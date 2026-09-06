@@ -1,0 +1,6 @@
+{
+  "name": "Mr Mohammed Hesham Records",
+  "description": "نظام احترافي وشخصي لإدارة الطلاب والامتحانات والنتائج والتقارير الأكاديمية مع تحليلات الأداء والتصدير إلى Excel",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
