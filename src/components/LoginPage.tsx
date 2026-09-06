@@ -126,10 +126,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ currentUser, onAuthorizedL
             <div className="relative inline-block mb-4">
               <div className="absolute -inset-1.5 bg-gradient-to-tr from-amber-500 to-orange-500 rounded-full blur-md opacity-70 animate-pulse" />
               <img 
-                src="/teacher-logo.jpg" 
-                alt="Mr Mohammed Hesham" 
-                className="relative w-24 h-24 rounded-full object-cover border-2 border-amber-400 shadow-xl"
-              />
+  src={`${import.meta.env.BASE_URL}teacher-logo.jpg`} 
+  alt="Mr Mohammed Hesham" 
+  className="relative w-24 h-24 rounded-full object-cover border-2 border-amber-400 shadow-xl"
+/>
               <div className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center shadow font-bold text-xs">
                 <Sparkles className="w-3.5 h-3.5 fill-current" />
               </div>

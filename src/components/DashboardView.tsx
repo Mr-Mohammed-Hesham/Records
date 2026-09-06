@@ -138,9 +138,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="absolute -inset-1 rounded-2xl bg-gradient-to-tr from-amber-400 via-orange-500 to-amber-300 blur-sm opacity-70 animate-pulse" />
               <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl p-0.5 bg-gradient-to-br from-amber-400 to-orange-500 overflow-hidden shadow-lg shadow-amber-500/20">
                 <img 
-                  src={safeSettings.customLogoUrl || "/teacher-logo.jpg"} 
-                  alt="Mr. Mohammed Hesham" 
-                  className="w-full h-full object-cover rounded-[14px]"
+src={safeSettings.customLogoUrl || `${import.meta.env.BASE_URL}teacher-logo.jpg`}
+className="w-full h-full object-cover rounded-[14px]"
                   referrerPolicy="no-referrer"
                 />
               </div>

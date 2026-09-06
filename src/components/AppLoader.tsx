@@ -20,7 +20,7 @@ export const AppLoader: React.FC<AppLoaderProps> = ({
           <div className="absolute -inset-2 rounded-full bg-gradient-to-r from-amber-400 via-orange-500 to-amber-300 opacity-75 blur-md animate-spin" style={{ animationDuration: '6s' }} />
           <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full p-1 bg-gradient-to-br from-amber-400 via-amber-600 to-orange-500 shadow-2xl shadow-amber-500/30 overflow-hidden">
             <img 
-              src="/teacher-logo.jpg" 
+              src={`${import.meta.env.BASE_URL}teacher-logo.jpg`} 
               alt="Mr Mohammed Hesham" 
               className="w-full h-full object-cover rounded-full"
               referrerPolicy="no-referrer"
