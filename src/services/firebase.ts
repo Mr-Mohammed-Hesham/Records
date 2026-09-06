@@ -1,781 +1,934 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { 
-  getFirestore, 
+
+import {
+  getFirestore,
   initializeFirestore,
-  Firestore,
-  collection, 
-  doc, 
-  getDocs, 
-  getDoc, 
-  getDocFromServer,
-  setDoc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  where, 
-  orderBy, 
+  type Firestore,
+  collection,
+  doc,
+  getDocs,
+  getDoc,
+  setDoc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
   writeBatch,
-  onSnapshot 
+  onSnapshot,
 } from 'firebase/firestore';
-import { 
-  getAuth, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signOut, 
-  onAuthStateChanged, 
-  User 
+
+import {
+  getAuth,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+  onAuthStateChanged,
+  type User,
 } from 'firebase/auth';
-import { Student, Exam, ExamResult, TeacherSettings } from '../types';
+
+import {
+  Student,
+  Exam,
+  ExamResult,
+  TeacherSettings,
+  ExamType,
+} from '../types';
+
 import { DEFAULT_GRADING_SCALE } from '../utils/grading';
-import firebaseConfigData from '../../firebase-applet-config.json';
+
+/* =========================================================
+   FIREBASE CONFIG
+   ========================================================= */
 
 const firebaseConfig = {
-  apiKey: firebaseConfigData.apiKey,
-  authDomain: firebaseConfigData.authDomain,
-  projectId: firebaseConfigData.projectId,
-  storageBucket: firebaseConfigData.storageBucket,
-  messagingSenderId: firebaseConfigData.messagingSenderId,
-  appId: firebaseConfigData.appId,
+  apiKey: 'AIzaSyC2LHHPG7hn27LewZXmpU_PZAbysuL1TUc',
+  authDomain: 'records-2eedd.firebaseapp.com',
+  projectId: 'records-2eedd',
+  storageBucket: 'records-2eedd.firebasestorage.app',
+  messagingSenderId: '909170236632',
+  appId: '1:909170236632:web:194a138a4e137d20978bad',
+  measurementId: 'G-3W94L8Y977',
 };
 
-// Initialize Firebase App
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+/* =========================================================
+   ADMIN ACCESS
+   ========================================================= */
+
+const ALLOWED_ADMIN_EMAIL =
+  'mohammedhesham872@gmail.com';
+
+/* =========================================================
+   FIREBASE APP
+   ========================================================= */
+
+export const app =
+  getApps().length > 0
+    ? getApp()
+    : initializeApp(firebaseConfig);
+
+/* =========================================================
+   FIREBASE AUTH
+   ========================================================= */
+
 export const auth = getAuth(app);
 
-// Use experimentalForceLongPolling to ensure reliable connectivity in web iframes and proxies
+/* =========================================================
+   FIRESTORE
+   ========================================================= */
+
 function initFirestore(): Firestore {
   try {
-    return initializeFirestore(
-      app,
-      {
-        experimentalForceLongPolling: true,
-      },
-      firebaseConfigData.firestoreDatabaseId || '(default)'
-    );
+    return initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    });
   } catch {
-    return getFirestore(app, firebaseConfigData.firestoreDatabaseId || '(default)');
+    return getFirestore(app);
   }
 }
 
 export const db = initFirestore();
 
-// Test connection helper
-export async function testConnection(): Promise<boolean> {
-  try {
-    const testDoc = await getDoc(doc(db, 'settings', 'config'));
-    return testDoc.exists();
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase client operating in offline mode.');
-    }
-    return false;
-  }
-}
+/* =========================================================
+   GOOGLE AUTH PROVIDER
+   ========================================================= */
 
-// Firestore Error Handling specifications
-export enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
+const googleProvider = new GoogleAuthProvider();
 
-export interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-    tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-      email?: string | null;
-    }[];
-  };
-}
+googleProvider.setCustomParameters({
+  prompt: 'select_account',
+});
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData?.map(provider => ({
-        providerId: provider.providerId,
-        email: provider.email,
-      })) || []
-    },
-    operationType,
-    path
-  };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
+/* =========================================================
+   UAE GRADES
+   ========================================================= */
 
-// Google Auth Helpers
+export const UAE_GRADES = [
+  'Grade 1',
+  'Grade 2',
+  'Grade 3',
+  'Grade 4',
+  'Grade 5',
+  'Grade 6',
+  'Grade 7',
+  'Grade 8',
+  'Grade 9',
+  'Grade 10',
+  'Grade 11',
+  'Grade 12',
+];
+
+/* =========================================================
+   EXAM TYPES
+   ========================================================= */
+
+export const DEFAULT_EXAM_TYPES: ExamType[] = [
+  'Quiz',
+  'Test',
+  'Midterm',
+  'Final Exam',
+  'Homework',
+  'Assignment',
+  'Practice Exam',
+];
+
+/* =========================================================
+   DEFAULT SETTINGS
+   ========================================================= */
+
+export const DEFAULT_SETTINGS: TeacherSettings = {
+  teacherName: 'Mohammed Hisham',
+  appTitle: 'Student Records',
+  defaultSubject: 'Mathematics',
+
+  grades: UAE_GRADES,
+
+  groups: [],
+
+  subjects: ['Mathematics'],
+
+  examTypes: DEFAULT_EXAM_TYPES,
+
+  passPercentage: 50,
+
+  gradingScale: DEFAULT_GRADING_SCALE,
+
+  customLogoUrl: '',
+};
+
+/* =========================================================
+   AUTH
+   ========================================================= */
+
+/**
+ * تسجيل الدخول مسموح فقط للحساب المحدد.
+ */
 export async function signInWithGoogle(): Promise<User> {
-  const provider = new GoogleAuthProvider();
-  const result = await signInWithPopup(auth, provider);
-  return result.user;
+  const result = await signInWithPopup(
+    auth,
+    googleProvider
+  );
+
+  const user = result.user;
+
+  const email =
+    user.email?.trim().toLowerCase();
+
+  if (
+    email !==
+    ALLOWED_ADMIN_EMAIL.toLowerCase()
+  ) {
+    await signOut(auth);
+
+    throw new Error(
+      'هذا الحساب غير مصرح له بالدخول إلى النظام.'
+    );
+  }
+
+  return user;
 }
 
+/**
+ * تسجيل الخروج.
+ */
 export async function signOutTeacher(): Promise<void> {
   await signOut(auth);
 }
 
-// UAE Curriculum Grades (Grades 1 to 12)
-export const UAE_GRADES = [
-  'الصف الأول (Grade 1)',
-  'الصف الثاني (Grade 2)',
-  'الصف الثالث (Grade 3)',
-  'الصف الرابع (Grade 4)',
-  'الصف الخامس (Grade 5)',
-  'الصف السادس (Grade 6)',
-  'الصف السابع (Grade 7)',
-  'الصف الثامن (Grade 8)',
-  'الصف التاسع (Grade 9)',
-  'الصف العاشر (Grade 10)',
-  'الصف الحادي عشر (Grade 11)',
-  'الصف الثاني عشر (Grade 12)',
-];
+/**
+ * مراقبة حالة تسجيل الدخول.
+ */
+export function subscribeToAuth(
+  callback: (user: User | null) => void
+): () => void {
+  return onAuthStateChanged(
+    auth,
+    (user) => {
+      if (!user) {
+        callback(null);
+        return;
+      }
 
-// Default initial settings
-export const DEFAULT_SETTINGS: TeacherSettings = {
-  teacherName: 'Mr. Mohammed Hesham',
-  appTitle: 'Mr Mohammed Hesham Records',
-  defaultSubject: 'الفيزياء',
-  grades: UAE_GRADES,
-  groups: [],
-  subjects: [
-    'الفيزياء',
-    'الرياضيات',
-    'الكيمياء',
-    'الأحياء',
-    'العلوم',
-    'اللغة الإنجليزية',
-    'اللغة العربية',
-    'التربية الإسلامية',
-    'الدراسات الاجتماعية',
-    'الحاسوب والتكنولوجيا',
-  ],
-  examTypes: ['Quiz', 'Test', 'Midterm', 'Final Exam', 'Homework', 'Assignment', 'Practice Exam'],
-  passPercentage: 60,
-  gradingScale: DEFAULT_GRADING_SCALE,
-  customLogoUrl: '',
-};
+      const email =
+        user.email?.trim().toLowerCase();
 
-// Check authentication session
-export async function ensureAuthenticated(): Promise<User | null> {
-  if (auth.currentUser) return auth.currentUser;
-  return new Promise((resolve) => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      unsubscribe();
-      resolve(user || null);
-    });
-  });
+      if (
+        email !==
+        ALLOWED_ADMIN_EMAIL.toLowerCase()
+      ) {
+        signOut(auth).catch(() => {});
+        callback(null);
+        return;
+      }
+
+      callback(user);
+    }
+  );
 }
 
-// ----------------- STUDENTS CRUD ----------------- //
+/**
+ * الحصول على المستخدم الحالي إذا كان مصرحًا له.
+ */
+export function getCurrentUser(): User | null {
+  const user = auth.currentUser;
+
+  if (!user) {
+    return null;
+  }
+
+  const email =
+    user.email?.trim().toLowerCase();
+
+  if (
+    email !==
+    ALLOWED_ADMIN_EMAIL.toLowerCase()
+  ) {
+    return null;
+  }
+
+  return user;
+}
+
+/**
+ * التأكد من وجود مستخدم مصرح له.
+ */
+export async function ensureAuthenticated(): Promise<User> {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error(
+      'يجب تسجيل الدخول أولاً.'
+    );
+  }
+
+  const email =
+    user.email?.trim().toLowerCase();
+
+  if (
+    email !==
+    ALLOWED_ADMIN_EMAIL.toLowerCase()
+  ) {
+    await signOut(auth);
+
+    throw new Error(
+      'هذا الحساب غير مصرح له بالدخول إلى النظام.'
+    );
+  }
+
+  return user;
+}
+
+/* =========================================================
+   STUDENTS
+   ========================================================= */
 
 export async function getStudents(): Promise<Student[]> {
-  try {
-    await ensureAuthenticated();
-    const studentsCol = collection(db, 'students');
-    const snapshot = await getDocs(studentsCol);
-    const students: Student[] = [];
-    snapshot.forEach((docSnap) => {
-      students.push({ id: docSnap.id, ...(docSnap.data() as Omit<Student, 'id'>) });
-    });
-    // Sort by name or createdAt
-    return students.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-  } catch (error) {
-    console.error('Error fetching students from Firestore:', error);
-    // Fallback to local storage if offline
-    const local = localStorage.getItem('mmh_students');
-    return local ? JSON.parse(local) : [];
-  }
+  const snapshot = await getDocs(
+    collection(db, 'students')
+  );
+
+  return snapshot.docs.map((item) => ({
+    id: item.id,
+    ...item.data(),
+  })) as Student[];
 }
 
-export async function addStudent(studentData: Omit<Student, 'id'>): Promise<Student> {
-  try {
-    await ensureAuthenticated();
-    const studentsCol = collection(db, 'students');
-    const docRef = await addDoc(studentsCol, {
-      ...studentData,
-      createdAt: studentData.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    const newStudent: Student = { id: docRef.id, ...studentData };
-    
-    // Update local cache
-    const current = await getStudents();
-    localStorage.setItem('mmh_students', JSON.stringify([...current, newStudent]));
-    return newStudent;
-  } catch (error) {
-    console.error('Error adding student:', error);
-    // Fallback save locally
-    const id = 'local_' + Date.now();
-    const fallback: Student = { id, ...studentData };
-    const current = await getStudents();
-    localStorage.setItem('mmh_students', JSON.stringify([...current, fallback]));
-    return fallback;
+export async function getStudent(
+  studentId: string
+): Promise<Student | null> {
+  const snapshot = await getDoc(
+    doc(db, 'students', studentId)
+  );
+
+  if (!snapshot.exists()) {
+    return null;
   }
+
+  return {
+    id: snapshot.id,
+    ...snapshot.data(),
+  } as Student;
 }
 
-export async function updateStudent(id: string, studentData: Partial<Student>): Promise<void> {
-  try {
-    await ensureAuthenticated();
-    const docRef = doc(db, 'students', id);
-    await updateDoc(docRef, {
-      ...studentData,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error('Error updating student in Firestore:', error);
-  }
-  // Sync local cache
-  const local = localStorage.getItem('mmh_students');
-  if (local) {
-    const list: Student[] = JSON.parse(local);
-    const updated = list.map(s => s.id === id ? { ...s, ...studentData, updatedAt: new Date().toISOString() } : s);
-    localStorage.setItem('mmh_students', JSON.stringify(updated));
-  }
+export async function addStudent(
+  student: Omit<Student, 'id'>
+): Promise<string> {
+  const reference = await addDoc(
+    collection(db, 'students'),
+    student
+  );
+
+  return reference.id;
 }
 
-export async function deleteStudent(id: string): Promise<void> {
-  try {
-    await ensureAuthenticated();
-    const docRef = doc(db, 'students', id);
-    await deleteDoc(docRef);
-
-    // Also delete any results for this student
-    const resultsCol = collection(db, 'results');
-    const q = query(resultsCol, where('studentDocId', '==', id));
-    const snaps = await getDocs(q);
-    const batch = writeBatch(db);
-    snaps.forEach(resDoc => batch.delete(resDoc.ref));
-    await batch.commit();
-  } catch (error) {
-    console.error('Error deleting student:', error);
-  }
-  // Sync local cache
-  const local = localStorage.getItem('mmh_students');
-  if (local) {
-    const list: Student[] = JSON.parse(local);
-    localStorage.setItem('mmh_students', JSON.stringify(list.filter(s => s.id !== id)));
-  }
+export async function createStudent(
+  student: Omit<Student, 'id'>
+): Promise<string> {
+  return addStudent(student);
 }
 
-// ----------------- EXAMS CRUD ----------------- //
+export async function updateStudent(
+  studentId: string,
+  data: Partial<Student>
+): Promise<void> {
+  await updateDoc(
+    doc(db, 'students', studentId),
+    data
+  );
+}
+
+export async function deleteStudent(
+  studentId: string
+): Promise<void> {
+  await deleteDoc(
+    doc(db, 'students', studentId)
+  );
+}
+
+/* =========================================================
+   STUDENT SEARCH
+   ========================================================= */
+
+export async function searchStudents(
+  searchTerm: string
+): Promise<Student[]> {
+  const students = await getStudents();
+
+  const term = searchTerm
+    .trim()
+    .toLowerCase();
+
+  if (!term) {
+    return students;
+  }
+
+  return students.filter((student) => {
+    const name = String(
+      student.name || ''
+    ).toLowerCase();
+
+    const phone = String(
+      student.phone || ''
+    ).toLowerCase();
+
+    const code = String(
+      student.studentId || ''
+    ).toLowerCase();
+
+    return (
+      name.includes(term) ||
+      phone.includes(term) ||
+      code.includes(term)
+    );
+  });
+}
+
+/* =========================================================
+   STUDENTS REALTIME
+   ========================================================= */
+
+export function subscribeToStudents(
+  callback: (students: Student[]) => void
+): () => void {
+  return onSnapshot(
+    collection(db, 'students'),
+    (snapshot) => {
+      const students = snapshot.docs.map(
+        (item) => ({
+          id: item.id,
+          ...item.data(),
+        })
+      ) as Student[];
+
+      callback(students);
+    }
+  );
+}
+
+/* =========================================================
+   EXAMS
+   ========================================================= */
 
 export async function getExams(): Promise<Exam[]> {
-  try {
-    await ensureAuthenticated();
-    const examsCol = collection(db, 'exams');
-    const snapshot = await getDocs(examsCol);
-    const exams: Exam[] = [];
-    snapshot.forEach((docSnap) => {
-      exams.push({ id: docSnap.id, ...(docSnap.data() as Omit<Exam, 'id'>) });
-    });
-    return exams.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  } catch (error) {
-    console.error('Error fetching exams from Firestore:', error);
-    const local = localStorage.getItem('mmh_exams');
-    return local ? JSON.parse(local) : [];
-  }
+  const snapshot = await getDocs(
+    collection(db, 'exams')
+  );
+
+  return snapshot.docs.map((item) => ({
+    id: item.id,
+    ...item.data(),
+  })) as Exam[];
 }
 
-export async function addExam(examData: Omit<Exam, 'id'>): Promise<Exam> {
-  try {
-    await ensureAuthenticated();
-    const examsCol = collection(db, 'exams');
-    const docRef = await addDoc(examsCol, {
-      ...examData,
-      createdAt: examData.createdAt || new Date().toISOString(),
-    });
-    const newExam: Exam = { id: docRef.id, ...examData };
-    return newExam;
-  } catch (error) {
-    console.error('Error adding exam:', error);
-    const id = 'local_exam_' + Date.now();
-    const fallback: Exam = { id, ...examData };
-    return fallback;
+export async function getExam(
+  examId: string
+): Promise<Exam | null> {
+  const snapshot = await getDoc(
+    doc(db, 'exams', examId)
+  );
+
+  if (!snapshot.exists()) {
+    return null;
   }
+
+  return {
+    id: snapshot.id,
+    ...snapshot.data(),
+  } as Exam;
 }
 
-export async function updateExam(id: string, examData: Partial<Exam>): Promise<void> {
-  try {
-    await ensureAuthenticated();
-    const docRef = doc(db, 'exams', id);
-    await updateDoc(docRef, examData);
-  } catch (error) {
-    console.error('Error updating exam:', error);
-  }
+export async function addExam(
+  exam: Omit<Exam, 'id'>
+): Promise<string> {
+  const reference = await addDoc(
+    collection(db, 'exams'),
+    exam
+  );
+
+  return reference.id;
 }
 
-export async function deleteExam(id: string): Promise<void> {
-  try {
-    await ensureAuthenticated();
-    const docRef = doc(db, 'exams', id);
-    await deleteDoc(docRef);
-
-    // Also delete all results associated with this exam
-    const resultsCol = collection(db, 'results');
-    const q = query(resultsCol, where('examId', '==', id));
-    const snaps = await getDocs(q);
-    const batch = writeBatch(db);
-    snaps.forEach(resDoc => batch.delete(resDoc.ref));
-    await batch.commit();
-  } catch (error) {
-    console.error('Error deleting exam and results:', error);
-  }
+export async function createExam(
+  exam: Omit<Exam, 'id'>
+): Promise<string> {
+  return addExam(exam);
 }
 
-// ----------------- RESULTS CRUD ----------------- //
+export async function updateExam(
+  examId: string,
+  data: Partial<Exam>
+): Promise<void> {
+  await updateDoc(
+    doc(db, 'exams', examId),
+    data
+  );
+}
 
-export function subscribeToRealtimeData(
-  onStudentsChange: (students: Student[]) => void,
-  onExamsChange: (exams: Exam[]) => void,
-  onResultsChange: (results: ExamResult[]) => void
+export async function deleteExam(
+  examId: string
+): Promise<void> {
+  await deleteDoc(
+    doc(db, 'exams', examId)
+  );
+}
+
+/* =========================================================
+   EXAMS REALTIME
+   ========================================================= */
+
+export function subscribeToExams(
+  callback: (exams: Exam[]) => void
 ): () => void {
-  // Initial load
-  getStudents().then(onStudentsChange);
-  getExams().then(onExamsChange);
-  getAllResults().then(onResultsChange);
+  return onSnapshot(
+    collection(db, 'exams'),
+    (snapshot) => {
+      const exams = snapshot.docs.map(
+        (item) => ({
+          id: item.id,
+          ...item.data(),
+        })
+      ) as Exam[];
 
-  try {
-    const unsubStudents = onSnapshot(collection(db, 'students'), (snap) => {
-      const list: Student[] = [];
-      snap.forEach(d => list.push({ id: d.id, ...(d.data() as Omit<Student, 'id'>) }));
-      list.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-      onStudentsChange(list);
-      localStorage.setItem('mmh_students', JSON.stringify(list));
-    }, (err) => console.warn('Students listener fallback:', err));
-
-    const unsubExams = onSnapshot(collection(db, 'exams'), (snap) => {
-      const list: Exam[] = [];
-      snap.forEach(d => list.push({ id: d.id, ...(d.data() as Omit<Exam, 'id'>) }));
-      list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      onExamsChange(list);
-      localStorage.setItem('mmh_exams', JSON.stringify(list));
-    }, (err) => console.warn('Exams listener fallback:', err));
-
-    const unsubResults = onSnapshot(collection(db, 'results'), (snap) => {
-      const list: ExamResult[] = [];
-      snap.forEach(d => list.push({ id: d.id, ...(d.data() as Omit<ExamResult, 'id'>) }));
-      onResultsChange(list);
-      localStorage.setItem('mmh_results', JSON.stringify(list));
-    }, (err) => console.warn('Results listener fallback:', err));
-
-    return () => {
-      unsubStudents();
-      unsubExams();
-      unsubResults();
-    };
-  } catch (err) {
-    console.warn('Realtime subscription error:', err);
-    return () => {};
-  }
+      callback(exams);
+    }
+  );
 }
 
-export async function getAllResults(): Promise<ExamResult[]> {
-  try {
-    await ensureAuthenticated();
-    const resultsCol = collection(db, 'results');
-    const snapshot = await getDocs(resultsCol);
-    const results: ExamResult[] = [];
-    snapshot.forEach((docSnap) => {
-      results.push({ id: docSnap.id, ...(docSnap.data() as Omit<ExamResult, 'id'>) });
-    });
-    return results;
-  } catch (error) {
-    console.error('Error fetching results:', error);
-    const local = localStorage.getItem('mmh_results');
-    return local ? JSON.parse(local) : [];
-  }
+/* =========================================================
+   RESULTS
+   ========================================================= */
+
+export async function getResults(): Promise<ExamResult[]> {
+  const snapshot = await getDocs(
+    collection(db, 'results')
+  );
+
+  return snapshot.docs.map((item) => ({
+    id: item.id,
+    ...item.data(),
+  })) as ExamResult[];
 }
 
-export async function getResultsByExam(examId: string): Promise<ExamResult[]> {
-  try {
-    await ensureAuthenticated();
-    const resultsCol = collection(db, 'results');
-    const q = query(resultsCol, where('examId', '==', examId));
-    const snapshot = await getDocs(q);
-    const results: ExamResult[] = [];
-    snapshot.forEach((docSnap) => {
-      results.push({ id: docSnap.id, ...(docSnap.data() as Omit<ExamResult, 'id'>) });
-    });
-    return results;
-  } catch (error) {
-    console.error('Error fetching exam results:', error);
-    const all = await getAllResults();
-    return all.filter(r => r.examId === examId);
+export async function getResult(
+  resultId: string
+): Promise<ExamResult | null> {
+  const snapshot = await getDoc(
+    doc(db, 'results', resultId)
+  );
+
+  if (!snapshot.exists()) {
+    return null;
   }
+
+  return {
+    id: snapshot.id,
+    ...snapshot.data(),
+  } as ExamResult;
 }
 
-export async function getResultsByStudent(studentDocId: string): Promise<ExamResult[]> {
-  try {
-    await ensureAuthenticated();
-    const resultsCol = collection(db, 'results');
-    const q = query(resultsCol, where('studentDocId', '==', studentDocId));
-    const snapshot = await getDocs(q);
-    const results: ExamResult[] = [];
-    snapshot.forEach((docSnap) => {
-      results.push({ id: docSnap.id, ...(docSnap.data() as Omit<ExamResult, 'id'>) });
-    });
-    return results.sort((a, b) => new Date(b.examDate).getTime() - new Date(a.examDate).getTime());
-  } catch (error) {
-    console.error('Error fetching student results:', error);
-    const all = await getAllResults();
-    return all.filter(r => r.studentDocId === studentDocId);
-  }
+export async function addResult(
+  result: Omit<ExamResult, 'id'>
+): Promise<string> {
+  const reference = await addDoc(
+    collection(db, 'results'),
+    result
+  );
+
+  return reference.id;
 }
+
+export async function createResult(
+  result: Omit<ExamResult, 'id'>
+): Promise<string> {
+  return addResult(result);
+}
+
+export async function updateResult(
+  resultId: string,
+  data: Partial<ExamResult>
+): Promise<void> {
+  await updateDoc(
+    doc(db, 'results', resultId),
+    data
+  );
+}
+
+export async function updateSingleResult(
+  resultId: string,
+  data: Partial<ExamResult>
+): Promise<void> {
+  await updateResult(resultId, data);
+}
+
+export async function deleteResult(
+  resultId: string
+): Promise<void> {
+  await deleteDoc(
+    doc(db, 'results', resultId)
+  );
+}
+
+/* =========================================================
+   SAVE BATCH RESULTS
+   ========================================================= */
 
 export async function saveBatchResults(
-  examId: string, 
-  results: Array<Omit<ExamResult, 'id'>>
+  results: ExamResult[]
 ): Promise<void> {
-  try {
-    await ensureAuthenticated();
-    const resultsCol = collection(db, 'results');
-    
-    // Existing results for this exam
-    const existingSnaps = await getDocs(query(resultsCol, where('examId', '==', examId)));
-    const existingMap = new Map<string, string>(); // studentDocId -> resultId
-    existingSnaps.forEach(docSnap => {
-      const data = docSnap.data();
-      existingMap.set(data.studentDocId, docSnap.id);
-    });
+  const batch = writeBatch(db);
 
-    const batch = writeBatch(db);
+  results.forEach((result) => {
+    const { id, ...data } = result;
 
-    for (const res of results) {
-      if (existingMap.has(res.studentDocId)) {
-        const docId = existingMap.get(res.studentDocId)!;
-        const ref = doc(db, 'results', docId);
-        batch.update(ref, {
-          ...res,
-          updatedAt: new Date().toISOString(),
-        });
-      } else {
-        const newRef = doc(resultsCol);
-        batch.set(newRef, {
-          ...res,
-          updatedAt: new Date().toISOString(),
-        });
-      }
+    if (id) {
+      const resultRef = doc(
+        db,
+        'results',
+        id
+      );
+
+      batch.set(
+        resultRef,
+        data,
+        { merge: true }
+      );
+    } else {
+      const resultRef = doc(
+        collection(db, 'results')
+      );
+
+      batch.set(
+        resultRef,
+        data
+      );
     }
+  });
 
-    await batch.commit();
-  } catch (error) {
-    console.error('Error saving batch results in Firestore:', error);
-  }
+  await batch.commit();
 }
 
-export async function deleteResult(resultId: string): Promise<void> {
-  try {
-    await ensureAuthenticated();
-    const docRef = doc(db, 'results', resultId);
-    await deleteDoc(docRef);
-  } catch (error) {
-    console.error('Error deleting result:', error);
-  }
+/* =========================================================
+   RESULTS BY STUDENT
+   ========================================================= */
+
+export async function getStudentResults(
+  studentId: string
+): Promise<ExamResult[]> {
+  const resultsQuery = query(
+    collection(db, 'results'),
+    where('studentId', '==', studentId)
+  );
+
+  const snapshot = await getDocs(
+    resultsQuery
+  );
+
+  return snapshot.docs.map((item) => ({
+    id: item.id,
+    ...item.data(),
+  })) as ExamResult[];
 }
 
-export async function updateSingleResult(resultId: string, data: Partial<ExamResult>): Promise<void> {
-  try {
-    await ensureAuthenticated();
-    const docRef = doc(db, 'results', resultId);
-    await updateDoc(docRef, {
-      ...data,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error('Error updating result:', error);
-  }
+/* =========================================================
+   RESULTS BY EXAM
+   ========================================================= */
+
+export async function getExamResults(
+  examId: string
+): Promise<ExamResult[]> {
+  const resultsQuery = query(
+    collection(db, 'results'),
+    where('examId', '==', examId)
+  );
+
+  const snapshot = await getDocs(
+    resultsQuery
+  );
+
+  return snapshot.docs.map((item) => ({
+    id: item.id,
+    ...item.data(),
+  })) as ExamResult[];
 }
 
-// ----------------- SETTINGS ----------------- //
+/* =========================================================
+   RESULTS REALTIME
+   ========================================================= */
+
+export function subscribeToResults(
+  callback: (results: ExamResult[]) => void
+): () => void {
+  return onSnapshot(
+    collection(db, 'results'),
+    (snapshot) => {
+      const results = snapshot.docs.map(
+        (item) => ({
+          id: item.id,
+          ...item.data(),
+        })
+      ) as ExamResult[];
+
+      callback(results);
+    }
+  );
+}
+
+/* =========================================================
+   STUDENT RESULTS REALTIME
+   ========================================================= */
+
+export function subscribeToStudentResults(
+  studentId: string,
+  callback: (results: ExamResult[]) => void
+): () => void {
+  const resultsQuery = query(
+    collection(db, 'results'),
+    where('studentId', '==', studentId)
+  );
+
+  return onSnapshot(
+    resultsQuery,
+    (snapshot) => {
+      const results = snapshot.docs.map(
+        (item) => ({
+          id: item.id,
+          ...item.data(),
+        })
+      ) as ExamResult[];
+
+      callback(results);
+    }
+  );
+}
+
+/* =========================================================
+   TEACHER SETTINGS
+   ========================================================= */
+
+const SETTINGS_ID = 'teacher';
 
 export async function getTeacherSettings(): Promise<TeacherSettings> {
-  try {
-    await ensureAuthenticated();
-    const docRef = doc(db, 'settings', 'config');
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return { ...DEFAULT_SETTINGS, ...(docSnap.data() as TeacherSettings) };
+  const snapshot = await getDoc(
+    doc(db, 'settings', SETTINGS_ID)
+  );
+
+  if (!snapshot.exists()) {
+    return DEFAULT_SETTINGS;
+  }
+
+  return {
+    ...DEFAULT_SETTINGS,
+    ...snapshot.data(),
+  } as TeacherSettings;
+}
+
+export async function saveTeacherSettings(
+  settings: Partial<TeacherSettings>
+): Promise<void> {
+  await setDoc(
+    doc(db, 'settings', SETTINGS_ID),
+    settings,
+    {
+      merge: true,
     }
-  } catch (error) {
-    console.error('Error fetching settings:', error);
-  }
-  const local = localStorage.getItem('mmh_settings');
-  return local ? JSON.parse(local) : DEFAULT_SETTINGS;
+  );
 }
 
-export async function saveTeacherSettings(settings: TeacherSettings): Promise<void> {
-  try {
-    await ensureAuthenticated();
-    const docRef = doc(db, 'settings', 'config');
-    await setDoc(docRef, settings, { merge: true });
-  } catch (error) {
-    console.error('Error saving settings to Firestore:', error);
-  }
-  localStorage.setItem('mmh_settings', JSON.stringify(settings));
-}
+/* =========================================================
+   SETTINGS REALTIME
+   ========================================================= */
 
-// ----------------- SAMPLE DATA SEEDER ----------------- //
+export function subscribeToTeacherSettings(
+  callback: (settings: TeacherSettings) => void
+): () => void {
+  return onSnapshot(
+    doc(db, 'settings', SETTINGS_ID),
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        callback(DEFAULT_SETTINGS);
+        return;
+      }
 
-export async function seedSampleData(): Promise<void> {
-  const sampleStudents: Array<Omit<Student, 'id'>> = [
-    {
-      studentId: 'STU-1001',
-      name: 'أحمد محمود العطار',
-      grade: 'الأول الثانوي',
-      group: 'المجموعة A (السبت - الثلاثاء)',
-      subject: 'الفيزياء',
-      phone: '01012345678',
-      parentPhone: '01212345678',
-      school: 'مدرسة المتفوقين الثانوية',
-      notes: 'طالب ممتاز ومشارك دائم في الحصص ومهتم بالتجارب العملية',
-      createdAt: new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString(),
-    },
-    {
-      studentId: 'STU-1002',
-      name: 'سارة إبراهيم الشناوي',
-      grade: 'الأول الثانوي',
-      group: 'المجموعة A (السبت - الثلاثاء)',
-      subject: 'الفيزياء',
-      phone: '01123456789',
-      parentPhone: '01098765432',
-      school: 'مدرسة الزهراء التجريبية',
-      notes: 'دقيقة في حل المسائل الرياضية وتحافظ على تسليم الواجبات',
-      createdAt: new Date(Date.now() - 28 * 24 * 3600 * 1000).toISOString(),
-    },
-    {
-      studentId: 'STU-1003',
-      name: 'عمر خالد الدسوقي',
-      grade: 'الثاني الثانوي',
-      group: 'المجموعة B (الأحد - الأربعاء)',
-      subject: 'الفيزياء',
-      phone: '01055551234',
-      parentPhone: '01255551234',
-      school: 'مدرسة الأورمان الثانوية',
-      notes: 'يحتاج تركيزاً أكبر في مسائل الحركة وقوانين نيوتن',
-      createdAt: new Date(Date.now() - 25 * 24 * 3600 * 1000).toISOString(),
-    },
-    {
-      studentId: 'STU-1004',
-      name: 'مريم طارق الفقي',
-      grade: 'الثاني الثانوي',
-      group: 'المجموعة B (الأحد - الأربعاء)',
-      subject: 'الفيزياء',
-      phone: '01144445555',
-      parentPhone: '01044445555',
-      school: 'مدرسة النصر القومية',
-      notes: 'مستواها في تطور مستمر وأداؤها في الامتحانات الأخيرة مشرق',
-      createdAt: new Date(Date.now() - 20 * 24 * 3600 * 1000).toISOString(),
-    },
-    {
-      studentId: 'STU-1005',
-      name: 'يوسف مصطفى النجار',
-      grade: 'الثالث الثانوي',
-      group: 'مجموعة المتفوقين',
-      subject: 'الفيزياء',
-      phone: '01277778888',
-      parentPhone: '01177778888',
-      school: 'مدرسة جمال عبد الناصر الثانوية',
-      notes: 'طالب عبقري في الفيزياء الحديثة والدوائر الكهربية',
-      createdAt: new Date(Date.now() - 18 * 24 * 3600 * 1000).toISOString(),
-    },
-    {
-      studentId: 'STU-1006',
-      name: 'نور الدين شريف رضوان',
-      grade: 'الثالث الثانوي',
-      group: 'مجموعة المتفوقين',
-      subject: 'الفيزياء',
-      phone: '01088889999',
-      parentPhone: '01288889999',
-      school: 'مدرسة الأندلس الخاصة',
-      notes: 'سريع البديهة ويحتاج متابعة لتجنب أخطاء السرعة',
-      createdAt: new Date(Date.now() - 15 * 24 * 3600 * 1000).toISOString(),
+      const settings: TeacherSettings = {
+        ...DEFAULT_SETTINGS,
+        ...snapshot.data(),
+      };
+
+      callback(settings);
     }
-  ];
-
-  const addedStudents: Student[] = [];
-  for (const s of sampleStudents) {
-    const added = await addStudent(s);
-    addedStudents.push(added);
-  }
-
-  // Sample Exams
-  const sampleExams: Array<Omit<Exam, 'id'>> = [
-    {
-      title: 'امتحان الباب الأول: الحركة الخطية ومعادلات الحركة',
-      subject: 'الفيزياء',
-      grade: 'الأول الثانوي',
-      group: 'الكل',
-      date: new Date(Date.now() - 20 * 24 * 3600 * 1000).toISOString().split('T')[0],
-      totalScore: 50,
-      passScore: 30,
-      type: 'Test',
-      notes: 'امتحان شامل 20 سؤال اختياري و 3 مسائل مقالية',
-    },
-    {
-      title: 'كويز سريع: قوانين كيرشوف وتوصيل المقاومات',
-      subject: 'الفيزياء',
-      grade: 'الثالث الثانوي',
-      group: 'مجموعة المتفوقين',
-      date: new Date(Date.now() - 12 * 24 * 3600 * 1000).toISOString().split('T')[0],
-      totalScore: 20,
-      passScore: 12,
-      type: 'Quiz',
-      notes: 'اختبار مدته 30 دقيقة لقياس دقة حساب التيارات وفرق الجهد',
-    },
-    {
-      title: 'امتحان منتصف الفصل الدراسي: الميكانيكا والطاقة',
-      subject: 'الفيزياء',
-      grade: 'الأول الثانوي',
-      group: 'المجموعة A (السبت - الثلاثاء)',
-      date: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString().split('T')[0],
-      totalScore: 100,
-      passScore: 60,
-      type: 'Midterm',
-      notes: 'امتحان الميدتيرم الرئيسي',
-    },
-  ];
-
-  const addedExams: Exam[] = [];
-  for (const e of sampleExams) {
-    const added = await addExam(e);
-    addedExams.push(added);
-  }
-
-  // Results for Exam 1 (Movement)
-  const exam1 = addedExams[0];
-  const exam1Scores = [
-    { studentIndex: 0, score: 48, notes: 'إجابة نموذجية ممتازة' },
-    { studentIndex: 1, score: 46, notes: 'ممتازة جداً' },
-    { studentIndex: 2, score: 28, notes: 'يحتاج لمراجعة معادلات الحركة بعناية' },
-    { studentIndex: 3, score: 39, notes: 'مستوى جيد جداً' },
-  ];
-
-  const resultsBatch1: Array<Omit<ExamResult, 'id'>> = exam1Scores.map(sc => {
-    const student = addedStudents[sc.studentIndex];
-    const pct = Math.round((sc.score / exam1.totalScore) * 1000) / 10;
-    return {
-      studentDocId: student.id,
-      studentId: student.studentId,
-      studentName: student.name,
-      examId: exam1.id,
-      examTitle: exam1.title,
-      examDate: exam1.date,
-      subject: exam1.subject,
-      score: sc.score,
-      totalScore: exam1.totalScore,
-      percentage: pct,
-      gradeRating: pct >= 90 ? 'ممتاز' : pct >= 80 ? 'جيد جداً' : pct >= 70 ? 'جيد' : pct >= 60 ? 'مقبول' : 'يحتاج تحسين',
-      passed: sc.score >= exam1.passScore,
-      notes: sc.notes,
-      createdAt: new Date().toISOString(),
-    };
-  });
-  await saveBatchResults(exam1.id, resultsBatch1);
-
-  // Results for Exam 2 (Kirchhoff)
-  const exam2 = addedExams[1];
-  const exam2Scores = [
-    { studentIndex: 4, score: 20, notes: 'الدرجة النهائية، تفوق رائع' },
-    { studentIndex: 5, score: 18.5, notes: 'ممتاز جداً مع خطأ بسيط في الإشارة' },
-  ];
-
-  const resultsBatch2: Array<Omit<ExamResult, 'id'>> = exam2Scores.map(sc => {
-    const student = addedStudents[sc.studentIndex];
-    const pct = Math.round((sc.score / exam2.totalScore) * 1000) / 10;
-    return {
-      studentDocId: student.id,
-      studentId: student.studentId,
-      studentName: student.name,
-      examId: exam2.id,
-      examTitle: exam2.title,
-      examDate: exam2.date,
-      subject: exam2.subject,
-      score: sc.score,
-      totalScore: exam2.totalScore,
-      percentage: pct,
-      gradeRating: pct >= 90 ? 'ممتاز' : pct >= 80 ? 'جيد جداً' : pct >= 70 ? 'جيد' : pct >= 60 ? 'مقبول' : 'يحتاج تحسين',
-      passed: sc.score >= exam2.passScore,
-      notes: sc.notes,
-      createdAt: new Date().toISOString(),
-    };
-  });
-  await saveBatchResults(exam2.id, resultsBatch2);
-
-  // Results for Exam 3 (Midterm)
-  const exam3 = addedExams[2];
-  const exam3Scores = [
-    { studentIndex: 0, score: 98, notes: 'الأول على المجموعة بجدارة' },
-    { studentIndex: 1, score: 94, notes: 'أداء راقٍ ومتميز' },
-  ];
-
-  const resultsBatch3: Array<Omit<ExamResult, 'id'>> = exam3Scores.map(sc => {
-    const student = addedStudents[sc.studentIndex];
-    const pct = Math.round((sc.score / exam3.totalScore) * 1000) / 10;
-    return {
-      studentDocId: student.id,
-      studentId: student.studentId,
-      studentName: student.name,
-      examId: exam3.id,
-      examTitle: exam3.title,
-      examDate: exam3.date,
-      subject: exam3.subject,
-      score: sc.score,
-      totalScore: exam3.totalScore,
-      percentage: pct,
-      gradeRating: pct >= 90 ? 'ممتاز' : pct >= 80 ? 'جيد جداً' : pct >= 70 ? 'جيد' : pct >= 60 ? 'مقبول' : 'يحتاج تحسين',
-      passed: sc.score >= exam3.passScore,
-      notes: sc.notes,
-      createdAt: new Date().toISOString(),
-    };
-  });
-  await saveBatchResults(exam3.id, resultsBatch3);
+  );
 }
+
+/* =========================================================
+   ALL DATA REALTIME
+   ========================================================= */
+
+export interface RealtimeData {
+  students: Student[];
+  exams: Exam[];
+  results: ExamResult[];
+  settings: TeacherSettings;
+}
+
+export function subscribeToRealtimeData(
+  callback: (data: RealtimeData) => void
+): () => void {
+  let students: Student[] = [];
+  let exams: Exam[] = [];
+  let results: ExamResult[] = [];
+  let settings: TeacherSettings = DEFAULT_SETTINGS;
+
+  let studentsReady = false;
+  let examsReady = false;
+  let resultsReady = false;
+  let settingsReady = false;
+
+  const emit = () => {
+    callback({
+      students,
+      exams,
+      results,
+      settings,
+    });
+  };
+
+  const unsubscribeStudents = onSnapshot(
+    collection(db, 'students'),
+    (snapshot) => {
+      students = snapshot.docs.map(
+        (item) => ({
+          id: item.id,
+          ...item.data(),
+        })
+      ) as Student[];
+
+      studentsReady = true;
+
+      if (
+        studentsReady &&
+        examsReady &&
+        resultsReady &&
+        settingsReady
+      ) {
+        emit();
+      }
+    }
+  );
+
+  const unsubscribeExams = onSnapshot(
+    collection(db, 'exams'),
+    (snapshot) => {
+      exams = snapshot.docs.map(
+        (item) => ({
+          id: item.id,
+          ...item.data(),
+        })
+      ) as Exam[];
+
+      examsReady = true;
+
+      if (
+        studentsReady &&
+        examsReady &&
+        resultsReady &&
+        settingsReady
+      ) {
+        emit();
+      }
+    }
+  );
+
+  const unsubscribeResults = onSnapshot(
+    collection(db, 'results'),
+    (snapshot) => {
+      results = snapshot.docs.map(
+        (item) => ({
+          id: item.id,
+          ...item.data(),
+        })
+      ) as ExamResult[];
+
+      resultsReady = true;
+
+      if (
+        studentsReady &&
+        examsReady &&
+        resultsReady &&
+        settingsReady
+      ) {
+        emit();
+      }
+    }
+  );
+
+  const unsubscribeSettings = onSnapshot(
+    doc(db, 'settings', SETTINGS_ID),
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        settings = DEFAULT_SETTINGS;
+      } else {
+        settings = {
+          ...DEFAULT_SETTINGS,
+          ...snapshot.data(),
+        } as TeacherSettings;
+      }
+
+      settingsReady = true;
+
+      if (
+        studentsReady &&
+        examsReady &&
+        resultsReady &&
+        settingsReady
+      ) {
+        emit();
+      }
+    }
+  );
+
+  return () => {
+    unsubscribeStudents();
+    unsubscribeExams();
+    unsubscribeResults();
+    unsubscribeSettings();
+  };
+}
+
+/* =========================================================
+   CLEAR ALL DATA
+   ========================================================= */
 
 export async function clearAllData(): Promise<void> {
-  try {
-    await ensureAuthenticated();
-    const studentsCol = collection(db, 'students');
-    const examsCol = collection(db, 'exams');
-    const resultsCol = collection(db, 'results');
+  const batch = writeBatch(db);
 
-    const sSnap = await getDocs(studentsCol);
-    for (const d of sSnap.docs) {
-      await deleteDoc(d.ref);
-    }
+  const collectionNames = [
+    'students',
+    'exams',
+    'results',
+    'settings',
+  ];
 
-    const eSnap = await getDocs(examsCol);
-    for (const d of eSnap.docs) {
-      await deleteDoc(d.ref);
-    }
+  for (const collectionName of collectionNames) {
+    const snapshot = await getDocs(
+      collection(db, collectionName)
+    );
 
-    const rSnap = await getDocs(resultsCol);
-    for (const d of rSnap.docs) {
-      await deleteDoc(d.ref);
-    }
-
-    localStorage.removeItem('mmh_students');
-    localStorage.removeItem('mmh_exams');
-    localStorage.removeItem('mmh_results');
-  } catch (error) {
-    console.error('Error clearing data:', error);
+    snapshot.docs.forEach((item) => {
+      batch.delete(item.ref);
+    });
   }
+
+  await batch.commit();
 }
 
+/* =========================================================
+   SAMPLE DATA
+   ========================================================= */
+
+/**
+ * لا يتم إنشاء أي بيانات وهمية.
+ * التطبيق يبدأ فارغًا بالكامل.
+ */
+export async function seedSampleData(): Promise<void> {
+  return;
+}

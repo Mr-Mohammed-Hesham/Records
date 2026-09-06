@@ -1,29 +1,37 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Students collection
+
+    // الحساب الوحيد المسموح له باستخدام النظام
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email == 'mohammedhesham872@gmail.com';
+    }
+
+    // Students
     match /students/{studentId} {
-      allow read, write: if true;
+      allow read, write: if isAdmin();
     }
 
-    // Exams collection
+    // Exams
     match /exams/{examId} {
-      allow read, write: if true;
+      allow read, write: if isAdmin();
     }
 
-    // Results collection
+    // Results
     match /results/{resultId} {
-      allow read, write: if true;
+      allow read, write: if isAdmin();
     }
 
-    // Teacher settings collection
+    // Teacher Settings
     match /settings/{settingId} {
-      allow read, write: if true;
+      allow read, write: if isAdmin();
     }
 
-    // Connection test collection
+    // Connection Test
     match /test/{testId} {
-      allow read, write: if true;
+      allow read, write: if isAdmin();
     }
   }
 }
