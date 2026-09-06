@@ -590,13 +590,6 @@ export default function App() {
           `تم تسجيل امتحان "${examData.title}" بنجاح`
         );
 
-        /*
-         * سيتم فتح شاشة رصد الدرجات
-         * للامتحان الجديد.
-         *
-         * addExam يرجع ID فقط،
-         * لذلك نستخدم examData مع الـ ID.
-         */
         setActiveScoringExam({
           id: added,
           ...examData,
@@ -699,26 +692,19 @@ export default function App() {
     setIsScoreModalOpen(true);
   };
 
+  /* =======================================================
+     SAVE BATCH SCORES
+     ======================================================= */
+
   const handleSaveBatchScores = async (
-    examId: string,
-    scores: Array<
-      Omit<ExamResult, 'id'>
-    >
+    scores: Array<Omit<ExamResult, 'id'>>
   ) => {
     try {
-      /*
-       * saveBatchResults تستقبل
-       * Array<ExamResult> وليس examId منفصل.
-       *
-       * نضيف examId إلى كل نتيجة
-       * قبل إرسالها إلى Firebase.
-       */
       const resultsToSave: ExamResult[] =
         scores.map(
           (score) => ({
             ...score,
             id: '',
-            examId,
           })
         );
 
@@ -739,8 +725,14 @@ export default function App() {
         'حدث خطأ أثناء حفظ الدرجات',
         'error'
       );
+
+      throw err;
     }
   };
+
+  /* =======================================================
+     DELETE RESULT
+     ======================================================= */
 
   const handleDeleteResult = async (
     resultId: string
@@ -765,6 +757,10 @@ export default function App() {
       );
     }
   };
+
+  /* =======================================================
+     UPDATE RESULT
+     ======================================================= */
 
   const handleUpdateResult = async (
     resultId: string,
@@ -954,12 +950,6 @@ export default function App() {
             rest
           );
         }
-
-        /*
-         * النتائج لا يتم استيرادها هنا
-         * مباشرة حتى لا تتكرر أو ترتبط
-         * بمعرفات مختلفة.
-         */
 
         addToast(
           'تم استيراد بيانات النسخة الاحتياطية بنجاح!'
