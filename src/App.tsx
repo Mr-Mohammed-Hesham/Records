@@ -71,11 +71,14 @@ import { ExamFormModal } from './components/ExamFormModal';
 import { ScoreEntryModal } from './components/ScoreEntryModal';
 import { QuickSearchModal } from './components/QuickSearchModal';
 import { ConfirmModal } from './components/ConfirmModal';
+
 import {
   ToastContainer,
   ToastNotification,
 } from './components/Toast';
+
 import { AppLoader } from './components/AppLoader';
+
 import {
   LoginPage,
   OFFICIAL_EMAILS,
@@ -403,6 +406,41 @@ export default function App() {
   }, []);
 
   /* =======================================================
+     KEEP SELECTED STUDENT UPDATED
+     ======================================================= */
+
+  useEffect(() => {
+    if (!selectedStudent) {
+      return;
+    }
+
+    const updatedStudent =
+      students.find(
+        (student) =>
+          student.id ===
+          selectedStudent.id
+      );
+
+    if (updatedStudent) {
+      setSelectedStudent(
+        updatedStudent
+      );
+    } else {
+      setSelectedStudent(null);
+
+      if (currentView === 'profile') {
+        setCurrentView(
+          'students'
+        );
+      }
+    }
+  }, [
+    students,
+    selectedStudent,
+    currentView,
+  ]);
+
+  /* =======================================================
      EMPTY DATABASE MESSAGE
      ======================================================= */
 
@@ -485,6 +523,11 @@ export default function App() {
           `تمت إضافة الطالب "${studentData.name}" برقم تعريفي (${studentData.studentId})`
         );
       }
+
+      setIsStudentModalOpen(
+        false
+      );
+      setStudentToEdit(null);
     } catch (err) {
       console.error(
         'Save student error:',
@@ -508,12 +551,30 @@ export default function App() {
         `هل أنت متأكد من رغبتك في حذف الطالب "${student.name}" نهائياً؟ سيتم أيضاً إزالة كافة نتائج امتحاناته المسجلة.`,
       onConfirm: async () => {
         try {
+          /*
+           * حذف نتائج الطالب أولاً.
+           * هذا يضمن أن سجل الطالب لا يترك
+           * نتائج معلقة داخل Firebase.
+           */
+          const studentResults =
+            results.filter(
+              (result) =>
+                result.studentDocId ===
+                student.id
+            );
+
+          for (const result of studentResults) {
+            await deleteResult(
+              result.id
+            );
+          }
+
           await deleteStudent(
             student.id
           );
 
           addToast(
-            `تم حذف الطالب "${student.name}" بنجاح`
+            `تم حذف الطالب "${student.name}" وجميع نتائجه بنجاح`
           );
 
           if (
@@ -536,7 +597,7 @@ export default function App() {
           );
 
           addToast(
-            'تعذر حذف الطالب',
+            'تعذر حذف الطالب أو بعض نتائجه',
             'error'
           );
         }
@@ -595,8 +656,16 @@ export default function App() {
           ...examData,
         });
 
-        setIsScoreModalOpen(true);
+        setIsExamModalOpen(
+          false
+        );
+
+        setIsScoreModalOpen(
+          true
+        );
       }
+
+      setExamToEdit(null);
     } catch (err) {
       console.error(
         'Save exam error:',
@@ -620,12 +689,42 @@ export default function App() {
         `هل أنت متأكد من حذف امتحان "${exam.title}"؟ سيتم حذف جميع النتائج المرتبطة بهذا الامتحان.`,
       onConfirm: async () => {
         try {
+          /*
+           * حذف النتائج المرتبطة بالامتحان أولاً.
+           */
+          const examResults =
+            results.filter(
+              (result) =>
+                result.examId ===
+                exam.id
+            );
+
+          for (const result of examResults) {
+            await deleteResult(
+              result.id
+            );
+          }
+
           await deleteExam(
             exam.id
           );
 
+          if (
+            activeScoringExam &&
+            activeScoringExam.id ===
+              exam.id
+          ) {
+            setActiveScoringExam(
+              null
+            );
+
+            setIsScoreModalOpen(
+              false
+            );
+          }
+
           addToast(
-            `تم حذف امتحان "${exam.title}"`
+            `تم حذف امتحان "${exam.title}" وجميع نتائجه بنجاح`
           );
         } catch (err) {
           console.error(
@@ -634,7 +733,7 @@ export default function App() {
           );
 
           addToast(
-            'تعذر حذف الامتحان',
+            'تعذر حذف الامتحان أو بعض نتائجه',
             'error'
           );
         }
@@ -700,8 +799,39 @@ export default function App() {
     scores: Array<Omit<ExamResult, 'id'>>
   ) => {
     try {
+      if (!scores || scores.length === 0) {
+        addToast(
+          'لم يتم إدخال أي درجات للحفظ',
+          'info'
+        );
+
+        return;
+      }
+
+      /*
+       * نتأكد أن كل نتيجة مرتبطة بطالب وامتحان.
+       * هذا مهم جداً لفصل سجل كل طالب عن الآخر.
+       */
+      const validScores =
+        scores.filter(
+          (score) =>
+            !!score.studentDocId &&
+            !!score.examId
+        );
+
+      if (
+        validScores.length === 0
+      ) {
+        addToast(
+          'بيانات النتائج غير مكتملة: يجب تحديد الطالب والامتحان',
+          'error'
+        );
+
+        return;
+      }
+
       const resultsToSave: ExamResult[] =
-        scores.map(
+        validScores.map(
           (score) => ({
             ...score,
             id: '',
@@ -713,7 +843,7 @@ export default function App() {
       );
 
       addToast(
-        `تم حفظ وتحديث نتائج ${scores.length} طالب بنجاح!`
+        `تم حفظ وتحديث نتائج ${validScores.length} طالب بنجاح!`
       );
     } catch (err) {
       console.error(
@@ -776,6 +906,11 @@ export default function App() {
         );
 
       if (!resObj) {
+        addToast(
+          'لم يتم العثور على النتيجة',
+          'error'
+        );
+
         return;
       }
 
@@ -884,6 +1019,7 @@ export default function App() {
         setExams([]);
         setResults([]);
         setSelectedStudent(null);
+        setActiveScoringExam(null);
         setCurrentView(
           'dashboard'
         );
@@ -927,8 +1063,11 @@ export default function App() {
           );
         }
 
+        /*
+         * استيراد الطلاب
+         */
         for (const student of
-          data.students) {
+          data.students || []) {
           const {
             id,
             ...rest
@@ -939,6 +1078,15 @@ export default function App() {
           );
         }
 
+        /*
+         * استيراد الامتحانات
+         */
+        const importedExamIds =
+          new Map<
+            string,
+            string
+          >();
+
         for (const exam of
           data.exams || []) {
           const {
@@ -946,8 +1094,48 @@ export default function App() {
             ...rest
           } = exam;
 
-          await addExam(
-            rest
+          const newExamId =
+            await addExam(
+              rest
+            );
+
+          if (id) {
+            importedExamIds.set(
+              id,
+              newExamId
+            );
+          }
+        }
+
+        /*
+         * استيراد النتائج.
+         *
+         * نستخدم IDs الأصلية إذا كانت متوافقة
+         * مع البيانات الحالية، وإلا نحاول
+         * ربطها بالامتحان المستورد.
+         */
+        const importedResults =
+          data.results || [];
+
+        if (
+          importedResults.length >
+          0
+        ) {
+          const resultsToImport =
+            importedResults.map(
+              (result) => ({
+                ...result,
+                id: '',
+                examId:
+                  importedExamIds.get(
+                    result.examId
+                  ) ||
+                  result.examId,
+              })
+            );
+
+          await saveBatchResults(
+            resultsToImport
           );
         }
 
@@ -1261,6 +1449,7 @@ export default function App() {
               title="تصدير جميع البيانات إلى Excel"
             >
               <FileDown className="w-4 h-4 text-amber-500" />
+
               <span className="hidden sm:inline">
                 Export Excel
               </span>
@@ -1319,6 +1508,7 @@ export default function App() {
               className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold rounded-lg text-xs sm:text-sm shadow-md shadow-amber-500/20 inline-flex items-center gap-1.5 transition cursor-pointer"
             >
               <UserPlus className="w-4 h-4" />
+
               <span>
                 + Add Student
               </span>
@@ -1883,8 +2073,19 @@ export default function App() {
         students={
           students
         }
+        /*
+         * مهم جداً:
+         * الرصد يعرض فقط نتائج الامتحان
+         * الحالي، وليس نتائج جميع الامتحانات.
+         */
         existingResults={
-          results
+          activeScoringExam
+            ? results.filter(
+                (result) =>
+                  result.examId ===
+                  activeScoringExam.id
+              )
+            : []
         }
         settings={
           settings
@@ -1894,6 +2095,9 @@ export default function App() {
         }
         onSaveScores={
           handleSaveBatchScores
+        }
+        preselectedStudent={
+          preselectedStudentForScore
         }
       />
 
@@ -1925,7 +2129,16 @@ export default function App() {
           confirmModalConfig.message
         }
         onConfirm={
-          confirmModalConfig.onConfirm
+          async () => {
+            await confirmModalConfig.onConfirm();
+
+            setConfirmModalConfig(
+              (prev) => ({
+                ...prev,
+                isOpen: false,
+              })
+            );
+          }
         }
         onClose={() =>
           setConfirmModalConfig(

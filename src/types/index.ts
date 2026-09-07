@@ -1,4 +1,4 @@
-export type ExamType = 
+export type ExamType =
   | 'Quiz'
   | 'Test'
   | 'Midterm'
@@ -13,7 +13,13 @@ export interface Student {
   name: string;
   grade: string; // e.g. الأول الثانوي
   group: string; // e.g. مجموعة A
-  subject: string; // e.g. فيزياء / لغة عربية
+
+  // المادة القديمة - نحافظ عليها للتوافق مع البيانات الموجودة
+  subject: string;
+
+  // المواد التي يدرسها الطالب - يمكن أن تكون أكثر من مادة
+  subjects?: string[];
+
   school?: string;
   phone?: string;
   parentPhone?: string;
@@ -41,8 +47,13 @@ export interface Exam {
 export interface ExamResult {
   id: string;
   examId: string;
-  studentId: string; // Reference to Student.id or studentId
-  studentDocId: string; // The Firestore document ID of the student
+
+  // Student ID
+  studentId: string;
+
+  // Firestore document ID للطالب
+  studentDocId: string;
+
   studentName: string;
   examTitle: string;
   examDate: string;
