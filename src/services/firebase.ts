@@ -25,6 +25,7 @@ import {
   signOut,
   onAuthStateChanged,
   type User,
+  type Auth,
 } from 'firebase/auth';
 
 import {
@@ -39,24 +40,98 @@ import { DEFAULT_GRADING_SCALE } from '../utils/grading';
 
 /* =========================================================
    FIREBASE CONFIG
+   Project: records-2eedd (Existing Firebase Project)
+   Firestore: (default) Database
+   Using ONLY real VITE_FIREBASE_* environment variables
    ========================================================= */
 
+export const TARGET_FIREBASE_PROJECT_ID = 'records-2eedd';
+export const FIRESTORE_DATABASE_ID = '(default)';
+
+const apiKey =
+  typeof import.meta !== 'undefined'
+    ? import.meta.env?.VITE_FIREBASE_API_KEY?.trim()
+    : undefined;
+
+const authDomain =
+  typeof import.meta !== 'undefined'
+    ? import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN?.trim()
+    : undefined;
+
+const projectId =
+  typeof import.meta !== 'undefined'
+    ? import.meta.env?.VITE_FIREBASE_PROJECT_ID?.trim()
+    : undefined;
+
+const storageBucket =
+  typeof import.meta !== 'undefined'
+    ? import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET?.trim()
+    : undefined;
+
+const messagingSenderId =
+  typeof import.meta !== 'undefined'
+    ? import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID?.trim()
+    : undefined;
+
+const appId =
+  typeof import.meta !== 'undefined'
+    ? import.meta.env?.VITE_FIREBASE_APP_ID?.trim()
+    : undefined;
+
+const measurementId =
+  typeof import.meta !== 'undefined'
+    ? import.meta.env?.VITE_FIREBASE_MEASUREMENT_ID?.trim()
+    : undefined;
+
+// Validate required Firebase environment variables - fail clearly if missing
+const missingVariables: string[] = [];
+if (!apiKey) missingVariables.push('VITE_FIREBASE_API_KEY');
+if (!authDomain) missingVariables.push('VITE_FIREBASE_AUTH_DOMAIN');
+if (!projectId) missingVariables.push('VITE_FIREBASE_PROJECT_ID');
+if (!storageBucket) missingVariables.push('VITE_FIREBASE_STORAGE_BUCKET');
+if (!appId) missingVariables.push('VITE_FIREBASE_APP_ID');
+
+if (missingVariables.length > 0) {
+  const failureMessage = `[Firebase Configuration Error] Missing required Firebase environment variable(s): ${missingVariables.join(
+    ', '
+  )}. The application must use ONLY real VITE_FIREBASE_* credentials for project "${TARGET_FIREBASE_PROJECT_ID}".`;
+  console.error(failureMessage);
+  throw new Error(failureMessage);
+}
+
+if (projectId !== TARGET_FIREBASE_PROJECT_ID) {
+  const projectMismatchMessage = `[Firebase Configuration Error] Invalid VITE_FIREBASE_PROJECT_ID: "${projectId}". Required project is "${TARGET_FIREBASE_PROJECT_ID}".`;
+  console.error(projectMismatchMessage);
+  throw new Error(projectMismatchMessage);
+}
+
 const firebaseConfig = {
-  apiKey: 'AIzaSyC2LHHPG7hn27LewZXmpU_PZAbysuL1TUc',
-  authDomain: 'records-2eedd.firebaseapp.com',
-  projectId: 'records-2eedd',
-  storageBucket: 'records-2eedd.firebasestorage.app',
-  messagingSenderId: '909170236632',
-  appId: '1:909170236632:web:194a138a4e137d20978bad',
-  measurementId: 'G-3W94L8Y977',
+  apiKey: apiKey!,
+  authDomain: authDomain!,
+  projectId: TARGET_FIREBASE_PROJECT_ID,
+  storageBucket: storageBucket!,
+  messagingSenderId: messagingSenderId || undefined,
+  appId: appId!,
+  measurementId: measurementId || undefined,
 };
 
 /* =========================================================
    ADMIN ACCESS
    ========================================================= */
 
-const ALLOWED_ADMIN_EMAIL =
-  'mohammedhesham872@gmail.com';
+export const ALLOWED_ADMIN_EMAILS = [
+  'mohammedhesham872@gmail.com',
+  'mr.mohamed.hesham93@gmail.com',
+  'mohammedhesham872@gmai.com',
+];
+
+export function isAllowedEmail(email?: string | null): boolean {
+  if (!email) return false;
+  const normalized = email.trim().toLowerCase();
+  return ALLOWED_ADMIN_EMAILS.some(
+    (allowed) => allowed.toLowerCase() === normalized
+  );
+}
 
 /* =========================================================
    FIREBASE APP
@@ -79,11 +154,13 @@ export const auth = getAuth(app);
 
 function initFirestore(): Firestore {
   try {
-    return initializeFirestore(app, {
-      experimentalForceLongPolling: true,
-    });
+    return initializeFirestore(
+      app,
+      { experimentalForceLongPolling: true },
+      FIRESTORE_DATABASE_ID
+    );
   } catch {
-    return getFirestore(app);
+    return getFirestore(app, FIRESTORE_DATABASE_ID);
   }
 }
 
@@ -104,18 +181,19 @@ googleProvider.setCustomParameters({
    ========================================================= */
 
 export const UAE_GRADES = [
-  'Grade 1',
-  'Grade 2',
-  'Grade 3',
-  'Grade 4',
-  'Grade 5',
-  'Grade 6',
-  'Grade 7',
-  'Grade 8',
-  'Grade 9',
-  'Grade 10',
-  'Grade 11',
-  'Grade 12',
+  'الصف الأول (Grade 1)',
+  'الصف الثاني (Grade 2)',
+  'الصف الثالث (Grade 3)',
+  'الصف الرابع (Grade 4)',
+  'الصف الخامس (Grade 5)',
+  'الصف السادس (Grade 6)',
+  'الصف السابع (Grade 7)',
+  'الصف الثامن (Grade 8)',
+  'الصف التاسع (Grade 9)',
+  'الصف العاشر (Grade 10)',
+  'الصف الحادي عشر (Grade 11)',
+  'الصف الثاني عشر (Grade 12)',
+  'أخرى',
 ];
 
 /* =========================================================
@@ -137,8 +215,8 @@ export const DEFAULT_EXAM_TYPES: ExamType[] = [
    ========================================================= */
 
 export const DEFAULT_SETTINGS: TeacherSettings = {
-  teacherName: 'Mohammed Hisham',
-  appTitle: 'Student Records',
+  teacherName: 'Mr. Mohamed Hesham',
+  appTitle: 'Mr. Mohamed Hesham Records',
   defaultSubject: 'Mathematics',
 
   grades: UAE_GRADES,
@@ -161,7 +239,7 @@ export const DEFAULT_SETTINGS: TeacherSettings = {
    ========================================================= */
 
 /**
- * تسجيل الدخول مسموح فقط للحساب المحدد.
+ * تسجيل الدخول مسموح فقط للحسابات المعتمدة.
  */
 export async function signInWithGoogle(): Promise<User> {
   const result = await signInWithPopup(
@@ -174,10 +252,7 @@ export async function signInWithGoogle(): Promise<User> {
   const email =
     user.email?.trim().toLowerCase();
 
-  if (
-    email !==
-    ALLOWED_ADMIN_EMAIL.toLowerCase()
-  ) {
+  if (!isAllowedEmail(email)) {
     await signOut(auth);
 
     throw new Error(
@@ -212,10 +287,7 @@ export function subscribeToAuth(
       const email =
         user.email?.trim().toLowerCase();
 
-      if (
-        email !==
-        ALLOWED_ADMIN_EMAIL.toLowerCase()
-      ) {
+      if (!isAllowedEmail(email)) {
         signOut(auth).catch(() => {});
         callback(null);
         return;
@@ -239,10 +311,7 @@ export function getCurrentUser(): User | null {
   const email =
     user.email?.trim().toLowerCase();
 
-  if (
-    email !==
-    ALLOWED_ADMIN_EMAIL.toLowerCase()
-  ) {
+  if (!isAllowedEmail(email)) {
     return null;
   }
 
@@ -264,10 +333,7 @@ export async function ensureAuthenticated(): Promise<User> {
   const email =
     user.email?.trim().toLowerCase();
 
-  if (
-    email !==
-    ALLOWED_ADMIN_EMAIL.toLowerCase()
-  ) {
+  if (!isAllowedEmail(email)) {
     await signOut(auth);
 
     throw new Error(
@@ -803,15 +869,12 @@ export function subscribeToRealtimeData(
       ) as Student[];
 
       studentsReady = true;
-
-      if (
-        studentsReady &&
-        examsReady &&
-        resultsReady &&
-        settingsReady
-      ) {
-        emit();
-      }
+      emit();
+    },
+    (err) => {
+      console.warn('Realtime students listener:', err.message);
+      studentsReady = true;
+      emit();
     }
   );
 
@@ -826,15 +889,12 @@ export function subscribeToRealtimeData(
       ) as Exam[];
 
       examsReady = true;
-
-      if (
-        studentsReady &&
-        examsReady &&
-        resultsReady &&
-        settingsReady
-      ) {
-        emit();
-      }
+      emit();
+    },
+    (err) => {
+      console.warn('Realtime exams listener:', err.message);
+      examsReady = true;
+      emit();
     }
   );
 
@@ -849,15 +909,12 @@ export function subscribeToRealtimeData(
       ) as ExamResult[];
 
       resultsReady = true;
-
-      if (
-        studentsReady &&
-        examsReady &&
-        resultsReady &&
-        settingsReady
-      ) {
-        emit();
-      }
+      emit();
+    },
+    (err) => {
+      console.warn('Realtime results listener:', err.message);
+      resultsReady = true;
+      emit();
     }
   );
 
@@ -874,15 +931,12 @@ export function subscribeToRealtimeData(
       }
 
       settingsReady = true;
-
-      if (
-        studentsReady &&
-        examsReady &&
-        resultsReady &&
-        settingsReady
-      ) {
-        emit();
-      }
+      emit();
+    },
+    (err) => {
+      console.warn('Realtime settings listener:', err.message);
+      settingsReady = true;
+      emit();
     }
   );
 

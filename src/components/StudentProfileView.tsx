@@ -307,7 +307,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
         }`}>
           <Sparkles className="w-5 h-5 shrink-0 mt-0.5 text-indigo-600" />
           <div>
-            <span className="font-bold block mb-0.5">التقييم التحليلي لمستر محمد هشام:</span>
+            <span className="font-bold block mb-0.5">التقييم التحليلي لـ Mr. Mohamed Hesham:</span>
             <p className="leading-relaxed">{stats.trendMessage}</p>
           </div>
         </div>
@@ -320,49 +320,66 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
               لم يتم رصد نتائج امتحانات لهذا الطالب حتى الآن لعرض الرسم البياني.
             </div>
           ) : (
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-              {/* SVG Curve / Bars visualization */}
-              <div className="h-44 flex items-end gap-3 pt-6 pb-2 px-2 overflow-x-auto">
-                {timelineResults.map((r, idx) => {
-                  const heightPercent = Math.max(12, Math.min(100, r.percentage));
-                  const isPass = r.passed;
-                  return (
-                    <div key={r.id} className="flex-1 min-w-[50px] max-w-[80px] flex flex-col items-center h-full justify-end group relative">
-                      {/* Tooltip */}
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-12 z-20 bg-slate-900 text-white text-[10px] py-1 px-2 rounded-lg whitespace-nowrap pointer-events-none shadow-md">
-                        {r.examTitle}: <strong>{r.score}/{r.totalScore}</strong> ({r.percentage}%)
-                      </div>
-
-                      <span className="text-[10px] font-mono font-bold text-slate-700 mb-1">
-                        {r.percentage}%
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 overflow-hidden">
+              {/* Bars visualization */}
+              <div className="relative w-full">
+                {/* Reference Grid lines */}
+                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-12 pr-7 pl-1">
+                  {[100, 75, 50, 25, 0].map((val) => (
+                    <div key={val} className="w-full flex items-center gap-2">
+                      <span className="text-[8px] font-mono text-slate-300 w-5 text-left shrink-0">
+                        {val}%
                       </span>
-
-                      {/* Bar */}
-                      <div 
-                        style={{ height: `${heightPercent}%` }}
-                        className={`w-full rounded-t-lg transition-all duration-300 ${
-                          r.percentage >= 90
-                            ? 'bg-emerald-500 hover:bg-emerald-600'
-                            : r.percentage >= 80
-                            ? 'bg-blue-500 hover:bg-blue-600'
-                            : r.percentage >= 70
-                            ? 'bg-amber-500 hover:bg-amber-600'
-                            : r.percentage >= 60
-                            ? 'bg-orange-500 hover:bg-orange-600'
-                            : 'bg-rose-500 hover:bg-rose-600'
-                        }`}
-                      />
-
-                      {/* Exam Title & Date Label */}
-                      <span className="text-[9px] text-slate-500 font-medium truncate w-full text-center mt-1.5" title={r.examTitle}>
-                        {r.examTitle}
-                      </span>
-                      <span className="text-[8px] text-slate-400 font-mono">
-                        {r.examDate.slice(5)}
-                      </span>
+                      <div className="flex-1 border-b border-dashed border-slate-200" />
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
+
+                <div className="relative z-10 h-44 flex items-end gap-2 sm:gap-3 pt-6 pb-2 pr-8 pl-1 overflow-x-auto overflow-y-hidden">
+                  {timelineResults.map((r) => {
+                    const heightPercent = Math.max(10, Math.min(100, r.percentage));
+                    return (
+                      <div key={r.id} className="flex-1 min-w-[46px] max-w-[70px] flex flex-col items-center h-full justify-end group relative shrink">
+                        {/* Tooltip */}
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-12 z-20 bg-slate-900 text-white text-[10px] py-1 px-2.5 rounded-lg whitespace-nowrap pointer-events-none shadow-md">
+                          <span className="font-bold">{r.examTitle}</span>: {r.score}/{r.totalScore} ({r.percentage}%)
+                        </div>
+
+                        <span className="text-[10px] font-mono font-bold text-slate-700 mb-1 leading-none shrink-0">
+                          {r.percentage}%
+                        </span>
+
+                        {/* Bar */}
+                        <div className="w-full flex-1 flex items-end justify-center min-h-0">
+                          <div 
+                            style={{ height: `${heightPercent}%` }}
+                            className={`w-6 sm:w-7 max-w-[28px] sm:max-w-[34px] rounded-t-lg transition-all duration-300 ${
+                              r.percentage >= 90
+                                ? 'bg-emerald-500 hover:bg-emerald-600'
+                                : r.percentage >= 80
+                                ? 'bg-blue-500 hover:bg-blue-600'
+                                : r.percentage >= 70
+                                ? 'bg-amber-500 hover:bg-amber-600'
+                                : r.percentage >= 60
+                                ? 'bg-orange-500 hover:bg-orange-600'
+                                : 'bg-rose-500 hover:bg-rose-600'
+                            }`}
+                          />
+                        </div>
+
+                        {/* Exam Title & Date Label */}
+                        <div className="w-full text-center mt-1.5 pt-1 border-t border-slate-200 shrink-0">
+                          <span className="text-[9px] text-slate-600 font-medium truncate block w-full text-center leading-tight" title={r.examTitle}>
+                            {r.examTitle}
+                          </span>
+                          <span className="text-[8px] text-slate-400 font-mono block mt-0.5">
+                            {r.examDate ? r.examDate.slice(5) : ''}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Chart Legend */}

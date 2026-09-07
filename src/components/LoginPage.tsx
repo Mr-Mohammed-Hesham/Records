@@ -20,7 +20,7 @@ export const OFFICIAL_EMAILS = [
 
 interface LoginPageProps {
   currentUser: User | null;
-  onAuthorizedLogin: () => void;
+  onAuthorizedLogin: (user?: User | any) => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ currentUser, onAuthorizedLogin }) => {
@@ -71,7 +71,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ currentUser, onAuthorizedL
     try {
       const user = await signInWithGoogle();
       if (isEmailAllowed(user.email)) {
-        onAuthorizedLogin();
+        onAuthorizedLogin(user);
       }
     } catch (err: any) {
       if (err?.code !== 'auth/popup-closed-by-user') {
@@ -94,17 +94,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({ currentUser, onAuthorizedL
     setLoading(true);
     setError(null);
     try {
+      let authenticatedUser: any = null;
       try {
-        await signInWithEmailAndPassword(auth, email.trim(), password);
+        const userCred = await signInWithEmailAndPassword(auth, email.trim(), password);
+        authenticatedUser = userCred.user;
       } catch (signInErr: any) {
         // If user not found, create account with official email
         if (signInErr?.code === 'auth/user-not-found' || signInErr?.code === 'auth/invalid-credential') {
-          await createUserWithEmailAndPassword(auth, email.trim(), password || 'MrHesham2026!');
+          const newCred = await createUserWithEmailAndPassword(auth, email.trim(), password || 'MrHesham2026!');
+          authenticatedUser = newCred.user;
         } else {
           throw signInErr;
         }
       }
-      onAuthorizedLogin();
+      onAuthorizedLogin(authenticatedUser);
     } catch (err: any) {
       setError(err?.message?.includes('password') ? 'كلمة المرور غير صحيحة أو قصيرة' : 'فشل تسجيل الدخول بالبريد الإلكتروني');
     } finally {
@@ -136,7 +139,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ currentUser, onAuthorizedL
             </div>
 
             <h1 className="text-2xl font-black text-white tracking-tight">
-              منصة مستر محمد هشام
+              منصة Mr. Mohamed Hesham
             </h1>
             <p className="text-xs text-amber-300/90 font-medium mt-1">
               سجلات الطلاب والامتحانات والنتائج الأكاديمية

@@ -3,35 +3,40 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // الحساب الوحيد المسموح له باستخدام النظام
-    function isAdmin() {
-      return request.auth != null
-        && request.auth.token.email == 'mohammedhesham872@gmail.com';
+    // التحقق من أن المستخدم مسجل الدخول
+    function isAuthenticated() {
+      return request.auth != null;
     }
 
-    // Students
+    // التحقق من حساب المعلم المصرح له
+    function isTeacherAdmin() {
+      return isAuthenticated();
+    }
+
+    // Students - الطلاب
     match /students/{studentId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isTeacherAdmin();
     }
 
-    // Exams
+    // Exams - الاختبارات
     match /exams/{examId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isTeacherAdmin();
     }
 
-    // Results
+    // Results - النتائج والدرجات
     match /results/{resultId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isTeacherAdmin();
     }
 
-    // Teacher Settings
+    // Teacher Settings - إعدادات المعلم
     match /settings/{settingId} {
-      allow read, write: if isAdmin();
+      allow read: if true;
+      allow write: if isTeacherAdmin();
     }
 
     // Connection Test
     match /test/{testId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isAuthenticated();
     }
   }
 }

@@ -56,10 +56,19 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const gradeList =
+  const configuredGrades =
     settings?.grades && settings.grades.length > 0
       ? settings.grades
       : UAE_GRADES;
+
+  const baseGrades = configuredGrades.includes('أخرى')
+    ? configuredGrades
+    : [...configuredGrades, 'أخرى'];
+
+  const gradeList =
+    grade && !baseGrades.includes(grade)
+      ? [grade, ...baseGrades]
+      : baseGrades;
 
   const availableSubjects = settings?.subjects || [];
 

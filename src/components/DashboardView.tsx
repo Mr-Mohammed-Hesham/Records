@@ -311,7 +311,7 @@ className="w-full h-full object-cover rounded-[14px]"
       {/* Charts & Performance Matrix Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Exam Average Trend Chart */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200 dark:border-slate-800 transition-colors overflow-hidden flex flex-col justify-between">
           <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
             <div>
               <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
@@ -331,10 +331,23 @@ className="w-full h-full object-cover rounded-[14px]"
               <p>سجل امتحانات ونتائج لعرض المخطط البياني هنا.</p>
             </div>
           ) : (
-            <div className="mt-6">
-              <div className="h-52 flex items-end gap-4 px-2">
+            <div className="mt-5 relative w-full overflow-hidden">
+              {/* Reference Grid lines */}
+              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-12 pr-8 pl-1">
+                {[100, 75, 50, 25, 0].map((val) => (
+                  <div key={val} className="w-full flex items-center gap-2">
+                    <span className="text-[9px] font-mono text-slate-300 dark:text-slate-600 w-6 text-left shrink-0">
+                      {val}%
+                    </span>
+                    <div className="flex-1 border-b border-dashed border-slate-100 dark:border-slate-800/80" />
+                  </div>
+                ))}
+              </div>
+
+              {/* Bars Track */}
+              <div className="relative z-10 h-48 sm:h-52 flex items-end justify-around gap-2 sm:gap-3 pr-9 pl-1 pb-1 overflow-x-auto overflow-y-hidden">
                 {recentExamsChart.map((e, idx) => {
-                  const height = Math.max(16, e.avg);
+                  const height = Math.max(8, Math.min(100, e.avg));
                   const colors = [
                     'from-amber-500 to-orange-500',
                     'from-indigo-500 to-violet-600',
@@ -346,26 +359,43 @@ className="w-full h-full object-cover rounded-[14px]"
                   const barGradient = colors[idx % colors.length];
 
                   return (
-                    <div key={e.id} className="flex-1 flex flex-col items-center h-full justify-end group relative">
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-10 bg-slate-950 text-white text-[10px] py-1 px-2.5 rounded-lg whitespace-nowrap shadow-xl border border-slate-800 pointer-events-none z-20">
-                        متوسط: <strong>{e.avg}%</strong> ({e.attended} طالب)
+                    <div
+                      key={e.id}
+                      className="flex-1 min-w-[48px] max-w-[74px] sm:max-w-[90px] flex flex-col items-center h-full justify-end group relative shrink"
+                    >
+                      {/* Tooltip on hover */}
+                      <div className="opacity-0 group-hover:opacity-100 transition-all duration-150 absolute -top-12 z-30 bg-slate-950 text-white text-[11px] py-1.5 px-3 rounded-xl whitespace-nowrap shadow-xl border border-slate-800 pointer-events-none transform -translate-y-1 group-hover:translate-y-0">
+                        <div className="font-bold truncate max-w-[170px]">{e.title}</div>
+                        <div className="text-[10px] text-amber-400 font-mono mt-0.5">
+                          متوسط: {e.avg}% • ({e.attended} طالب)
+                        </div>
                       </div>
 
-                      <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      {/* Percentage label above the bar */}
+                      <span className="text-[10px] sm:text-xs font-mono font-bold text-slate-700 dark:text-slate-300 mb-1 leading-none shrink-0">
                         {e.avg}%
                       </span>
 
-                      <div 
-                        style={{ height: `${height}%` }}
-                        className={`w-full bg-gradient-to-t ${barGradient} rounded-t-xl transition-all duration-300 shadow-sm group-hover:brightness-110`}
-                      />
+                      {/* Sized Bar with constrained proportions */}
+                      <div className="w-full flex-1 flex items-end justify-center min-h-0">
+                        <div 
+                          style={{ height: `${height}%` }}
+                          className={`w-6 sm:w-8 max-w-[32px] sm:max-w-[40px] bg-gradient-to-t ${barGradient} rounded-t-lg sm:rounded-t-xl transition-all duration-300 shadow-sm group-hover:brightness-110 group-hover:scale-y-[1.02] origin-bottom cursor-pointer`}
+                        />
+                      </div>
 
-                      <span className="text-[11px] text-slate-700 dark:text-slate-300 font-semibold truncate w-full text-center mt-2.5" title={e.title}>
-                        {e.title}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        {e.date.slice(5)}
-                      </span>
+                      {/* Title and Date below the bar */}
+                      <div className="w-full text-center mt-1.5 pt-1 border-t border-slate-100 dark:border-slate-800/80 shrink-0">
+                        <span
+                          className="text-[10px] sm:text-[11px] text-slate-700 dark:text-slate-300 font-semibold truncate block w-full text-center leading-tight px-0.5"
+                          title={e.title}
+                        >
+                          {e.title}
+                        </span>
+                        <span className="text-[9px] text-slate-400 font-mono block mt-0.5">
+                          {e.date ? e.date.slice(5) : ''}
+                        </span>
+                      </div>
                     </div>
                   );
                 })}
@@ -375,7 +405,7 @@ className="w-full h-full object-cover rounded-[14px]"
         </div>
 
         {/* Performance Matrix Card */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col justify-between transition-colors">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 p-5 sm:p-6 flex flex-col justify-between transition-colors overflow-hidden">
           <div>
             <h3 className="font-bold text-slate-900 dark:text-white text-base mb-4 flex items-center gap-2">
               <Zap className="w-4 h-4 text-amber-500" />

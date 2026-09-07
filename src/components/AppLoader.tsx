@@ -34,7 +34,7 @@ export const AppLoader: React.FC<AppLoaderProps> = ({
 
         {/* Title */}
         <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white mb-1">
-          منصة مستر محمد هشام
+          منصة Mr. Mohamed Hesham
         </h1>
         <p className="text-xs sm:text-sm font-medium text-amber-300/80 mb-6 flex items-center gap-1.5 justify-center">
           <span>نظام السجلات الأكاديمية والمتابعة الشاملة</span>

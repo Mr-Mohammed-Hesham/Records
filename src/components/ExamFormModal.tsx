@@ -34,7 +34,19 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const gradeList = settings?.grades && settings.grades.length > 0 ? settings.grades : UAE_GRADES;
+  const configuredGrades =
+    settings?.grades && settings.grades.length > 0
+      ? settings.grades
+      : UAE_GRADES;
+
+  const baseGrades = configuredGrades.includes('أخرى')
+    ? configuredGrades
+    : [...configuredGrades, 'أخرى'];
+
+  const gradeList =
+    grade && !baseGrades.includes(grade)
+      ? [grade, ...baseGrades]
+      : baseGrades;
 
   useEffect(() => {
     if (activeExam) {

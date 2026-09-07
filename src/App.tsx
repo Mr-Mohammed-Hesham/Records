@@ -9,6 +9,7 @@ import {
   Search,
   UserPlus,
   FileDown,
+  Download,
   Menu,
   X,
   Sun,
@@ -209,7 +210,7 @@ export default function App() {
   }, []);
 
   const isAuthorized =
-    currentUser &&
+    !!currentUser &&
     OFFICIAL_EMAILS.some(
       (email) =>
         email.toLowerCase() ===
@@ -268,11 +269,23 @@ export default function App() {
     });
 
   /* =======================================================
-     TOASTS
+     TOASTS & AUTO-DISMISS
      ======================================================= */
 
   const [toasts, setToasts] =
     useState<ToastNotification[]>([]);
+
+  const removeToast = useCallback(
+    (id: string) => {
+      setToasts((prev) =>
+        prev.filter(
+          (toast) =>
+            toast.id !== id
+        )
+      );
+    },
+    []
+  );
 
   const addToast = useCallback(
     (
@@ -280,7 +293,8 @@ export default function App() {
       type:
         | 'success'
         | 'error'
-        | 'info' = 'success'
+        | 'info' = 'success',
+      duration = 3500
     ) => {
       const id =
         Date.now().toString() +
@@ -294,23 +308,115 @@ export default function App() {
           id,
           message,
           type,
+          duration,
         },
       ]);
+
+      if (duration > 0) {
+        setTimeout(() => {
+          removeToast(id);
+        }, duration);
+      }
     },
-    []
+    [removeToast]
   );
 
-  const removeToast = useCallback(
-    (id: string) => {
-      setToasts((prev) =>
-        prev.filter(
-          (toast) =>
-            toast.id !== id
-        )
+  /* =======================================================
+     PWA DIRECT INSTALLATION (NO EXTRA POPUPS)
+     ======================================================= */
+
+  const [deferredInstallPrompt, setDeferredInstallPrompt] =
+    useState<any>(() => {
+      return typeof window !== 'undefined'
+        ? (window as any).__pwaInstallPrompt || null
+        : null;
+    });
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
+
+  useEffect(() => {
+    // Detect if already installed / standalone
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as unknown as { standalone?: boolean })
+        .standalone === true;
+
+    if (isStandalone) {
+      setIsAppInstalled(true);
+    }
+
+    if ((window as any).__pwaInstallPrompt) {
+      setDeferredInstallPrompt((window as any).__pwaInstallPrompt);
+    }
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      (window as any).__pwaInstallPrompt = e;
+      setDeferredInstallPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setIsAppInstalled(true);
+      setDeferredInstallPrompt(null);
+      if ((window as any).__pwaInstallPrompt) {
+        (window as any).__pwaInstallPrompt = null;
+      }
+      addToast('تم تثبيت التطبيق بنجاح على جهازك!', 'success', 3000);
+    };
+
+    window.addEventListener(
+      'beforeinstallprompt',
+      handleBeforeInstallPrompt
+    );
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener(
+        'beforeinstallprompt',
+        handleBeforeInstallPrompt
       );
-    },
-    []
-  );
+      window.removeEventListener(
+        'appinstalled',
+        handleAppInstalled
+      );
+    };
+  }, [addToast]);
+
+  const handleTriggerInstall = async () => {
+    if (isAppInstalled) {
+      addToast('التطبيق مثبت بالفعل على جهازك وهو يعمل بأفضل كفاءة', 'info', 2500);
+      return;
+    }
+
+    const promptEvent =
+      deferredInstallPrompt ||
+      (typeof window !== 'undefined'
+        ? (window as any).__pwaInstallPrompt
+        : null);
+
+    if (promptEvent) {
+      try {
+        await promptEvent.prompt();
+        const choiceResult =
+          await promptEvent.userChoice;
+        if (
+          choiceResult &&
+          choiceResult.outcome === 'accepted'
+        ) {
+          setIsAppInstalled(true);
+          setDeferredInstallPrompt(null);
+          if (typeof window !== 'undefined') {
+            (window as any).__pwaInstallPrompt = null;
+          }
+        }
+      } catch (err) {
+        console.warn('Direct installation trigger:', err);
+      }
+      return;
+    }
+
+    // Direct feedback without any browser address bar guidance
+    addToast('جاري تحضير التثبيت المباشر...', 'info', 2000);
+  };
 
   /* =======================================================
      QUICK SEARCH SHORTCUT
@@ -351,12 +457,22 @@ export default function App() {
      ======================================================= */
 
   useEffect(() => {
+    if (!authInitialized) {
+      return;
+    }
+
+    if (!currentUser || !isAuthorized) {
+      setLoading(false);
+      return;
+    }
+
     let unsubscribe:
       | (() => void)
       | undefined;
 
     async function init() {
       try {
+        setLoading(true);
         const loadedSettings =
           await getTeacherSettings();
 
@@ -382,13 +498,14 @@ export default function App() {
               setSettings(
                 data.settings
               );
+              setLoading(false);
             }
           );
 
         setLoading(false);
       } catch (err) {
-        console.error(
-          'Initialization error:',
+        console.warn(
+          'Initialization info:',
           err
         );
 
@@ -403,7 +520,7 @@ export default function App() {
         unsubscribe();
       }
     };
-  }, []);
+  }, [authInitialized, currentUser, isAuthorized]);
 
   /* =======================================================
      KEEP SELECTED STUDENT UPDATED
@@ -462,7 +579,7 @@ export default function App() {
         );
 
         addToast(
-          'مرحباً بك مستر محمد هشام! النظام جاهز، ويمكنك البدء بإضافة الطلاب والامتحانات.',
+          'Welcome Mr. Mohamed Hesham! النظام جاهز، ويمكنك البدء بإضافة الطلاب والامتحانات.',
           'info'
         );
       }
@@ -1314,9 +1431,13 @@ export default function App() {
     return (
       <LoginPage
         currentUser={currentUser}
-        onAuthorizedLogin={
-          handleGoogleLogin
-        }
+        onAuthorizedLogin={(user) => {
+          if (user) {
+            setCurrentUser(user);
+          } else {
+            handleGoogleLogin();
+          }
+        }}
       />
     );
   }
@@ -1383,15 +1504,15 @@ export default function App() {
               </div>
 
               <div>
-                <div className="text-amber-600 dark:text-amber-400 font-extrabold text-base leading-tight">
-                  مستر محمد{' '}
-                  <span className="text-slate-900 dark:text-white">
-                    هشام
+                <div className="text-amber-500 font-extrabold text-base leading-tight font-sans tracking-wide">
+                  Mr. Mohamed{' '}
+                  <span className="text-slate-900 dark:text-white font-black">
+                    Hesham
                   </span>
                 </div>
 
-                <p className="text-[10px] text-slate-400 dark:text-slate-400 hidden sm:block tracking-wider">
-                  نظام السجلات الأكاديمية
+                <p className="text-[10px] text-slate-400 dark:text-slate-400 hidden sm:block tracking-wider font-sans">
+                  Academic Records & Management
                 </p>
               </div>
             </div>
@@ -1399,6 +1520,17 @@ export default function App() {
 
           {/* Header Tools */}
           <div className="flex items-center gap-2 sm:gap-3">
+
+            {/* Install Button (Matching screenshot header pill) */}
+            <button
+              id="btn-install-pwa-header"
+              onClick={handleTriggerInstall}
+              className="px-3 py-2 border border-amber-500/30 dark:border-amber-500/40 rounded-xl text-xs sm:text-sm font-bold hover:bg-amber-500/15 bg-amber-500/10 text-amber-600 dark:text-amber-400 inline-flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
+              title="تثبيت التطبيق مباشرة على الهاتف أو سطح المكتب"
+            >
+              <Download className="w-4 h-4 text-amber-500 animate-pulse" />
+              <span>تثبيت</span>
+            </button>
 
             {/* Theme */}
             <button
@@ -1538,12 +1670,12 @@ export default function App() {
               </div>
 
               <div>
-                <div className="text-amber-600 dark:text-amber-400 font-extrabold text-sm leading-snug">
-                  مستر محمد هشام
+                <div className="text-amber-500 font-extrabold text-sm leading-snug font-sans tracking-wide">
+                  Mr. Mohamed Hesham
                 </div>
 
-                <p className="text-[11px] text-slate-400 dark:text-slate-400">
-                  إدارة السجلات الأكاديمية
+                <p className="text-[11px] text-slate-400 dark:text-slate-400 font-sans">
+                  Academic Records & Management
                 </p>
               </div>
             </div>
@@ -1694,8 +1826,8 @@ export default function App() {
                       className="w-8 h-8 rounded-lg object-cover"
                     />
 
-                    <span className="font-extrabold text-sm text-amber-600 dark:text-amber-400">
-                      مستر محمد هشام
+                    <span className="font-extrabold text-sm text-amber-500 font-sans tracking-wide">
+                      Mr. Mohamed Hesham
                     </span>
                   </div>
 
@@ -2149,6 +2281,20 @@ export default function App() {
           )
         }
       />
+
+      {/* Floating Quick Install Button (Matching user screenshot bottom-left) */}
+      {!isAppInstalled && (
+        <button
+          id="btn-floating-install-pwa"
+          onClick={handleTriggerInstall}
+          aria-label="تثبيت التطبيق مباشرة"
+          title="تثبيت التطبيق مباشرة على الهاتف أو سطح المكتب"
+          className="fixed bottom-6 left-6 z-40 w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-xl shadow-teal-500/30 hover:shadow-teal-500/50 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 group cursor-pointer border border-white/20"
+        >
+          <Download className="w-5 h-5 transition-transform group-hover:translate-y-0.5" />
+          <span className="sr-only">تثبيت التطبيق</span>
+        </button>
+      )}
     </div>
   );
 }
