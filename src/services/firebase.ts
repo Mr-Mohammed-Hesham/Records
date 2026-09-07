@@ -45,74 +45,40 @@ import { DEFAULT_GRADING_SCALE } from '../utils/grading';
    Using ONLY real VITE_FIREBASE_* environment variables
    ========================================================= */
 
+/* =========================================================
+
+   FIREBASE CONFIG
+
+   Project: records-2eedd
+
+   Firestore: (default)
+
+   ========================================================= */
+
+
+
 export const TARGET_FIREBASE_PROJECT_ID = 'records-2eedd';
+
 export const FIRESTORE_DATABASE_ID = '(default)';
 
-const apiKey =
-  typeof import.meta !== 'undefined'
-    ? import.meta.env?.VITE_FIREBASE_API_KEY?.trim()
-    : undefined;
 
-const authDomain =
-  typeof import.meta !== 'undefined'
-    ? import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN?.trim()
-    : undefined;
-
-const projectId =
-  typeof import.meta !== 'undefined'
-    ? import.meta.env?.VITE_FIREBASE_PROJECT_ID?.trim()
-    : undefined;
-
-const storageBucket =
-  typeof import.meta !== 'undefined'
-    ? import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET?.trim()
-    : undefined;
-
-const messagingSenderId =
-  typeof import.meta !== 'undefined'
-    ? import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID?.trim()
-    : undefined;
-
-const appId =
-  typeof import.meta !== 'undefined'
-    ? import.meta.env?.VITE_FIREBASE_APP_ID?.trim()
-    : undefined;
-
-const measurementId =
-  typeof import.meta !== 'undefined'
-    ? import.meta.env?.VITE_FIREBASE_MEASUREMENT_ID?.trim()
-    : undefined;
-
-// Validate required Firebase environment variables - fail clearly if missing
-const missingVariables: string[] = [];
-if (!apiKey) missingVariables.push('VITE_FIREBASE_API_KEY');
-if (!authDomain) missingVariables.push('VITE_FIREBASE_AUTH_DOMAIN');
-if (!projectId) missingVariables.push('VITE_FIREBASE_PROJECT_ID');
-if (!storageBucket) missingVariables.push('VITE_FIREBASE_STORAGE_BUCKET');
-if (!appId) missingVariables.push('VITE_FIREBASE_APP_ID');
-
-if (missingVariables.length > 0) {
-  const failureMessage = `[Firebase Configuration Error] Missing required Firebase environment variable(s): ${missingVariables.join(
-    ', '
-  )}. The application must use ONLY real VITE_FIREBASE_* credentials for project "${TARGET_FIREBASE_PROJECT_ID}".`;
-  console.error(failureMessage);
-  throw new Error(failureMessage);
-}
-
-if (projectId !== TARGET_FIREBASE_PROJECT_ID) {
-  const projectMismatchMessage = `[Firebase Configuration Error] Invalid VITE_FIREBASE_PROJECT_ID: "${projectId}". Required project is "${TARGET_FIREBASE_PROJECT_ID}".`;
-  console.error(projectMismatchMessage);
-  throw new Error(projectMismatchMessage);
-}
 
 const firebaseConfig = {
-  apiKey: apiKey!,
-  authDomain: authDomain!,
-  projectId: TARGET_FIREBASE_PROJECT_ID,
-  storageBucket: storageBucket!,
-  messagingSenderId: messagingSenderId || undefined,
-  appId: appId!,
-  measurementId: measurementId || undefined,
+
+  apiKey: 'AIzaSyC2LHHPG7hn27LewZXmpU_PZAbysuL1TUc  ',
+
+  authDomain: 'records-2eedd.firebaseapp.com',
+
+  projectId: 'records-2eedd',
+
+  storageBucket: 'records-2eedd.firebasestorage.app',
+
+  messagingSenderId: '909170236632',
+
+  appId: '1:909170236632:web:194a138a4e137d20978bad',
+
+  measurementId: 'G-3W94L8Y977',
+
 };
 
 /* =========================================================
