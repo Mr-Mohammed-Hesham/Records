@@ -65,7 +65,7 @@ export const FIRESTORE_DATABASE_ID = '(default)';
 
 const firebaseConfig = {
 
-  apiKey: 'AIzaSyC2LHHPG7hn27LewZXmpU_PZAbysuL1TUc  ',
+  apiKey: 'AIzaSyC2LHHPG7hn27LewZXmpU_PZAbysuL1TUc'.trim(),
 
   authDomain: 'records-2eedd.firebaseapp.com',
 

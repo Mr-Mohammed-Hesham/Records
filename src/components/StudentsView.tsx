@@ -244,44 +244,47 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
       className="space-y-5 text-right"
     >
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
-            <Users className="w-6 h-6 text-indigo-600" />
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+            <div className="p-2 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl">
+              <Users className="w-5 h-5 sm:w-6 sm:h-6" />
+            </div>
             إدارة الطلاب ({students.length})
           </h1>
 
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             سجل الطلاب المسجلين، معدلات أدائهم وحالاتهم الأكاديمية
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
           <button
             onClick={onExportAllExcel}
-            className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all cursor-pointer shadow-xs"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-all cursor-pointer shadow-xs"
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            تصدير الكل إلى Excel
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <span className="hidden xs:inline sm:inline">تصدير الكل إلى Excel</span>
+            <span className="xs:hidden sm:hidden">Excel</span>
           </button>
 
           <button
             id="add-student-main-btn"
             onClick={onAddStudent}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-98 rounded-xl shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-98 rounded-xl shadow-md shadow-amber-500/20 transition-all cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
-            إضافة طالب جديد
+            <span>إضافة طالب جديد</span>
           </button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2.5 sm:gap-3">
 
           {/* Search */}
-          <div className="md:col-span-4 relative">
+          <div className="sm:col-span-2 md:col-span-4 relative">
             <input
               id="student-search-box"
               type="text"
@@ -290,7 +293,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                 setSearchTerm(e.target.value)
               }
               placeholder="بحث بالاسم أو ID أو رقم الهاتف..."
-              className="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-right font-medium"
+              className="w-full pr-9 pl-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all text-right font-medium text-slate-900 dark:text-white placeholder-slate-400"
             />
 
             <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
@@ -303,7 +306,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
               onChange={e =>
                 setGradeFilter(e.target.value)
               }
-              className="w-full py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden text-right cursor-pointer"
+              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden text-right cursor-pointer text-slate-800 dark:text-slate-200"
             >
               <option value="الكل">
                 كل الصفوف
@@ -327,7 +330,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
               onChange={e =>
                 setGroupFilter(e.target.value)
               }
-              className="w-full py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden text-right cursor-pointer"
+              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden text-right cursor-pointer text-slate-800 dark:text-slate-200"
             >
               <option value="الكل">
                 كل المجموعات
@@ -351,7 +354,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
               onChange={e =>
                 setSubjectFilter(e.target.value)
               }
-              className="w-full py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden text-right cursor-pointer"
+              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden text-right cursor-pointer text-slate-800 dark:text-slate-200"
             >
               <option value="الكل">
                 كل المواد
@@ -375,7 +378,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
               onChange={e =>
                 setStatusFilter(e.target.value)
               }
-              className="w-full py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-hidden text-right cursor-pointer font-medium"
+              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden text-right cursor-pointer font-medium text-slate-800 dark:text-slate-200"
             >
               <option value="الكل">
                 كل الحالات
@@ -397,9 +400,9 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
         </div>
 
         {/* Sorting */}
-        <div className="flex flex-wrap items-center justify-between text-xs pt-2 border-t border-slate-100 text-slate-500">
-          <div className="flex items-center gap-2">
-            <span>الترتيب حسب:</span>
+        <div className="flex flex-wrap items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <span className="text-[11px]">الترتيب:</span>
 
             <button
               onClick={() =>
@@ -407,8 +410,8 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
               }
               className={`px-2.5 py-1 rounded-lg border transition-colors cursor-pointer inline-flex items-center gap-1 ${
                 sortField === 'name'
-                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold'
-                  : 'bg-slate-50 border-slate-200'
+                  ? 'bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-400 font-bold'
+                  : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
               }`}
             >
               الاسم{' '}
@@ -424,11 +427,11 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
               }
               className={`px-2.5 py-1 rounded-lg border transition-colors cursor-pointer inline-flex items-center gap-1 ${
                 sortField === 'average'
-                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold'
-                  : 'bg-slate-50 border-slate-200'
+                  ? 'bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-400 font-bold'
+                  : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
               }`}
             >
-              متوسط الدرجات{' '}
+              المتوسط{' '}
               {sortField === 'average' &&
                 (sortDirection === 'asc'
                   ? '↑'
@@ -441,11 +444,11 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
               }
               className={`px-2.5 py-1 rounded-lg border transition-colors cursor-pointer inline-flex items-center gap-1 ${
                 sortField === 'examsCount'
-                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700 font-bold'
-                  : 'bg-slate-50 border-slate-200'
+                  ? 'bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-400 font-bold'
+                  : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
               }`}
             >
-              عدد الامتحانات{' '}
+              الامتحانات{' '}
               {sortField === 'examsCount' &&
                 (sortDirection === 'asc'
                   ? '↑'
@@ -453,15 +456,131 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             </button>
           </div>
 
-          <span className="text-[11px] text-slate-400">
+          <span className="text-[11px] text-slate-400 dark:text-slate-500">
             عرض {sortedStudents.length} من أصل{' '}
             {students.length} طالب
           </span>
         </div>
       </div>
 
-      {/* Students Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+      {/* Mobile Student Cards (md:hidden) */}
+      <div className="md:hidden space-y-3">
+        {sortedStudents.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-8 text-center border border-slate-200 dark:border-slate-800 shadow-sm text-slate-400 dark:text-slate-500">
+            <Users className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+            <p className="font-bold text-slate-700 dark:text-slate-300 text-sm">
+              {students.length === 0 ? 'لا يوجد طلاب مسجلين حتى الآن' : 'لا توجد نتائج مطابقة لشروط البحث'}
+            </p>
+            {students.length === 0 && (
+              <button
+                onClick={onAddStudent}
+                className="mt-3 px-4 py-2 text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl transition cursor-pointer"
+              >
+                إضافة أول طالب
+              </button>
+            )}
+          </div>
+        ) : (
+          sortedStudents.map(({ student, stats, subjects }) => (
+            <div
+              key={student.id}
+              className="bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-3 transition-all"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div 
+                  className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
+                  onClick={() => onOpenProfile(student)}
+                >
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-400 flex items-center justify-center font-bold text-sm shrink-0 border border-amber-500/20">
+                    {student.name.charAt(0)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-bold text-slate-900 dark:text-white text-sm truncate hover:text-amber-500 transition-colors">
+                      {student.name}
+                    </h4>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      <span className="font-mono font-bold text-slate-600 dark:text-slate-300 text-[11px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                        #{student.studentId}
+                      </span>
+                      <span>•</span>
+                      <span>{student.grade}</span>
+                      {student.group && (
+                        <>
+                          <span>•</span>
+                          <span>{student.group}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => onOpenProfile(student)}
+                    className="p-1.5 text-slate-400 hover:text-amber-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    title="فتح ملف الطالب"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => onEditStudent(student)}
+                    className="p-1.5 text-slate-400 hover:text-indigo-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    title="تعديل بيانات الطالب"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => onDeleteStudent(student)}
+                    className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    title="حذف الطالب"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-3 gap-2 py-2 px-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl text-center text-xs border border-slate-100 dark:border-slate-700/60">
+                <div>
+                  <span className="text-[10px] text-slate-400 block">المتوسط</span>
+                  <span className="font-mono font-black text-amber-600 dark:text-amber-400">
+                    {stats.totalExams > 0 ? `${stats.averagePercentage}%` : '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block">الامتحانات</span>
+                  <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                    {stats.totalExams}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block">آخر نتيجة</span>
+                  <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                    {stats.latestPercentage !== null ? `${stats.latestPercentage}%` : '-'}
+                  </span>
+                </div>
+              </div>
+
+              {subjects.length > 0 && (
+                <div className="flex flex-wrap gap-1 items-center">
+                  <span className="text-[11px] text-slate-400 ml-1">المواد:</span>
+                  {subjects.map((sub) => (
+                    <span
+                      key={sub}
+                      className="px-2 py-0.5 rounded-md text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium"
+                    >
+                      {sub}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Desktop Students Table (hidden md:block) */}
+      <div className="hidden md:block bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200/80 dark:border-slate-800 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-right text-xs">
             <thead className="bg-slate-50/80 text-slate-700 font-bold border-b border-slate-200">

@@ -184,8 +184,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             onClick={() => setReportType('by_group')}
             className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
               reportType === 'by_group'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200/60 dark:border-slate-700/60'
             }`}
           >
             تقرير حسب المجموعة
@@ -194,8 +194,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             onClick={() => setReportType('exam_comparison')}
             className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
               reportType === 'exam_comparison'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200/60 dark:border-slate-700/60'
             }`}
           >
             مقارنة امتحانات
@@ -205,7 +205,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         {/* Filters bar: Date Range & Selector */}
         <div className="flex flex-wrap items-center justify-between gap-4 text-xs">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1.5 text-slate-600">
+            <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
               <Calendar className="w-3.5 h-3.5 text-slate-400" />
               <span>فترة التقرير:</span>
             </div>
@@ -214,7 +214,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs"
                 placeholder="من"
               />
               <span className="text-slate-400">إلى</span>
@@ -222,13 +222,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs"
                 placeholder="إلى"
               />
               {(startDate || endDate) && (
                 <button
                   onClick={() => { setStartDate(''); setEndDate(''); }}
-                  className="text-[11px] text-indigo-600 hover:underline cursor-pointer"
+                  className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline cursor-pointer font-bold"
                 >
                   إعادة ضبط
                 </button>
@@ -239,11 +239,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           {/* Conditional dropdown based on report type */}
           {reportType === 'single_student' && (
             <div className="flex items-center gap-2">
-              <span className="text-slate-600 font-bold">اختر الطالب:</span>
+              <span className="text-slate-600 dark:text-slate-300 font-bold">اختر الطالب:</span>
               <select
                 value={selectedStudentId}
                 onChange={(e) => setSelectedStudentId(e.target.value)}
-                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium cursor-pointer"
+                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
               >
                 {students.map(s => (
                   <option key={s.id} value={s.id}>{s.name} ({s.studentId})</option>
@@ -254,11 +254,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
           {reportType === 'single_exam' && (
             <div className="flex items-center gap-2">
-              <span className="text-slate-600 font-bold">اختر الامتحان:</span>
+              <span className="text-slate-600 dark:text-slate-300 font-bold">اختر الامتحان:</span>
               <select
                 value={selectedExamId}
                 onChange={(e) => setSelectedExamId(e.target.value)}
-                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium cursor-pointer"
+                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
               >
                 {exams.map(e => (
                   <option key={e.id} value={e.id}>{e.title} ({e.date})</option>
@@ -269,11 +269,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
           {reportType === 'by_grade' && (
             <div className="flex items-center gap-2">
-              <span className="text-slate-600 font-bold">اختر الصف:</span>
+              <span className="text-slate-600 dark:text-slate-300 font-bold">اختر الصف:</span>
               <select
                 value={selectedGrade}
                 onChange={(e) => setSelectedGrade(e.target.value)}
-                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium cursor-pointer"
+                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
               >
                 {settings.grades.map(g => (
                   <option key={g} value={g}>{g}</option>
@@ -284,11 +284,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
           {reportType === 'by_group' && (
             <div className="flex items-center gap-2">
-              <span className="text-slate-600 font-bold">اختر المجموعة:</span>
+              <span className="text-slate-600 dark:text-slate-300 font-bold">اختر المجموعة:</span>
               <select
                 value={selectedGroup}
                 onChange={(e) => setSelectedGroup(e.target.value)}
-                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium cursor-pointer"
+                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
               >
                 {settings.groups.map(grp => (
                   <option key={grp} value={grp}>{grp}</option>

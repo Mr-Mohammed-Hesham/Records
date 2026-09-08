@@ -260,11 +260,17 @@ export default function App() {
       isOpen: boolean;
       title: string;
       message: string;
-      onConfirm: () => void;
+      confirmText?: string;
+      cancelText?: string;
+      isDestructive?: boolean;
+      onConfirm: () => void | Promise<void>;
     }>({
       isOpen: false,
       title: '',
       message: '',
+      confirmText: 'تأكيد',
+      cancelText: 'إلغاء',
+      isDestructive: true,
       onConfirm: () => {},
     });
 
@@ -419,38 +425,132 @@ export default function App() {
   };
 
   /* =======================================================
-     QUICK SEARCH SHORTCUT
+     STEP BACK (PHONE BACK BUTTON & ESC KEY)
      ======================================================= */
 
+  const handleStepBack = useCallback((): boolean => {
+    // 1. Confirm dialog
+    if (confirmModalConfig.isOpen) {
+      setConfirmModalConfig((prev) => ({ ...prev, isOpen: false }));
+      return true;
+    }
+    // 2. Quick Search modal
+    if (isSearchModalOpen) {
+      setIsSearchModalOpen(false);
+      return true;
+    }
+    // 3. Score Entry modal
+    if (isScoreModalOpen) {
+      setIsScoreModalOpen(false);
+      setActiveScoringExam(null);
+      setPreselectedStudentForScore(null);
+      return true;
+    }
+    // 4. Student form modal
+    if (isStudentModalOpen) {
+      setIsStudentModalOpen(false);
+      setStudentToEdit(null);
+      return true;
+    }
+    // 5. Exam form modal
+    if (isExamModalOpen) {
+      setIsExamModalOpen(false);
+      setExamToEdit(null);
+      return true;
+    }
+    // 6. Mobile sidebar menu
+    if (mobileMenuOpen) {
+      setMobileMenuOpen(false);
+      return true;
+    }
+    // 7. Student profile view
+    if (selectedStudent || currentView === 'profile') {
+      setSelectedStudent(null);
+      setCurrentView('students');
+      return true;
+    }
+    // 8. If in any other section than dashboard
+    if (currentView !== 'dashboard') {
+      setCurrentView('dashboard');
+      return true;
+    }
+    return false;
+  }, [
+    confirmModalConfig.isOpen,
+    isSearchModalOpen,
+    isScoreModalOpen,
+    isStudentModalOpen,
+    isExamModalOpen,
+    mobileMenuOpen,
+    selectedStudent,
+    currentView,
+  ]);
+
+  /* Keyboard shortcuts: Ctrl+K (Quick Search) & Escape (Step Back) */
   useEffect(() => {
-    const handleKeyDown = (
-      event: KeyboardEvent
-    ) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (
-        (event.ctrlKey ||
-          event.metaKey) &&
-        event.key.toLowerCase() ===
-          'k'
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === 'k'
       ) {
         event.preventDefault();
+        setIsSearchModalOpen((prev) => !prev);
+        return;
+      }
 
-        setIsSearchModalOpen(
-          (prev) => !prev
-        );
+      if (event.key === 'Escape') {
+        const handled = handleStepBack();
+        if (handled) {
+          event.preventDefault();
+        }
       }
     };
 
-    window.addEventListener(
-      'keydown',
-      handleKeyDown
-    );
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleStepBack]);
 
-    return () =>
-      window.removeEventListener(
-        'keydown',
-        handleKeyDown
-      );
-  }, []);
+  /* Mobile / Browser History integration for phone back button */
+  useEffect(() => {
+    const isStepActive =
+      confirmModalConfig.isOpen ||
+      isSearchModalOpen ||
+      isScoreModalOpen ||
+      isStudentModalOpen ||
+      isExamModalOpen ||
+      mobileMenuOpen ||
+      !!selectedStudent ||
+      currentView !== 'dashboard';
+
+    if (isStepActive && !window.history.state?.stepActive) {
+      window.history.pushState({ stepActive: true }, '');
+    }
+  }, [
+    confirmModalConfig.isOpen,
+    isSearchModalOpen,
+    isScoreModalOpen,
+    isStudentModalOpen,
+    isExamModalOpen,
+    mobileMenuOpen,
+    selectedStudent,
+    currentView,
+  ]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const handled = handleStepBack();
+      if (handled) {
+        const stillActive =
+          currentView !== 'dashboard' || !!selectedStudent;
+        if (stillActive && !window.history.state?.stepActive) {
+          window.history.pushState({ stepActive: true }, '');
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [handleStepBack, currentView, selectedStudent]);
 
   /* =======================================================
      INITIAL LOAD + REALTIME FIRESTORE
@@ -1325,6 +1425,21 @@ export default function App() {
       }
     };
 
+  const requestGoogleLogout = () => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title: 'تأكيد تسجيل الخروج',
+      message:
+        'هل أنت متأكد من رغبتك في تسجيل الخروج من حسابك؟ يمكنك تسجيل الدخول مجددًا في أي وقت.',
+      confirmText: 'تسجيل الخروج',
+      cancelText: 'إلغاء',
+      isDestructive: true,
+      onConfirm: async () => {
+        await handleGoogleLogout();
+      },
+    });
+  };
+
   /* =======================================================
      EXPORT EXCEL
      ======================================================= */
@@ -1465,10 +1580,10 @@ export default function App() {
           ================================================= */}
 
       <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
 
           {/* Brand */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
 
             <button
               onClick={() =>
@@ -1476,7 +1591,7 @@ export default function App() {
                   (prev) => !prev
                 )
               }
-              className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg lg:hidden cursor-pointer"
+              className="p-1.5 sm:p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl lg:hidden cursor-pointer"
               title="القائمة"
             >
               {mobileMenuOpen ? (
@@ -1492,9 +1607,9 @@ export default function App() {
                   'dashboard'
                 )
               }
-              className="flex items-center gap-3 cursor-pointer group"
+              className="flex items-center gap-2 sm:gap-3 cursor-pointer group"
             >
-              <div className="relative w-10 h-10 rounded-xl p-0.5 bg-gradient-to-br from-amber-400 via-orange-500 to-amber-600 shadow-md shadow-amber-500/20 shrink-0 overflow-hidden">
+              <div className="relative w-8 h-8 sm:w-10 sm:h-10 rounded-xl p-0.5 bg-gradient-to-br from-amber-400 via-orange-500 to-amber-600 shadow-md shadow-amber-500/20 shrink-0 overflow-hidden">
                 <img
                   src={`${import.meta.env.BASE_URL}teacher-logo.jpg`}
                   alt="Mr Mohammed Hesham"
@@ -1504,7 +1619,7 @@ export default function App() {
               </div>
 
               <div>
-                <div className="text-amber-500 font-extrabold text-base leading-tight font-sans tracking-wide">
+                <div className="text-amber-500 font-extrabold text-sm sm:text-base leading-tight font-sans tracking-wide">
                   Mr. Mohamed{' '}
                   <span className="text-slate-900 dark:text-white font-black">
                     Hesham
@@ -1519,20 +1634,20 @@ export default function App() {
           </div>
 
           {/* Header Tools */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-2.5">
 
             {/* Install Button (Matching screenshot header pill) */}
             <button
               id="btn-install-pwa-header"
               onClick={handleTriggerInstall}
-              className="px-3 py-2 border border-amber-500/30 dark:border-amber-500/40 rounded-xl text-xs sm:text-sm font-bold hover:bg-amber-500/15 bg-amber-500/10 text-amber-600 dark:text-amber-400 inline-flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
+              className="hidden sm:inline-flex px-3 py-2 border border-amber-500/30 dark:border-amber-500/40 rounded-xl text-xs sm:text-sm font-bold hover:bg-amber-500/15 bg-amber-500/10 text-amber-600 dark:text-amber-400 items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
               title="تثبيت التطبيق مباشرة على الهاتف أو سطح المكتب"
             >
               <Download className="w-4 h-4 text-amber-500 animate-pulse" />
               <span>تثبيت</span>
             </button>
 
-            {/* Theme */}
+            {/* Theme Toggle */}
             <button
               onClick={
                 toggleTheme
@@ -1552,14 +1667,23 @@ export default function App() {
               )}
             </button>
 
-            {/* Search */}
+            {/* Mobile Quick Search Button */}
+            <button
+              onClick={() => setIsSearchModalOpen(true)}
+              className="sm:hidden p-2 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs transition cursor-pointer"
+              title="بحث سريع"
+            >
+              <Search className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+            </button>
+
+            {/* Search Bar on Tablet/Desktop */}
             <div
               onClick={() =>
                 setIsSearchModalOpen(
                   true
                 )
               }
-              className="flex items-center bg-slate-100 dark:bg-slate-800/80 px-3.5 py-1.5 sm:py-2 rounded-full w-44 sm:w-64 md:w-72 border border-transparent hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer transition-colors"
+              className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800/80 px-3.5 py-1.5 sm:py-2 rounded-full w-48 md:w-64 border border-transparent hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer transition-colors"
             >
               <Search className="w-4 h-4 text-slate-400 shrink-0" />
 
@@ -1572,24 +1696,24 @@ export default function App() {
               </kbd>
             </div>
 
-            {/* Excel */}
+            {/* Excel (Desktop) */}
             <button
               onClick={
                 handleExportAllExcel
               }
-              className="px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-xs sm:text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="hidden md:inline-flex px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs text-slate-700 dark:text-slate-200 items-center gap-1.5 transition-colors cursor-pointer"
               title="تصدير جميع البيانات إلى Excel"
             >
               <FileDown className="w-4 h-4 text-amber-500" />
 
-              <span className="hidden sm:inline">
-                Export Excel
+              <span>
+                Excel
               </span>
             </button>
 
             {/* User */}
             {currentUser && (
-              <div className="flex items-center gap-2 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/50 py-1.5 px-2.5 rounded-lg text-xs">
+              <div className="flex items-center gap-1.5 sm:gap-2 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/50 py-1 sm:py-1.5 px-2 sm:px-2.5 rounded-xl text-xs">
 
                 {currentUser.photoURL ? (
                   <img
@@ -1605,7 +1729,7 @@ export default function App() {
                       .displayName?.[0] ||
                       currentUser
                         .email?.[0] ||
-                      'M'}
+                        'M'}
                   </div>
                 )}
 
@@ -1622,9 +1746,9 @@ export default function App() {
 
                 <button
                   onClick={
-                    handleGoogleLogout
+                    requestGoogleLogout
                   }
-                  className="text-slate-400 hover:text-red-500 transition-colors p-0.5 cursor-pointer"
+                  className="text-slate-400 hover:text-red-500 transition-colors p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer"
                   title="تسجيل الخروج"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -1637,12 +1761,15 @@ export default function App() {
               onClick={
                 handleOpenAddStudent
               }
-              className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold rounded-lg text-xs sm:text-sm shadow-md shadow-amber-500/20 inline-flex items-center gap-1.5 transition cursor-pointer"
+              className="px-2.5 sm:px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold rounded-xl text-xs sm:text-sm shadow-md shadow-amber-500/20 inline-flex items-center gap-1.5 transition cursor-pointer shrink-0"
             >
               <UserPlus className="w-4 h-4" />
 
-              <span>
-                + Add Student
+              <span className="hidden sm:inline">
+                + إضافة طالب
+              </span>
+              <span className="sm:hidden">
+                + طالب
               </span>
             </button>
           </div>
@@ -1927,12 +2054,14 @@ export default function App() {
 
                 {currentUser && (
                   <button
-                    onClick={
-                      handleGoogleLogout
-                    }
-                    className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg text-xs font-bold"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      requestGoogleLogout();
+                    }}
+                    className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
                   >
-                    خروج
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>خروج</span>
                   </button>
                 )}
               </div>
@@ -1941,7 +2070,7 @@ export default function App() {
         )}
 
         {/* Content */}
-        <main className="flex-1 min-w-0">
+        <main className="flex-1 min-w-0 pb-20 lg:pb-8">
 
           {currentView ===
             'dashboard' && (
@@ -2260,6 +2389,15 @@ export default function App() {
         message={
           confirmModalConfig.message
         }
+        confirmText={
+          confirmModalConfig.confirmText
+        }
+        cancelText={
+          confirmModalConfig.cancelText
+        }
+        isDestructive={
+          confirmModalConfig.isDestructive
+        }
         onConfirm={
           async () => {
             await confirmModalConfig.onConfirm();
@@ -2272,6 +2410,14 @@ export default function App() {
             );
           }
         }
+        onCancel={() =>
+          setConfirmModalConfig(
+            (prev) => ({
+              ...prev,
+              isOpen: false,
+            })
+          )
+        }
         onClose={() =>
           setConfirmModalConfig(
             (prev) => ({
@@ -2282,19 +2428,58 @@ export default function App() {
         }
       />
 
-      {/* Floating Quick Install Button (Matching user screenshot bottom-left) */}
+      {/* Floating Quick Install Button */}
       {!isAppInstalled && (
         <button
           id="btn-floating-install-pwa"
           onClick={handleTriggerInstall}
           aria-label="تثبيت التطبيق مباشرة"
           title="تثبيت التطبيق مباشرة على الهاتف أو سطح المكتب"
-          className="fixed bottom-6 left-6 z-40 w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-xl shadow-teal-500/30 hover:shadow-teal-500/50 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 group cursor-pointer border border-white/20"
+          className="fixed bottom-20 left-4 sm:bottom-6 sm:left-6 z-40 w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 shadow-xl shadow-amber-500/30 flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 group cursor-pointer border border-white/20"
         >
           <Download className="w-5 h-5 transition-transform group-hover:translate-y-0.5" />
           <span className="sr-only">تثبيت التطبيق</span>
         </button>
       )}
+
+      {/* Mobile Bottom Navigation Bar (lg:hidden) */}
+      <nav
+        id="mobile-bottom-nav"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-1 py-1.5 pb-safe flex items-center justify-around shadow-lg"
+      >
+        {[
+          { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard },
+          { id: 'students', label: 'الطلاب', icon: Users, badge: students.length },
+          { id: 'exams', label: 'الامتحانات', icon: FileSpreadsheet, badge: exams.length },
+          { id: 'scoring', label: 'الدرجات', icon: CheckSquare },
+          { id: 'reports', label: 'التقارير', icon: BarChart3 },
+          { id: 'settings', label: 'الإعدادات', icon: SettingsIcon },
+        ].map((item) => {
+          const Icon = item.icon;
+          const isActive = currentView === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => navigateTo(item.id as ViewMode)}
+              className={`flex flex-col items-center justify-center py-1 px-1.5 rounded-xl text-[10px] font-bold transition-all relative cursor-pointer min-w-[48px] ${
+                isActive
+                  ? 'text-amber-600 dark:text-amber-400 bg-amber-500/10'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}
+            >
+              <div className="relative">
+                <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
+                {item.badge !== undefined && item.badge !== null && item.badge > 0 && (
+                  <span className="absolute -top-1 -right-2 px-1 text-[9px] font-black bg-amber-500 text-slate-950 rounded-full min-w-[14px] h-[14px] flex items-center justify-center">
+                    {item.badge > 99 ? '99+' : item.badge}
+                  </span>
+                )}
+              </div>
+              <span className="mt-0.5 tracking-tight truncate max-w-[50px]">{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }

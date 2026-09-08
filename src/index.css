@@ -19,6 +19,44 @@
     background-color: #090d16;
     color: #f1f5f9;
   }
+
+  /* Form Controls & Dropdown Menus in Light and Dark Mode */
+  select {
+    color-scheme: light;
+  }
+  .dark select {
+    color-scheme: dark;
+  }
+
+  select option,
+  select optgroup {
+    background-color: #ffffff;
+    color: #0f172a;
+    font-size: 14px;
+    padding: 8px 12px;
+  }
+
+  .dark select option,
+  .dark select optgroup {
+    background-color: #0f172a !important;
+    color: #f8fafc !important;
+  }
+
+  .dark select {
+    background-color: #1e293b;
+    color: #f8fafc;
+    border-color: #334155;
+  }
+
+  .dark select:focus {
+    background-color: #0f172a;
+    border-color: #f59e0b;
+  }
+
+  /* Safe Area for Mobile Notch / Navigation Bar */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 1rem);
+  }
   
   /* Scrollbars */
   ::-webkit-scrollbar {
