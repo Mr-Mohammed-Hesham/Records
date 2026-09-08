@@ -15,6 +15,7 @@ import {
   Sun,
   Moon,
   LogOut,
+  RefreshCw,
 } from 'lucide-react';
 
 import {
@@ -1471,6 +1472,47 @@ export default function App() {
     };
 
   /* =======================================================
+     REFRESH PLATFORM (تحديث المنصة)
+     ======================================================= */
+
+  const [isRefreshingPlatform, setIsRefreshingPlatform] = useState(false);
+
+  const handleRefreshPlatform = async () => {
+    try {
+      setIsRefreshingPlatform(true);
+      addToast('جاري تحديث المنصة ومزامنة أحدث السجلات...', 'info');
+
+      // Update Service Worker caches if registered
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          for (const registration of registrations) {
+            await registration.update();
+          }
+        } catch (swErr) {
+          console.debug('Service worker sync:', swErr);
+        }
+      }
+
+      // Re-sync settings
+      try {
+        const freshSettings = await getTeacherSettings();
+        setSettings(freshSettings);
+      } catch (stErr) {
+        console.debug('Settings refresh:', stErr);
+      }
+
+      // Smooth delay before reload so the user sees the spin & toast
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    } catch (err) {
+      console.error('Refresh platform error:', err);
+      window.location.reload();
+    }
+  };
+
+  /* =======================================================
      NAVIGATION
      ======================================================= */
 
@@ -1579,19 +1621,18 @@ export default function App() {
           HEADER
           ================================================= */}
 
-      <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-xs transition-colors">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-xs transition-colors w-full overflow-hidden">
+        <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-1.5 sm:gap-4 w-full">
 
           {/* Brand */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0 min-w-0">
             <button
               onClick={() =>
                 setMobileMenuOpen(
                   (prev) => !prev
                 )
               }
-              className="p-1.5 sm:p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl lg:hidden cursor-pointer"
+              className="p-1.5 sm:p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl lg:hidden cursor-pointer shrink-0"
               title="القائمة"
             >
               {mobileMenuOpen ? (
@@ -1607,7 +1648,7 @@ export default function App() {
                   'dashboard'
                 )
               }
-              className="flex items-center gap-2 sm:gap-3 cursor-pointer group"
+              className="flex items-center gap-1.5 sm:gap-3 cursor-pointer group min-w-0"
             >
               <div className="relative w-8 h-8 sm:w-10 sm:h-10 rounded-xl p-0.5 bg-gradient-to-br from-amber-400 via-orange-500 to-amber-600 shadow-md shadow-amber-500/20 shrink-0 overflow-hidden">
                 <img
@@ -1618,8 +1659,8 @@ export default function App() {
                 />
               </div>
 
-              <div>
-                <div className="text-amber-500 font-extrabold text-sm sm:text-base leading-tight font-sans tracking-wide">
+              <div className="min-w-0">
+                <div className="text-amber-500 font-extrabold text-xs sm:text-base leading-tight font-sans tracking-wide truncate">
                   Mr. Mohamed{' '}
                   <span className="text-slate-900 dark:text-white font-black">
                     Hesham
@@ -1634,13 +1675,26 @@ export default function App() {
           </div>
 
           {/* Header Tools */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
 
-            {/* Install Button (Matching screenshot header pill) */}
+            {/* Platform Refresh Button (تحديث المنصة) */}
+            <button
+              id="btn-refresh-platform"
+              onClick={handleRefreshPlatform}
+              disabled={isRefreshingPlatform}
+              className="px-2 py-1.5 sm:px-3 sm:py-2 border border-amber-500/30 dark:border-amber-500/40 rounded-xl text-xs sm:text-sm font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center gap-1 sm:gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
+              title="تحديث المنصة ومزامنة أحدث السجلات"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500 ${isRefreshingPlatform ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">تحديث المنصة</span>
+              <span className="sm:hidden text-[11px] font-bold">تحديث</span>
+            </button>
+
+            {/* Install Button */}
             <button
               id="btn-install-pwa-header"
               onClick={handleTriggerInstall}
-              className="hidden sm:inline-flex px-3 py-2 border border-amber-500/30 dark:border-amber-500/40 rounded-xl text-xs sm:text-sm font-bold hover:bg-amber-500/15 bg-amber-500/10 text-amber-600 dark:text-amber-400 items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
+              className="hidden md:inline-flex px-3 py-2 border border-amber-500/30 dark:border-amber-500/40 rounded-xl text-xs sm:text-sm font-bold hover:bg-amber-500/15 bg-amber-500/10 text-amber-600 dark:text-amber-400 items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
               title="تثبيت التطبيق مباشرة على الهاتف أو سطح المكتب"
             >
               <Download className="w-4 h-4 text-amber-500 animate-pulse" />
@@ -1652,7 +1706,7 @@ export default function App() {
               onClick={
                 toggleTheme
               }
-              className="p-2 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-600 dark:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs transition cursor-pointer"
+              className="p-1.5 sm:p-2 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-600 dark:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs transition cursor-pointer shrink-0"
               title={
                 theme === 'dark'
                   ? 'التبديل إلى الوضع الفاتح'
@@ -1670,7 +1724,7 @@ export default function App() {
             {/* Mobile Quick Search Button */}
             <button
               onClick={() => setIsSearchModalOpen(true)}
-              className="sm:hidden p-2 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs transition cursor-pointer"
+              className="sm:hidden p-1.5 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs transition cursor-pointer shrink-0"
               title="بحث سريع"
             >
               <Search className="w-4 h-4 text-slate-500 dark:text-slate-400" />
@@ -1683,7 +1737,7 @@ export default function App() {
                   true
                 )
               }
-              className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800/80 px-3.5 py-1.5 sm:py-2 rounded-full w-48 md:w-64 border border-transparent hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer transition-colors"
+              className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800/80 px-3.5 py-1.5 sm:py-2 rounded-full w-36 md:w-52 lg:w-64 border border-transparent hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer transition-colors shrink-0"
             >
               <Search className="w-4 h-4 text-slate-400 shrink-0" />
 
@@ -1691,7 +1745,7 @@ export default function App() {
                 بحث بالاسم أو ID...
               </span>
 
-              <kbd className="hidden md:inline font-mono text-[10px] bg-white dark:bg-slate-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600 text-slate-400">
+              <kbd className="hidden lg:inline font-mono text-[10px] bg-white dark:bg-slate-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600 text-slate-400">
                 ⌘K
               </kbd>
             </div>
@@ -1701,7 +1755,7 @@ export default function App() {
               onClick={
                 handleExportAllExcel
               }
-              className="hidden md:inline-flex px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs text-slate-700 dark:text-slate-200 items-center gap-1.5 transition-colors cursor-pointer"
+              className="hidden md:inline-flex px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs text-slate-700 dark:text-slate-200 items-center gap-1.5 transition-colors cursor-pointer shrink-0"
               title="تصدير جميع البيانات إلى Excel"
             >
               <FileDown className="w-4 h-4 text-amber-500" />
@@ -1713,7 +1767,7 @@ export default function App() {
 
             {/* User */}
             {currentUser && (
-              <div className="flex items-center gap-1.5 sm:gap-2 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/50 py-1 sm:py-1.5 px-2 sm:px-2.5 rounded-xl text-xs">
+              <div className="flex items-center gap-1 sm:gap-2 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/50 p-1 sm:py-1.5 sm:px-2.5 rounded-xl text-xs shrink-0">
 
                 {currentUser.photoURL ? (
                   <img
@@ -1721,10 +1775,10 @@ export default function App() {
                       currentUser.photoURL
                     }
                     alt=""
-                    className="w-5 h-5 rounded-full object-cover"
+                    className="w-5 h-5 rounded-full object-cover shrink-0"
                   />
                 ) : (
-                  <div className="w-5 h-5 rounded-full bg-amber-600 text-white flex items-center justify-center text-[10px] font-bold">
+                  <div className="w-5 h-5 rounded-full bg-amber-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
                     {currentUser
                       .displayName?.[0] ||
                       currentUser
@@ -1734,7 +1788,7 @@ export default function App() {
                 )}
 
                 <span
-                  className="font-medium text-amber-950 dark:text-amber-200 hidden sm:inline truncate max-w-[120px]"
+                  className="font-medium text-amber-950 dark:text-amber-200 hidden md:inline truncate max-w-[110px]"
                   title={
                     currentUser.email ||
                     ''
@@ -1748,30 +1802,13 @@ export default function App() {
                   onClick={
                     requestGoogleLogout
                   }
-                  className="text-slate-400 hover:text-red-500 transition-colors p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer"
+                  className="text-slate-400 hover:text-red-500 transition-colors p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer shrink-0"
                   title="تسجيل الخروج"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}
-
-            {/* Add Student */}
-            <button
-              onClick={
-                handleOpenAddStudent
-              }
-              className="px-2.5 sm:px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold rounded-xl text-xs sm:text-sm shadow-md shadow-amber-500/20 inline-flex items-center gap-1.5 transition cursor-pointer shrink-0"
-            >
-              <UserPlus className="w-4 h-4" />
-
-              <span className="hidden sm:inline">
-                + إضافة طالب
-              </span>
-              <span className="sm:hidden">
-                + طالب
-              </span>
-            </button>
           </div>
         </div>
       </header>
@@ -1780,7 +1817,7 @@ export default function App() {
           MAIN
           ================================================= */}
 
-      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex gap-6">
+      <div className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 flex gap-6 overflow-x-hidden">
 
         {/* Desktop Sidebar */}
         <aside className="w-64 shrink-0 hidden lg:block">
@@ -2028,6 +2065,23 @@ export default function App() {
                     }
                   )}
                 </nav>
+
+                {/* Quick Refresh in Drawer */}
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 mt-3">
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      handleRefreshPlatform();
+                    }}
+                    disabled={isRefreshingPlatform}
+                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/20 transition cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3">
+                      <RefreshCw className={`w-4 h-4 text-amber-500 ${isRefreshingPlatform ? 'animate-spin' : ''}`} />
+                      <span>تحديث ومزامنة المنصة</span>
+                    </div>
+                  </button>
+                </div>
               </div>
 
               <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
