@@ -547,10 +547,14 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto">
+    <div 
+      className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden"
+      onClick={onClose}
+    >
       <div
         id="score-entry-modal"
-        className="bg-white dark:bg-slate-900 rounded-3xl max-w-5xl w-full p-4 sm:p-6 shadow-2xl border border-slate-100 dark:border-slate-800 my-4 text-right flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-5xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-right flex flex-col max-h-[92dvh] sm:max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
       >
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 gap-3">
@@ -968,7 +972,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 mt-2 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 mt-2 border-t border-slate-100 dark:border-slate-800 pb-safe shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-500 dark:text-slate-400">
               عدد النتائج الجاهزة للحفظ:{' '}

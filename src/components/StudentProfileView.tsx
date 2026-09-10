@@ -19,11 +19,14 @@ import {
   HelpCircle,
   Clock,
   Sparkles,
-  ChevronDown
+  ChevronDown,
+  GraduationCap,
+  Eye
 } from 'lucide-react';
 import { Student, Exam, ExamResult, TeacherSettings } from '../types';
 import { calculateStudentStats, getGradeRating } from '../utils/grading';
-import { exportSingleStudentExcel } from '../utils/excel';
+import { exportSingleStudentAcademicReport } from '../utils/excel';
+import { StudentAcademicReportModal } from './StudentAcademicReportModal';
 
 interface StudentProfileViewProps {
   student: Student;
@@ -51,6 +54,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   const [editingResultId, setEditingResultId] = useState<string | null>(null);
   const [editScoreVal, setEditScoreVal] = useState<string>('');
   const [editNotesVal, setEditNotesVal] = useState<string>('');
+  const [showAcademicReportModal, setShowAcademicReportModal] = useState(false);
 
   const stats = calculateStudentStats(results, settings.gradingScale);
 
@@ -72,39 +76,48 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   };
 
   const handleExportExcel = () => {
-    exportSingleStudentExcel(student, results, stats);
+    exportSingleStudentAcademicReport(student, results, stats);
   };
 
   return (
     <div id="student-profile-view" className="space-y-6 text-right animate-in fade-in duration-200">
       {/* Top Bar with Back Button and Quick Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer flex items-center gap-1 font-semibold text-sm"
+            className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer flex items-center gap-1 font-semibold text-sm"
           >
             <ArrowRight className="w-4 h-4" />
             العودة لقائمة الطلاب
           </button>
-          <div className="h-4 w-px bg-slate-200" />
+          <div className="h-4 w-px bg-slate-200 dark:bg-slate-800" />
           <span className="text-xs text-slate-400">ملف الطالب الشخصي</span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowAcademicReportModal(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition-all cursor-pointer shadow-xs"
+          >
+            <Eye className="w-4 h-4 text-amber-500" />
+            التقرير الأكاديمي الشامل
+          </button>
+
           <button
             id="export-student-excel-btn"
             onClick={handleExportExcel}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all cursor-pointer shadow-xs"
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-all cursor-pointer shadow-xs"
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            Export Student Report to Excel
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            تصدير التقرير لـ Excel
           </button>
+
           <button
             onClick={() => onEditStudent(student)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition-colors cursor-pointer"
           >
-            <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+            <Edit3 className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
             تعديل البيانات
           </button>
         </div>
@@ -569,6 +582,15 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           </table>
         </div>
       </div>
+
+      {showAcademicReportModal && (
+        <StudentAcademicReportModal
+          student={student}
+          results={results}
+          settings={settings}
+          onClose={() => setShowAcademicReportModal(false)}
+        />
+      )}
     </div>
   );
 };

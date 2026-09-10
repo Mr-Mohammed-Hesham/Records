@@ -3,56 +3,49 @@ import { Student, Exam, ExamResult, StudentStats, TeacherSettings } from '../typ
 import { calculateStudentStats } from './grading';
 
 /**
- * Export single student complete performance report
+ * Export single student academic performance report
+ * Strictly contains: Student Name, Grade, Exams count, Individual exam scores, General average, Success rate, and Progress notes
  */
-export function exportSingleStudentExcel(
+export function exportSingleStudentAcademicReport(
   student: Student,
   results: ExamResult[],
   stats: StudentStats
 ) {
   const wb = XLSX.utils.book_new();
 
-  // Sheet 1: Student Overview and Stats
-  const infoRows = [
-    ['تقرير أداء الطالب الأكاديمي - Mr Mohammed Hesham Records', ''],
-    ['تاريخ التصدير:', new Date().toLocaleDateString('ar-EG')],
+  // Academic Report Header & Summary
+  const headerData = [
+    ['تقرير الأداء الأكاديمي للطالب - سجلات مستر محمد هشام', ''],
+    ['تاريخ استخراج التقرير:', new Date().toLocaleDateString('ar-EG')],
     ['', ''],
-    ['البيانات الشخصية والصف', ''],
+    ['بيانات الطالب الأساسية', ''],
     ['اسم الطالب:', student.name],
-    ['الرقم التعريفي (Student ID):', student.studentId],
     ['الصف الدراسي:', student.grade],
-    ['المجموعة / الفصل:', student.group],
-    ['المادة:', student.subject],
-    ['المدرسة:', student.school || 'غير محدد'],
-    ['رقم هاتف الطالب:', student.phone || '-'],
-    ['رقم هاتف ولي الأمر:', student.parentPhone || '-'],
-    ['تاريخ الإضافة:', student.createdAt ? new Date(student.createdAt).toLocaleDateString('ar-EG') : '-'],
-    ['ملاحظات:', student.notes || '-'],
+    ['المادة الدراسية:', student.subject || 'عام'],
+    ['المجموعة / الشعبة:', student.group || '-'],
     ['', ''],
-    ['المؤشرات الإحصائية العامة', ''],
-    ['عدد الامتحانات:', stats.totalExams],
-    ['متوسط النسبة المئوية:', `${stats.averagePercentage}%`],
+    ['ملخص المؤشرات الأكاديمية', ''],
+    ['إجمالي عدد الامتحانات:', stats.totalExams],
+    ['المتوسط العام للنسبة المئوية:', `${stats.averagePercentage}%`],
     ['متوسط الدرجات:', stats.averageScore],
-    ['أعلى درجة حصل عليها:', `${stats.highestScore} (${stats.highestPercentage}%)`],
-    ['أقل درجة حصل عليها:', `${stats.lowestScore} (${stats.lowestPercentage}%)`],
-    ['نسبة النجاح:', `${stats.passRate}%`],
+    ['أعلى نسبة تم تحقيقها:', `${stats.highestPercentage}% (${stats.highestScore} درجة)`],
+    ['نسبة النجاح العامة:', `${stats.passRate}%`],
     ['التقييم العام للمستوى:', stats.status],
-    ['مسار التطور:', stats.trendMessage],
+    ['ملاحظات التقدم والمستوى العام:', stats.trendMessage],
+    ['', ''],
+    ['تفاصيل درجات الامتحانات على حدة', '']
   ];
 
-  const wsInfo = XLSX.utils.aoa_to_sheet(infoRows);
-  XLSX.utils.book_append_sheet(wb, wsInfo, 'بيانات وإحصائيات الطالب');
-
-  // Sheet 2: Exam records
-  const examHeader = [
+  // Exam rows
+  const tableHeader = [
     'اسم الامتحان',
     'تاريخ الامتحان',
-    'الدرجة الحاصل عليها',
+    'درجة الامتحان',
     'الدرجة الكلية',
-    'النسبة المئوية',
-    'التقدير',
-    'حالة النجاح',
-    'ملاحظات المدرس'
+    'النسبة المئوية %',
+    'التقدير الأكاديمي',
+    'النتيجة',
+    'ملاحظات الامتحان'
   ];
 
   const examRows = results.map(r => [
@@ -66,12 +59,222 @@ export function exportSingleStudentExcel(
     r.notes || '-'
   ]);
 
-  const wsExams = XLSX.utils.aoa_to_sheet([examHeader, ...examRows]);
-  XLSX.utils.book_append_sheet(wb, wsExams, 'سجل الامتحانات');
+  const wsReport = XLSX.utils.aoa_to_sheet([...headerData, tableHeader, ...examRows]);
+  
+  // Set basic column widths
+  wsReport['!cols'] = [
+    { wch: 30 }, // اسم الامتحان / الحقول
+    { wch: 18 }, // التاريخ
+    { wch: 14 }, // الدرجة
+    { wch: 14 }, // الدرجة الكلية
+    { wch: 16 }, // النسبة
+    { wch: 16 }, // التقدير
+    { wch: 14 }, // النتيجة
+    { wch: 35 }, // ملاحظات
+  ];
 
-  // Generate file name
+  XLSX.utils.book_append_sheet(wb, wsReport, 'التقرير الأكاديمي');
+
   const safeName = student.name.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_');
-  XLSX.writeFile(wb, `تقرير_الطالب_${safeName}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  XLSX.writeFile(wb, `التقرير_الأكاديمي_${safeName}_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+/**
+ * Backward-compatible single student export
+ */
+export function exportSingleStudentExcel(
+  student: Student,
+  results: ExamResult[],
+  stats: StudentStats
+) {
+  exportSingleStudentAcademicReport(student, results, stats);
+}
+
+export interface ExportFilterOptions {
+  startDate?: string;
+  endDate?: string;
+  grade?: string;
+  subject?: string;
+  group?: string;
+}
+
+/**
+ * Export customized Excel report filtered by:
+ * - Specific Time Period (من تاريخ إلى تاريخ)
+ * - Grade (الصف)
+ * - Subject (المادة)
+ * Contains student academic reports in the exact student format specified by the user:
+ * Student Name, Grade, Exams Count, Individual Exam scores, General Average, Success Rate, and Progress Notes.
+ */
+export function exportCustomAcademicExcel(
+  students: Student[],
+  exams: Exam[],
+  allResults: ExamResult[],
+  options: ExportFilterOptions = {},
+  gradingScale?: TeacherSettings['gradingScale']
+) {
+  const wb = XLSX.utils.book_new();
+
+  // 1. Filter students
+  let filteredStudents = [...students];
+  if (options.grade && options.grade !== 'الكل') {
+    filteredStudents = filteredStudents.filter(s => s.grade === options.grade);
+  }
+  if (options.subject && options.subject !== 'الكل') {
+    filteredStudents = filteredStudents.filter(s => s.subject === options.subject);
+  }
+  if (options.group && options.group !== 'الكل') {
+    filteredStudents = filteredStudents.filter(s => s.group === options.group);
+  }
+
+  const validStudentIds = new Set(filteredStudents.map(s => s.id));
+
+  // 2. Filter results by date & students
+  let filteredResults = allResults.filter(r => validStudentIds.has(r.studentDocId));
+  if (options.startDate) {
+    filteredResults = filteredResults.filter(r => r.examDate >= options.startDate!);
+  }
+  if (options.endDate) {
+    filteredResults = filteredResults.filter(r => r.examDate <= options.endDate!);
+  }
+
+  // --- SHEET 1: ملخص أداء الطلاب الأكاديمي ---
+  const periodLabel = (options.startDate || options.endDate)
+    ? `الفترة: ${options.startDate || 'البداية'} إلى ${options.endDate || 'الآن'}`
+    : 'كافة الفترات';
+
+  const filterSummary = [
+    ['تقرير الأداء الأكاديمي الشامل للطلاب - Mr Mohammed Hesham', ''],
+    ['تاريخ الاستخراج:', new Date().toLocaleDateString('ar-EG')],
+    ['نطاق التقرير:', periodLabel],
+    ['الصف المحدد:', options.grade || 'كافة الصفوف'],
+    ['المادة المحددة:', options.subject || 'كافة المواد'],
+    ['عدد الطلاب المشمولين:', filteredStudents.length],
+    ['', '']
+  ];
+
+  const summaryHeader = [
+    'م',
+    'اسم الطالب',
+    'الصف الدراسي',
+    'المادة',
+    'عدد الامتحانات',
+    'المتوسط العام للنسبة %',
+    'متوسط الدرجات',
+    'نسبة النجاح %',
+    'التقييم العام',
+    'ملاحظات التقدم ومسار التطور'
+  ];
+
+  const summaryRows = filteredStudents.map((st, idx) => {
+    const stResults = filteredResults.filter(r => r.studentDocId === st.id);
+    const stats = calculateStudentStats(stResults, gradingScale);
+    return [
+      idx + 1,
+      st.name,
+      st.grade,
+      st.subject || 'عام',
+      stats.totalExams,
+      `${stats.averagePercentage}%`,
+      stats.averageScore,
+      `${stats.passRate}%`,
+      stats.status,
+      stats.trendMessage
+    ];
+  });
+
+  const wsSummary = XLSX.utils.aoa_to_sheet([...filterSummary, summaryHeader, ...summaryRows]);
+  wsSummary['!cols'] = [
+    { wch: 6 },
+    { wch: 25 },
+    { wch: 18 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 20 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 15 },
+    { wch: 45 }
+  ];
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'ملخص أداء الطلاب');
+
+  // --- SHEET 2: تقارير الطلاب المفصلة (بنفس تنسيق تقرير كل طالب) ---
+  const detailedReportRows: any[][] = [
+    ['التقارير الأكاديمية المفصلة للطلاب', ''],
+    ['(تحتوي على: اسم الطالب، الصف، عدد الامتحانات، درجات كل امتحان على حدة، المتوسط العام، نسبة النجاح، ملاحظات التقدم)', ''],
+    ['', '']
+  ];
+
+  filteredStudents.forEach((st, idx) => {
+    const stResults = filteredResults.filter(r => r.studentDocId === st.id);
+    const stats = calculateStudentStats(stResults, gradingScale);
+
+    // Student Header Card
+    detailedReportRows.push([`═══════════════════════════════════════════ [ طالب رقم ${idx + 1} ] ═══════════════════════════════════════════`]);
+    detailedReportRows.push(['اسم الطالب:', st.name, 'الصف الدراسي:', st.grade, 'المادة:', st.subject || 'عام']);
+    detailedReportRows.push([
+      'عدد الامتحانات:', stats.totalExams,
+      'المتوسط العام:', `${stats.averagePercentage}% (${stats.averageScore})`,
+      'نسبة النجاح:', `${stats.passRate}%`,
+      'التقييم:', stats.status
+    ]);
+    detailedReportRows.push(['ملاحظات التقدم والمستوى العام:', stats.trendMessage]);
+    
+    // Student individual exam details
+    detailedReportRows.push(['--- تفاصيل الامتحانات ---']);
+    detailedReportRows.push([
+      'اسم الامتحان',
+      'تاريخ الامتحان',
+      'درجة الامتحان',
+      'الدرجة الكلية',
+      'النسبة المئوية %',
+      'التقدير',
+      'النتيجة',
+      'ملاحظات الامتحان'
+    ]);
+
+    if (stResults.length === 0) {
+      detailedReportRows.push(['لا توجد امتحانات مسجلة لهذا الطالب خلال هذه الفترة المحدد']);
+    } else {
+      stResults.forEach(r => {
+        detailedReportRows.push([
+          r.examTitle,
+          r.examDate,
+          r.score,
+          r.totalScore,
+          `${r.percentage}%`,
+          r.gradeRating,
+          r.passed ? 'ناجح' : 'راسب',
+          r.notes || '-'
+        ]);
+      });
+    }
+
+    // Spacing between students
+    detailedReportRows.push(['']);
+    detailedReportRows.push(['']);
+  });
+
+  const wsDetailed = XLSX.utils.aoa_to_sheet(detailedReportRows);
+  wsDetailed['!cols'] = [
+    { wch: 30 },
+    { wch: 20 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 16 },
+    { wch: 14 },
+    { wch: 35 }
+  ];
+  XLSX.utils.book_append_sheet(wb, wsDetailed, 'تقارير الطلاب المفصلة');
+
+  // Generate expressive filename
+  const gradeTag = options.grade && options.grade !== 'الكل' ? `_${options.grade.replace(/\s+/g, '_')}` : '';
+  const subjTag = options.subject && options.subject !== 'الكل' ? `_${options.subject.replace(/\s+/g, '_')}` : '';
+  const dateTag = options.startDate || options.endDate ? `_من_${options.startDate || 'البداية'}_إلى_${options.endDate || 'الآن'}` : '';
+
+  const fileName = `تقارير_الطلاب_الأكاديمية${gradeTag}${subjTag}${dateTag}.xlsx`;
+  XLSX.writeFile(wb, fileName);
 }
 
 /**

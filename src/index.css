@@ -67,6 +67,28 @@
     border-color: #f59e0b;
   }
 
+  /* Date inputs in dark mode */
+  .dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.9) brightness(1.2);
+    cursor: pointer;
+  }
+
+  /* Print Styles for Student Academic Report */
+  @media print {
+    body {
+      background-color: #ffffff !important;
+      color: #000000 !important;
+    }
+    header, nav, aside, button {
+      display: none !important;
+    }
+    #root, main {
+      padding: 0 !important;
+      margin: 0 !important;
+      max-width: 100% !important;
+    }
+  }
+
   /* Safe Area for Mobile Notch / Navigation Bar */
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom, 1rem);

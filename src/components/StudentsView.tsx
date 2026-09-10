@@ -7,9 +7,11 @@ import {
   Edit3,
   Trash2,
   Users,
+  GraduationCap,
 } from 'lucide-react';
 import { Student, ExamResult, TeacherSettings } from '../types';
 import { calculateStudentStats } from '../utils/grading';
+import { StudentAcademicReportModal } from './StudentAcademicReportModal';
 
 interface StudentsViewProps {
   students: Student[];
@@ -42,6 +44,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const [statusFilter, setStatusFilter] = useState('الكل');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [academicModalStudent, setAcademicModalStudent] = useState<Student | null>(null);
 
   /*
    * الحصول على مواد الطالب.
@@ -516,6 +519,13 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
                 <div className="flex items-center gap-1 shrink-0">
                   <button
+                    onClick={() => setAcademicModalStudent(student)}
+                    className="p-1.5 text-slate-400 hover:text-amber-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    title="التقرير الأكاديمي للطالب"
+                  >
+                    <GraduationCap className="w-4 h-4 text-amber-500" />
+                  </button>
+                  <button
                     onClick={() => onOpenProfile(student)}
                     className="p-1.5 text-slate-400 hover:text-amber-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                     title="فتح ملف الطالب"
@@ -795,9 +805,19 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                         <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={() =>
+                              setAcademicModalStudent(student)
+                            }
+                            className="p-1.5 text-slate-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                            title="التقرير الأكاديمي للطالب"
+                          >
+                            <GraduationCap className="w-4 h-4 text-amber-500" />
+                          </button>
+
+                          <button
+                            onClick={() =>
                               onOpenProfile(student)
                             }
-                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                             title="فتح ملف الطالب"
                           >
                             <Eye className="w-4 h-4" />
@@ -807,7 +827,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                             onClick={() =>
                               onEditStudent(student)
                             }
-                            className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                             title="تعديل بيانات الطالب"
                           >
                             <Edit3 className="w-4 h-4" />
@@ -817,7 +837,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                             onClick={() =>
                               onDeleteStudent(student)
                             }
-                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                             title="حذف الطالب"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -832,6 +852,16 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Student Academic Report Modal */}
+      {academicModalStudent && (
+        <StudentAcademicReportModal
+          student={academicModalStudent}
+          results={allResults.filter(r => r.studentDocId === academicModalStudent.id)}
+          settings={settings}
+          onClose={() => setAcademicModalStudent(null)}
+        />
+      )}
     </div>
   );
 };
