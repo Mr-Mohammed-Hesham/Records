@@ -18,6 +18,7 @@ import {
 import { Exam, ExamResult, Student, TeacherSettings, ResultAttachment } from '../types';
 import { exportExamResultsExcel } from '../utils/excel';
 import { AttachmentModal } from './AttachmentModal';
+import { AttachmentThumbnail } from './AttachmentThumbnail';
 
 interface ExamsViewProps {
   exams: Exam[];
@@ -205,25 +206,14 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
                   </div>
 
                   {/* Actions dropdown or buttons */}
-                  <div className="flex items-center gap-1">
-                    <button
+                  <div className="flex items-center gap-1.5">
+                    <AttachmentThumbnail
+                      attachment={exam.attachment}
+                      size="md"
+                      tooltipPrefix={`امتحان: ${exam.title}`}
                       onClick={() => setAttachmentExam(exam)}
-                      className={`p-1.5 rounded-lg transition-colors cursor-pointer relative ${
-                        exam.attachment
-                          ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
-                          : 'text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-slate-800'
-                      }`}
-                      title={
-                        exam.attachment
-                          ? `عرض الإثبات والمرفق المعتمد للامتحان (${exam.attachment.name})`
-                          : 'إرفاق صورة أو ملف إثبات للامتحان (إيميل / نموذج الإجابة)'
-                      }
-                    >
-                      <Paperclip className="w-4 h-4" />
-                      {exam.attachment && (
-                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-white dark:ring-slate-900" />
-                      )}
-                    </button>
+                      onAttach={() => setAttachmentExam(exam)}
+                    />
                     <button
                       onClick={() => onEditExam(exam)}
                       className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
@@ -244,6 +234,29 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
                     </button>
                   </div>
                 </div>
+
+                {/* Quick Attachment Preview Bar if exam has an attachment */}
+                {exam.attachment && (
+                  <div
+                    onClick={() => setAttachmentExam(exam)}
+                    className="mt-3 flex items-center justify-between gap-2 p-2 px-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 cursor-pointer hover:bg-emerald-100/70 dark:hover:bg-emerald-900/40 transition-all group"
+                    title="انقر للمعاينة السريعة للمرفق الرسمي المعتمد"
+                  >
+                    <div className="flex items-center gap-2 overflow-hidden min-w-0">
+                      <AttachmentThumbnail
+                        attachment={exam.attachment}
+                        size="xs"
+                        readOnly
+                      />
+                      <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 truncate">
+                        المرفق المعتمد: {exam.attachment.name}
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 group-hover:underline shrink-0">
+                      معاينة سريعة ←
+                    </span>
+                  </div>
+                )}
 
                 {/* Exam Key Metrics */}
                 <div className="grid grid-cols-4 gap-2 my-4 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-700/60 text-center">

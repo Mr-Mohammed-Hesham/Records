@@ -26,6 +26,8 @@ import {
 } from '../utils/excel';
 import { ExcelExportModal } from './ExcelExportModal';
 import { StudentAcademicReportModal } from './StudentAcademicReportModal';
+import { AttachmentThumbnail } from './AttachmentThumbnail';
+import { AttachmentModal } from './AttachmentModal';
 
 interface ReportsViewProps {
   students: Student[];
@@ -49,6 +51,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   // Modals state
   const [showExportModal, setShowExportModal] = useState(false);
   const [academicModalStudent, setAcademicModalStudent] = useState<Student | null>(null);
+  const [previewAttachmentResult, setPreviewAttachmentResult] = useState<ExamResult | null>(null);
 
   // Selected student for single student report
   const [selectedStudentId, setSelectedStudentId] = useState<string>(students?.[0]?.id || '');
@@ -412,6 +415,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       <th className="py-3 px-3 text-center">النسبة</th>
                       <th className="py-3 px-3 text-center">التقدير</th>
                       <th className="py-3 px-3 text-center">النتيجة</th>
+                      <th className="py-3 px-3 text-center">إثبات ومرفق</th>
                       <th className="py-3 px-3.5">ملاحظات الامتحان</th>
                     </tr>
                   </thead>
@@ -437,6 +441,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                           }`}>
                             {r.passed ? 'ناجح' : 'راسب'}
                           </span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <div className="flex items-center justify-center">
+                            <AttachmentThumbnail
+                              attachment={r.attachment}
+                              size="sm"
+                              readOnly={true}
+                              tooltipPrefix={`امتحان: ${r.examTitle}`}
+                              onClick={() => setPreviewAttachmentResult(r)}
+                            />
+                          </div>
                         </td>
                         <td className="py-3 px-3.5 text-slate-500 dark:text-slate-400 text-[11px]">{r.notes || '-'}</td>
                       </tr>
@@ -549,6 +564,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   <th className="py-2.5 px-3 text-center">النسبة</th>
                   <th className="py-2.5 px-3 text-center">التقدير</th>
                   <th className="py-2.5 px-3 text-center">الحالة</th>
+                  <th className="py-2.5 px-3 text-center">مرفق / إثبات</th>
                   <th className="py-2.5 px-3">ملاحظات</th>
                 </tr>
               </thead>
@@ -568,6 +584,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       <span className={`text-[11px] font-bold ${r.passed ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-400'}`}>
                         {r.passed ? 'ناجح' : 'راسب'}
                       </span>
+                    </td>
+                    <td className="py-2 px-3 text-center">
+                      <div className="flex items-center justify-center">
+                        <AttachmentThumbnail
+                          attachment={r.attachment}
+                          size="sm"
+                          readOnly={true}
+                          tooltipPrefix={`طالب: ${r.studentName}`}
+                          onClick={() => setPreviewAttachmentResult(r)}
+                        />
+                      </div>
                     </td>
                     <td className="py-2 px-3 text-slate-500 dark:text-slate-400">{r.notes || '-'}</td>
                   </tr>
@@ -711,6 +738,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           results={dateFilteredResults.filter(r => r.studentDocId === academicModalStudent.id)}
           settings={settings}
           onClose={() => setAcademicModalStudent(null)}
+        />
+      )}
+
+      {/* Attachment Proof Quick Viewer Modal */}
+      {previewAttachmentResult && (
+        <AttachmentModal
+          isOpen={true}
+          title={`إثبات نتيجة امتحان: ${previewAttachmentResult.examTitle}`}
+          subtitle={`الطالب: ${previewAttachmentResult.studentName} | الدرجة: ${previewAttachmentResult.score}/${previewAttachmentResult.totalScore}`}
+          attachment={previewAttachmentResult.attachment}
+          readOnly={true}
+          onClose={() => setPreviewAttachmentResult(null)}
         />
       )}
     </div>

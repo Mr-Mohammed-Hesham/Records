@@ -30,6 +30,7 @@ import { calculateStudentStats, getGradeRating } from '../utils/grading';
 import { exportSingleStudentAcademicReport } from '../utils/excel';
 import { StudentAcademicReportModal } from './StudentAcademicReportModal';
 import { AttachmentModal } from './AttachmentModal';
+import { AttachmentThumbnail } from './AttachmentThumbnail';
 
 interface StudentProfileViewProps {
   student: Student;
@@ -442,6 +443,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                 <th className="py-3 px-3.5 text-center">النسبة %</th>
                 <th className="py-3 px-3.5 text-center">التقدير</th>
                 <th className="py-3 px-3.5 text-center">الحالة</th>
+                <th className="py-3 px-3 text-center">مرفق / إثبات</th>
                 <th className="py-3 px-3.5">ملاحظات المدرس</th>
                 <th className="py-3 px-3.5 text-center">إجراءات</th>
               </tr>
@@ -449,7 +451,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             <tbody className="divide-y divide-slate-100">
               {results.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-slate-400">
+                  <td colSpan={10} className="py-8 text-center text-slate-400">
                     لم يتم تسجيل نتائج امتحانات لهذا الطالب بعد. اضغط "رصد نتيجة امتحان جديد" للإضافة.
                   </td>
                 </tr>
@@ -523,6 +525,19 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                         </span>
                       </td>
 
+                      {/* Attachment Proof Thumbnail & Quick Preview */}
+                      <td className="py-3 px-3 text-center">
+                        <div className="flex items-center justify-center">
+                          <AttachmentThumbnail
+                            attachment={res.attachment}
+                            size="sm"
+                            tooltipPrefix={`امتحان: ${res.examTitle}`}
+                            onClick={() => setActiveAttachmentResult(res)}
+                            onAttach={() => setActiveAttachmentResult(res)}
+                          />
+                        </div>
+                      </td>
+
                       {/* Notes */}
                       <td className="py-3 px-3.5 text-slate-600">
                         {isEditing ? (
@@ -558,24 +573,6 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                             </>
                           ) : (
                             <>
-                              <button
-                                onClick={() => setActiveAttachmentResult(res)}
-                                className={`p-1 rounded-lg transition-colors cursor-pointer relative ${
-                                  res.attachment
-                                    ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
-                                    : 'text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-slate-800'
-                                }`}
-                                title={
-                                  res.attachment
-                                    ? `عرض إثبات ومصداقية النتيجة (${res.attachment.name})`
-                                    : 'إرفاق صورة أو ملف إثبات (إيميل / ورقة امتحان للتأكيد)'
-                                }
-                              >
-                                <Paperclip className="w-3.5 h-3.5" />
-                                {res.attachment && (
-                                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-white dark:ring-slate-900" />
-                                )}
-                              </button>
                               <button
                                 onClick={() => handleStartEdit(res)}
                                 className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"

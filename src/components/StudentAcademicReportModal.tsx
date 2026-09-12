@@ -16,6 +16,7 @@ import { Student, ExamResult, TeacherSettings } from '../types';
 import { calculateStudentStats } from '../utils/grading';
 import { exportSingleStudentAcademicReport } from '../utils/excel';
 import { AttachmentModal } from './AttachmentModal';
+import { AttachmentThumbnail } from './AttachmentThumbnail';
 
 interface StudentAcademicReportModalProps {
   student: Student;
@@ -243,19 +244,15 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
                           {r.notes || '-'}
                         </td>
                         <td className="py-3 px-3 text-center print:hidden">
-                          {r.attachment ? (
-                            <button
-                              type="button"
+                          <div className="flex items-center justify-center">
+                            <AttachmentThumbnail
+                              attachment={r.attachment}
+                              size="sm"
+                              readOnly={true}
+                              tooltipPrefix={`امتحان: ${r.examTitle}`}
                               onClick={() => setInspectAttachmentResult(r)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors cursor-pointer"
-                              title={`معاينة وتنزيل المرفق: ${r.attachment.name}`}
-                            >
-                              <Paperclip className="w-3 h-3" />
-                              <span>معاينة</span>
-                            </button>
-                          ) : (
-                            <span className="text-slate-300 dark:text-slate-600 font-mono">-</span>
-                          )}
+                            />
+                          </div>
                         </td>
                       </tr>
                     ))}

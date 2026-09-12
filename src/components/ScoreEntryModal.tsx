@@ -16,6 +16,7 @@ import { getGradeRating } from '../utils/grading';
 import { exportExamResultsExcel } from '../utils/excel';
 import { DEFAULT_SETTINGS } from '../services/firebase';
 import { AttachmentModal } from './AttachmentModal';
+import { AttachmentThumbnail } from './AttachmentThumbnail';
 
 interface ScoreEntryModalProps {
   isOpen: boolean;
@@ -977,23 +978,16 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
 
                         {/* Attachment / Proof */}
                         <td className="py-2.5 px-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => setAttachmentTargetRow(row)}
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                              row.attachment
-                                ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100'
-                                : 'text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-dashed border-slate-200 dark:border-slate-700'
-                            }`}
-                            title={
-                              row.attachment
-                                ? `مرفق: ${row.attachment.name} (اضغط للمعاينة أو التعديل)`
-                                : 'إرفاق صورة أو إيميل للتأكيد والمصداقية'
-                            }
-                          >
-                            <Paperclip className="w-3.5 h-3.5" />
-                            <span>{row.attachment ? 'موثق' : 'إرفاق'}</span>
-                          </button>
+                          <div className="flex items-center justify-center">
+                            <AttachmentThumbnail
+                              attachment={row.attachment}
+                              size="sm"
+                              showLabel={!row.attachment}
+                              tooltipPrefix={`طالب: ${row.studentName}`}
+                              onClick={() => setAttachmentTargetRow(row)}
+                              onAttach={() => setAttachmentTargetRow(row)}
+                            />
+                          </div>
                         </td>
                       </tr>
                     );

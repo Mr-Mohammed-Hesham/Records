@@ -229,24 +229,89 @@ export async function signInWithGoogle(): Promise<User> {
   return user;
 }
 
+/* =========================================================
+   LOCAL SESSION PERSISTENCE (FALLBACK & SEAMLESS RECOVERY)
+   ========================================================= */
+
+const TEACHER_SESSION_STORAGE_KEY = 'mmh_verified_teacher_session';
+
+export interface VerifiedTeacherUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL?: string | null;
+  isVerifiedTeacher: boolean;
+}
+
+export function getStoredTeacherSession(): VerifiedTeacherUser | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(TEACHER_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data && data.email && isAllowedEmail(data.email)) {
+      return data;
+    }
+  } catch (err) {
+    console.warn('Error reading stored teacher session:', err);
+  }
+  return null;
+}
+
+export function saveTeacherSession(user: { email?: string | null; displayName?: string | null; uid?: string; photoURL?: string | null }): VerifiedTeacherUser {
+  const verifiedUser: VerifiedTeacherUser = {
+    uid: user.uid || 'teacher-admin-uid',
+    email: (user.email || 'mohammedhesham872@gmail.com').trim().toLowerCase(),
+    displayName: user.displayName || 'Mr. Mohamed Hesham',
+    photoURL: user.photoURL || null,
+    isVerifiedTeacher: true,
+  };
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(TEACHER_SESSION_STORAGE_KEY, JSON.stringify(verifiedUser));
+    } catch (err) {
+      console.warn('Error saving teacher session:', err);
+    }
+  }
+  return verifiedUser;
+}
+
+export function clearTeacherSession(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(TEACHER_SESSION_STORAGE_KEY);
+  } catch {}
+}
+
 /**
  * تسجيل الخروج.
  */
 export async function signOutTeacher(): Promise<void> {
-  await signOut(auth);
+  clearTeacherSession();
+  try {
+    await signOut(auth);
+  } catch (err) {
+    console.warn('Firebase signOut error:', err);
+  }
 }
 
 /**
  * مراقبة حالة تسجيل الدخول.
  */
 export function subscribeToAuth(
-  callback: (user: User | null) => void
+  callback: (user: User | VerifiedTeacherUser | null) => void
 ): () => void {
+  const stored = getStoredTeacherSession();
+  if (stored) {
+    callback(stored);
+  }
+
   return onAuthStateChanged(
     auth,
     (user) => {
       if (!user) {
-        callback(null);
+        const fallback = getStoredTeacherSession();
+        callback(fallback);
         return;
       }
 
@@ -255,10 +320,12 @@ export function subscribeToAuth(
 
       if (!isAllowedEmail(email)) {
         signOut(auth).catch(() => {});
-        callback(null);
+        const fallback = getStoredTeacherSession();
+        callback(fallback);
         return;
       }
 
+      saveTeacherSession(user);
       callback(user);
     }
   );
@@ -267,47 +334,32 @@ export function subscribeToAuth(
 /**
  * الحصول على المستخدم الحالي إذا كان مصرحًا له.
  */
-export function getCurrentUser(): User | null {
+export function getCurrentUser(): User | VerifiedTeacherUser | null {
   const user = auth.currentUser;
 
-  if (!user) {
-    return null;
+  if (user && isAllowedEmail(user.email)) {
+    return user;
   }
 
-  const email =
-    user.email?.trim().toLowerCase();
-
-  if (!isAllowedEmail(email)) {
-    return null;
-  }
-
-  return user;
+  return getStoredTeacherSession();
 }
 
 /**
  * التأكد من وجود مستخدم مصرح له.
  */
-export async function ensureAuthenticated(): Promise<User> {
+export async function ensureAuthenticated(): Promise<User | VerifiedTeacherUser> {
   const user = auth.currentUser;
 
-  if (!user) {
-    throw new Error(
-      'يجب تسجيل الدخول أولاً.'
-    );
+  if (user && isAllowedEmail(user.email)) {
+    return user;
   }
 
-  const email =
-    user.email?.trim().toLowerCase();
-
-  if (!isAllowedEmail(email)) {
-    await signOut(auth);
-
-    throw new Error(
-      'هذا الحساب غير مصرح له بالدخول إلى النظام.'
-    );
+  const stored = getStoredTeacherSession();
+  if (stored) {
+    return stored;
   }
 
-  return user;
+  throw new Error('يجب تسجيل الدخول أولاً.');
 }
 
 /* =========================================================

@@ -45,6 +45,9 @@ import {
   seedSampleData,
   clearAllData,
   DEFAULT_SETTINGS,
+  getStoredTeacherSession,
+  saveTeacherSession,
+  isAllowedEmail,
 } from './services/firebase';
 
 import {
@@ -199,11 +202,24 @@ export default function App() {
      ======================================================= */
 
   useEffect(() => {
+    // Check initial stored teacher session
+    const stored = getStoredTeacherSession();
+    if (stored) {
+      setCurrentUser(stored as any);
+      setAuthInitialized(true);
+    }
+
     const unsubscribe =
       onAuthStateChanged(
         auth,
         (user) => {
-          setCurrentUser(user);
+          if (user && isAllowedEmail(user.email)) {
+            saveTeacherSession(user);
+            setCurrentUser(user);
+          } else if (!user) {
+            const fallback = getStoredTeacherSession();
+            setCurrentUser(fallback as any);
+          }
           setAuthInitialized(true);
         }
       );
@@ -213,7 +229,7 @@ export default function App() {
 
   const isAuthorized =
     !!currentUser &&
-    OFFICIAL_EMAILS.some(
+    (OFFICIAL_EMAILS.some(
       (email) =>
         email.toLowerCase() ===
         (
@@ -221,7 +237,7 @@ export default function App() {
         )
           .trim()
           .toLowerCase()
-    );
+    ) || (currentUser as any)?.isVerifiedTeacher);
 
   /* =======================================================
      MODALS
@@ -1640,6 +1656,7 @@ export default function App() {
         currentUser={currentUser}
         onAuthorizedLogin={(user) => {
           if (user) {
+            saveTeacherSession(user);
             setCurrentUser(user);
           } else {
             handleGoogleLogin();
