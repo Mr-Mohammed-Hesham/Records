@@ -21,12 +21,15 @@ import {
   Sparkles,
   ChevronDown,
   GraduationCap,
-  Eye
+  Eye,
+  Paperclip,
+  ShieldCheck
 } from 'lucide-react';
-import { Student, Exam, ExamResult, TeacherSettings } from '../types';
+import { Student, Exam, ExamResult, TeacherSettings, ResultAttachment } from '../types';
 import { calculateStudentStats, getGradeRating } from '../utils/grading';
 import { exportSingleStudentAcademicReport } from '../utils/excel';
 import { StudentAcademicReportModal } from './StudentAcademicReportModal';
+import { AttachmentModal } from './AttachmentModal';
 
 interface StudentProfileViewProps {
   student: Student;
@@ -37,6 +40,7 @@ interface StudentProfileViewProps {
   onEditStudent: (student: Student) => void;
   onDeleteResult: (resultId: string) => Promise<void>;
   onUpdateResult: (resultId: string, updatedScore: number, notes: string) => Promise<void>;
+  onUpdateResultAttachment?: (resultId: string, attachment: ResultAttachment | null) => Promise<void>;
   onAddScoreForStudent: (student: Student) => void;
 }
 
@@ -49,12 +53,14 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   onEditStudent,
   onDeleteResult,
   onUpdateResult,
+  onUpdateResultAttachment,
   onAddScoreForStudent,
 }) => {
   const [editingResultId, setEditingResultId] = useState<string | null>(null);
   const [editScoreVal, setEditScoreVal] = useState<string>('');
   const [editNotesVal, setEditNotesVal] = useState<string>('');
   const [showAcademicReportModal, setShowAcademicReportModal] = useState(false);
+  const [activeAttachmentResult, setActiveAttachmentResult] = useState<ExamResult | null>(null);
 
   const stats = calculateStudentStats(results, settings.gradingScale);
 
@@ -553,6 +559,24 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                           ) : (
                             <>
                               <button
+                                onClick={() => setActiveAttachmentResult(res)}
+                                className={`p-1 rounded-lg transition-colors cursor-pointer relative ${
+                                  res.attachment
+                                    ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                                    : 'text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-slate-800'
+                                }`}
+                                title={
+                                  res.attachment
+                                    ? `عرض إثبات ومصداقية النتيجة (${res.attachment.name})`
+                                    : 'إرفاق صورة أو ملف إثبات (إيميل / ورقة امتحان للتأكيد)'
+                                }
+                              >
+                                <Paperclip className="w-3.5 h-3.5" />
+                                {res.attachment && (
+                                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-white dark:ring-slate-900" />
+                                )}
+                              </button>
+                              <button
                                 onClick={() => handleStartEdit(res)}
                                 className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
                                 title="تعديل النتيجة"
@@ -589,6 +613,22 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           results={results}
           settings={settings}
           onClose={() => setShowAcademicReportModal(false)}
+        />
+      )}
+
+      {activeAttachmentResult && (
+        <AttachmentModal
+          isOpen={!!activeAttachmentResult}
+          title="إثبات ومرفق مصداقية الامتحان"
+          subtitle={`طالب: ${student.name} | امتحان: ${activeAttachmentResult.examTitle} | الدرجة: ${activeAttachmentResult.score} من ${activeAttachmentResult.totalScore}`}
+          attachment={activeAttachmentResult.attachment || null}
+          onSave={async (attachment) => {
+            if (onUpdateResultAttachment) {
+              await onUpdateResultAttachment(activeAttachmentResult.id, attachment);
+            }
+            setActiveAttachmentResult(null);
+          }}
+          onClose={() => setActiveAttachmentResult(null)}
         />
       )}
     </div>

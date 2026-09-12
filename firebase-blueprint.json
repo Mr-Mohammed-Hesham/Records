@@ -34,6 +34,7 @@
         "passScore": { "type": "number" },
         "type": { "type": "string" },
         "notes": { "type": "string" },
+        "attachment": { "type": "object" },
         "createdAt": { "type": "string" }
       }
     },
@@ -53,6 +54,7 @@
         "gradeRating": { "type": "string" },
         "passed": { "type": "boolean" },
         "notes": { "type": "string" },
+        "attachment": { "type": "object" },
         "updatedAt": { "type": "string" }
       }
     },

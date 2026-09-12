@@ -8,11 +8,14 @@ import {
   FileSpreadsheet,
   ArrowDown,
   Check,
+  Paperclip,
+  ShieldCheck,
 } from 'lucide-react';
-import { Student, Exam, ExamResult, TeacherSettings } from '../types';
+import { Student, Exam, ExamResult, TeacherSettings, ResultAttachment } from '../types';
 import { getGradeRating } from '../utils/grading';
 import { exportExamResultsExcel } from '../utils/excel';
 import { DEFAULT_SETTINGS } from '../services/firebase';
+import { AttachmentModal } from './AttachmentModal';
 
 interface ScoreEntryModalProps {
   isOpen: boolean;
@@ -37,6 +40,7 @@ interface ScoreRowState {
   group: string;
   score: string;
   notes: string;
+  attachment?: ResultAttachment | null;
   isModified: boolean;
   isExisting: boolean;
 }
@@ -56,6 +60,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   const [showAllStudents, setShowAllStudents] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [attachmentTargetRow, setAttachmentTargetRow] = useState<ScoreRowState | null>(null);
 
   const inputRefs = useRef<{
     [key: string]: HTMLInputElement | null;
@@ -154,6 +159,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
               ? String(result.score)
               : '',
           notes: result?.notes || '',
+          attachment: result?.attachment || null,
           isModified: false,
           isExisting: result !== undefined,
         };
@@ -188,6 +194,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           group: student?.group || '',
           score: String(result.score),
           notes: result.notes || '',
+          attachment: result.attachment || null,
           isModified: false,
           isExisting: true,
         });
@@ -448,6 +455,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           gradeRating: rating.label,
           passed,
           notes: row.notes,
+          attachment: row.attachment || null,
           updatedAt:
             new Date().toISOString(),
         });
@@ -751,6 +759,10 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                 <th className="py-2.5 px-3 min-w-[140px]">
                   ملاحظات
                 </th>
+
+                <th className="py-2.5 px-3 w-28 text-center">
+                  إثبات ومرفق
+                </th>
               </tr>
             </thead>
 
@@ -758,7 +770,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
               {filteredRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="py-10 text-center text-slate-400 dark:text-slate-500"
                   >
                     لا يوجد طلاب مسجلون في مادة{' '}
@@ -962,6 +974,27 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                             className="w-full text-xs py-1 px-2 bg-transparent border-b border-transparent focus:border-slate-300 dark:focus:border-slate-600 focus:bg-slate-50 dark:focus:bg-slate-800 rounded transition-all text-right text-slate-800 dark:text-slate-200"
                           />
                         </td>
+
+                        {/* Attachment / Proof */}
+                        <td className="py-2.5 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setAttachmentTargetRow(row)}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                              row.attachment
+                                ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100'
+                                : 'text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-dashed border-slate-200 dark:border-slate-700'
+                            }`}
+                            title={
+                              row.attachment
+                                ? `مرفق: ${row.attachment.name} (اضغط للمعاينة أو التعديل)`
+                                : 'إرفاق صورة أو إيميل للتأكيد والمصداقية'
+                            }
+                          >
+                            <Paperclip className="w-3.5 h-3.5" />
+                            <span>{row.attachment ? 'موثق' : 'إرفاق'}</span>
+                          </button>
+                        </td>
                       </tr>
                     );
                   }
@@ -1014,6 +1047,26 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           </div>
         </div>
       </div>
+
+      {attachmentTargetRow && exam && (
+        <AttachmentModal
+          isOpen={!!attachmentTargetRow}
+          title="إثبات ومرفق مصداقية النتيجة"
+          subtitle={`طالب: ${attachmentTargetRow.studentName} | امتحان: ${exam.title} | الدرجة: ${attachmentTargetRow.score || '-'}/${exam.totalScore}`}
+          attachment={attachmentTargetRow.attachment || null}
+          onSave={(attachment) => {
+            setRows((prev) =>
+              prev.map((r) =>
+                r.studentDocId === attachmentTargetRow.studentDocId
+                  ? { ...r, attachment, isModified: true }
+                  : r
+              )
+            );
+            setAttachmentTargetRow(null);
+          }}
+          onClose={() => setAttachmentTargetRow(null)}
+        />
+      )}
     </div>
   );
 };

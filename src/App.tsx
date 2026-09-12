@@ -23,6 +23,7 @@ import {
   Exam,
   ExamResult,
   TeacherSettings,
+  ResultAttachment,
 } from './types';
 
 import {
@@ -1175,6 +1176,55 @@ export default function App() {
   };
 
   /* =======================================================
+     UPDATE RESULT ATTACHMENT
+     ======================================================= */
+
+  const handleUpdateResultAttachment = async (
+    resultId: string,
+    attachment: ResultAttachment | null
+  ) => {
+    try {
+      await updateSingleResult(resultId, {
+        attachment: attachment || null,
+        updatedAt: new Date().toISOString(),
+      });
+
+      addToast(
+        attachment
+          ? 'تم حفظ وتثبيت مرفق إثبات المصداقية للنتيجة بنجاح'
+          : 'تم إزالة مرفق النتيجة بنجاح'
+      );
+    } catch (err) {
+      console.error('Update result attachment error:', err);
+      addToast('تعذر حفظ المرفق، يرجى المحاولة لاحقاً', 'error');
+    }
+  };
+
+  /* =======================================================
+     UPDATE EXAM ATTACHMENT
+     ======================================================= */
+
+  const handleUpdateExamAttachment = async (
+    examId: string,
+    attachment: ResultAttachment | null
+  ) => {
+    try {
+      await updateExam(examId, {
+        attachment: attachment || null,
+      });
+
+      addToast(
+        attachment
+          ? 'تم حفظ وتثبيت المرفق الرسمي للامتحان بنجاح'
+          : 'تم إزالة مرفق الامتحان بنجاح'
+      );
+    } catch (err) {
+      console.error('Update exam attachment error:', err);
+      addToast('تعذر حفظ مرفق الامتحان، يرجى المحاولة لاحقاً', 'error');
+    }
+  };
+
+  /* =======================================================
      SETTINGS
      ======================================================= */
 
@@ -2240,6 +2290,9 @@ export default function App() {
                 onAddScoreForStudent={
                   handleOpenScoringForStudent
                 }
+                onUpdateResultAttachment={
+                  handleUpdateResultAttachment
+                }
               />
             )}
 
@@ -2267,6 +2320,9 @@ export default function App() {
               }
               onOpenScoring={
                 handleOpenScoring
+              }
+              onUpdateExamAttachment={
+                handleUpdateExamAttachment
               }
             />
           )}

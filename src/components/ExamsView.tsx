@@ -12,10 +12,12 @@ import {
   Filter, 
   BarChart2, 
   ChevronRight,
-  BookOpen
+  BookOpen,
+  Paperclip
 } from 'lucide-react';
-import { Exam, ExamResult, Student, TeacherSettings } from '../types';
+import { Exam, ExamResult, Student, TeacherSettings, ResultAttachment } from '../types';
 import { exportExamResultsExcel } from '../utils/excel';
+import { AttachmentModal } from './AttachmentModal';
 
 interface ExamsViewProps {
   exams: Exam[];
@@ -26,6 +28,7 @@ interface ExamsViewProps {
   onEditExam: (exam: Exam) => void;
   onDeleteExam: (exam: Exam) => void;
   onOpenScoring: (exam: Exam) => void;
+  onUpdateExamAttachment?: (examId: string, attachment: ResultAttachment | null) => Promise<void>;
 }
 
 export const ExamsView: React.FC<ExamsViewProps> = ({
@@ -37,10 +40,12 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
   onEditExam,
   onDeleteExam,
   onOpenScoring,
+  onUpdateExamAttachment,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [gradeFilter, setGradeFilter] = useState('الكل');
   const [typeFilter, setTypeFilter] = useState('الكل');
+  const [attachmentExam, setAttachmentExam] = useState<Exam | null>(null);
 
   // Pre-calculate stats per exam
   const examStatsList = useMemo(() => {
@@ -202,6 +207,24 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
                   {/* Actions dropdown or buttons */}
                   <div className="flex items-center gap-1">
                     <button
+                      onClick={() => setAttachmentExam(exam)}
+                      className={`p-1.5 rounded-lg transition-colors cursor-pointer relative ${
+                        exam.attachment
+                          ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                          : 'text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-slate-800'
+                      }`}
+                      title={
+                        exam.attachment
+                          ? `عرض الإثبات والمرفق المعتمد للامتحان (${exam.attachment.name})`
+                          : 'إرفاق صورة أو ملف إثبات للامتحان (إيميل / نموذج الإجابة)'
+                      }
+                    >
+                      <Paperclip className="w-4 h-4" />
+                      {exam.attachment && (
+                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-white dark:ring-slate-900" />
+                      )}
+                    </button>
+                    <button
                       onClick={() => onEditExam(exam)}
                       className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                       title="تعديل بيانات الامتحان"
@@ -275,6 +298,22 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
           ))
         )}
       </div>
+
+      {attachmentExam && (
+        <AttachmentModal
+          isOpen={!!attachmentExam}
+          title="مرفق وإثبات مصداقية الامتحان الرسمي"
+          subtitle={`امتحان: ${attachmentExam.title} | المادة: ${attachmentExam.subject} | التاريخ: ${attachmentExam.date}`}
+          attachment={attachmentExam.attachment || null}
+          onSave={async (attachment) => {
+            if (onUpdateExamAttachment) {
+              await onUpdateExamAttachment(attachmentExam.id, attachment);
+            }
+            setAttachmentExam(null);
+          }}
+          onClose={() => setAttachmentExam(null)}
+        />
+      )}
     </div>
   );
 };

@@ -87,7 +87,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ currentUser, onAuthorizedL
     if (!email.trim()) return;
 
     if (!isEmailAllowed(email)) {
-      setError('هذا البريد غير مصرح له بالدخول. البريد المسموح هو mohammedhesham872@gmai.com فقط');
+      setError('هذا البريد غير مصرح له بالدخول. البريد المسموح هو mohammedhesham872@gmail.com فقط');
       return;
     }
 

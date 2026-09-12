@@ -9,11 +9,13 @@ import {
   CheckCircle2, 
   TrendingUp, 
   Sparkles,
-  GraduationCap
+  GraduationCap,
+  Paperclip
 } from 'lucide-react';
 import { Student, ExamResult, TeacherSettings } from '../types';
 import { calculateStudentStats } from '../utils/grading';
 import { exportSingleStudentAcademicReport } from '../utils/excel';
+import { AttachmentModal } from './AttachmentModal';
 
 interface StudentAcademicReportModalProps {
   student: Student;
@@ -29,6 +31,7 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
   onClose,
 }) => {
   const printRef = useRef<HTMLDivElement>(null);
+  const [inspectAttachmentResult, setInspectAttachmentResult] = React.useState<ExamResult | null>(null);
   const stats = calculateStudentStats(results, settings.gradingScale);
 
   // Sorted exam results by date
@@ -201,6 +204,7 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
                       <th className="py-3 px-3 text-center">التقدير</th>
                       <th className="py-3 px-3 text-center">النتيجة</th>
                       <th className="py-3 px-3.5">ملاحظات الامتحان</th>
+                      <th className="py-3 px-3 text-center print:hidden">إثبات ومصداقية</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
@@ -238,6 +242,21 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
                         <td className="py-3 px-3.5 text-slate-500 dark:text-slate-400 text-[11px]">
                           {r.notes || '-'}
                         </td>
+                        <td className="py-3 px-3 text-center print:hidden">
+                          {r.attachment ? (
+                            <button
+                              type="button"
+                              onClick={() => setInspectAttachmentResult(r)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors cursor-pointer"
+                              title={`معاينة وتنزيل المرفق: ${r.attachment.name}`}
+                            >
+                              <Paperclip className="w-3 h-3" />
+                              <span>معاينة</span>
+                            </button>
+                          ) : (
+                            <span className="text-slate-300 dark:text-slate-600 font-mono">-</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -274,6 +293,17 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
           </button>
         </div>
       </div>
+
+      {inspectAttachmentResult && (
+        <AttachmentModal
+          isOpen={!!inspectAttachmentResult}
+          readOnly={true}
+          title="معاينة إثبات ومرفق مصداقية الامتحان"
+          subtitle={`طالب: ${student.name} | امتحان: ${inspectAttachmentResult.examTitle} | الدرجة: ${inspectAttachmentResult.score}/${inspectAttachmentResult.totalScore}`}
+          attachment={inspectAttachmentResult.attachment || null}
+          onClose={() => setInspectAttachmentResult(null)}
+        />
+      )}
     </div>
   );
 };

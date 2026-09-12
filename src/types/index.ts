@@ -30,6 +30,15 @@ export interface Student {
   updatedAt?: string;
 }
 
+export interface ResultAttachment {
+  name: string;
+  type: string; // e.g. image/jpeg, image/png, application/pdf, message/rfc822, text/plain, etc.
+  size?: number; // size in bytes
+  dataUrl: string; // base64 / data URL
+  uploadedAt: string;
+  notes?: string;
+}
+
 export interface Exam {
   id: string;
   title: string;
@@ -41,6 +50,7 @@ export interface Exam {
   passScore: number;
   type: ExamType;
   notes?: string;
+  attachment?: ResultAttachment | null;
   createdAt?: string;
 }
 
@@ -63,6 +73,7 @@ export interface ExamResult {
   gradeRating: string; // ممتاز / جيد جدا / جيد / مقبول / يحتاج تحسين
   passed: boolean;
   notes?: string;
+  attachment?: ResultAttachment | null;
   createdAt?: string;
   updatedAt?: string;
 }
