@@ -747,8 +747,8 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                 </h3>
 
                 {exams && exams.length > 1 && onSelectExam && (
-                  <div className="flex items-center gap-1.5 bg-indigo-50/80 dark:bg-indigo-950/60 px-2 py-1 rounded-xl border border-indigo-200 dark:border-indigo-800/80">
-                    <span className="text-[11px] text-indigo-700 dark:text-indigo-300 font-bold">تغيير الامتحان:</span>
+                  <div className="flex items-center gap-1.5 bg-indigo-50/80 dark:bg-indigo-950/60 px-2 py-1 rounded-xl border border-indigo-200 dark:border-indigo-800/80 max-w-full">
+                    <span className="text-[11px] text-indigo-700 dark:text-indigo-300 font-bold shrink-0">تغيير الامتحان:</span>
                     <select
                       id="score-modal-exam-dropdown"
                       value={exam.id}
@@ -756,7 +756,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                         const chosen = exams.find((x) => x.id === e.target.value);
                         if (chosen) onSelectExam(chosen);
                       }}
-                      className="bg-white dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-100 rounded-lg px-2 py-1 border border-slate-200 dark:border-slate-700 focus:outline-hidden cursor-pointer"
+                      className="bg-white dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-100 rounded-lg px-2 py-1 border border-slate-200 dark:border-slate-700 focus:outline-hidden cursor-pointer max-w-[150px] sm:max-w-xs truncate"
                     >
                       {exams.map((ex) => (
                         <option key={ex.id} value={ex.id}>
