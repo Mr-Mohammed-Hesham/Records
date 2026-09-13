@@ -448,25 +448,30 @@ export function exportExamResultsExcel(
     'م',
     'اسم الطالب',
     'الرقم التعريفي ID',
+    'نوع المحاولة / التحسين',
     'الدرجة',
     'الدرجة الكلية',
     'النسبة المئوية',
     'التقدير',
     'حالة النجاح',
+    'الدرجة السابقة قبل التحسين',
     'ملاحظات'
   ];
 
   const tableRows = results.map((r, idx) => {
     const student = students.find(s => s.id === r.studentDocId);
+    const attemptText = r.attemptLabel || (r.isImprovement ? `تحسين (محاولة ${r.attemptNumber || 2})` : 'المحاولة الأساسية');
     return [
       idx + 1,
       r.studentName,
       student ? student.studentId : '-',
+      attemptText,
       r.score,
       r.totalScore,
       `${r.percentage}%`,
       r.gradeRating,
       r.passed ? 'ناجح' : 'راسب',
+      r.previousScore !== undefined ? r.previousScore : '-',
       r.notes || ''
     ];
   });

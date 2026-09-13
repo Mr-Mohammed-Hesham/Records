@@ -10,11 +10,14 @@ import {
   Check,
   Paperclip,
   ShieldCheck,
+  Plus,
+  Trash2,
+  Sparkles,
 } from 'lucide-react';
 import { Student, Exam, ExamResult, TeacherSettings, ResultAttachment } from '../types';
 import { getGradeRating } from '../utils/grading';
 import { exportExamResultsExcel } from '../utils/excel';
-import { DEFAULT_SETTINGS } from '../services/firebase';
+import { DEFAULT_SETTINGS, saveBatchResults, deleteResult } from '../services/firebase';
 import { AttachmentModal } from './AttachmentModal';
 import { AttachmentThumbnail } from './AttachmentThumbnail';
 
@@ -24,16 +27,20 @@ interface ScoreEntryModalProps {
   students?: Student[];
   existingResults?: ExamResult[];
   settings?: TeacherSettings;
+  preselectedStudent?: Student | null;
   onClose: () => void;
   onSaveBatch?: (
-    results: Array<Omit<ExamResult, 'id'>>
+    results: Array<ExamResult>
   ) => Promise<void>;
   onSaveScores?: (
-    results: Array<Omit<ExamResult, 'id'>>
+    results: Array<ExamResult>
   ) => Promise<void>;
+  onDeleteResult?: (resultId: string) => Promise<void>;
 }
 
 interface ScoreRowState {
+  rowKey: string;
+  resultId?: string;
   studentDocId: string;
   studentId: string;
   studentName: string;
@@ -42,6 +49,10 @@ interface ScoreRowState {
   score: string;
   notes: string;
   attachment?: ResultAttachment | null;
+  attemptNumber: number;
+  attemptLabel?: string;
+  isImprovement: boolean;
+  previousScore?: number;
   isModified: boolean;
   isExisting: boolean;
 }
@@ -52,15 +63,18 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   students = [],
   existingResults = [],
   settings = DEFAULT_SETTINGS,
+  preselectedStudent,
   onClose,
   onSaveBatch,
   onSaveScores,
+  onDeleteResult,
 }) => {
   const [rows, setRows] = useState<ScoreRowState[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAllStudents, setShowAllStudents] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [attachmentTargetRow, setAttachmentTargetRow] = useState<ScoreRowState | null>(null);
 
   const inputRefs = useRef<{
@@ -69,14 +83,6 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
 
   /*
    * الحصول على مواد الطالب.
-   *
-   * الطلاب الجدد:
-   * subjects: ['رياضيات', 'فيزياء']
-   *
-   * الطلاب القدامى:
-   * subject: 'رياضيات'
-   *
-   * نحافظ على الاثنين لضمان التوافق مع البيانات القديمة.
    */
   const getStudentSubjects = (student: Student): string[] => {
     if (
@@ -97,20 +103,13 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
     if (!exam || !isOpen) return;
 
     /*
-     * تحديد الطلاب المؤهلين للامتحان:
-     *
-     * 1. نفس الصف.
-     * 2. مسجل في مادة الامتحان.
-     *
-     * إذا كان الطالب قديمًا ولا توجد له مادة، نسمح له بالظهور
-     * حتى لا نكسر البيانات القديمة.
+     * تحديد الطلاب المؤهلين للامتحان
      */
     const eligibleStudents = students.filter((student) => {
       const matchesGrade =
         !exam.grade || student.grade === exam.grade;
 
       const studentSubjects = getStudentSubjects(student);
-
       const hasNoSubjectData = studentSubjects.length === 0;
 
       const matchesSubject =
@@ -120,82 +119,109 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
       return matchesGrade && matchesSubject;
     });
 
-    /*
-     * زر عرض جميع الطلاب:
-     * عند تفعيله نعرض كل الطلاب، كما كان النظام القديم.
-     *
-     * عند إيقافه نعرض فقط الطلاب المؤهلين للمادة والصف.
-     */
     const relevantStudents = showAllStudents
       ? students
       : eligibleStudents;
 
     /*
-     * خريطة النتائج الموجودة بالفعل لهذا الامتحان.
-     *
-     * الاعتماد على studentDocId + examId الموجودين في البيانات
-     * يحافظ على استقلالية نتائج كل امتحان.
+     * خريطة النتائج الحالية مجمعة لكل طالب لدعم تعدد الدرجات ومحاولات التحسين
      */
-    const resultMap = new Map<string, ExamResult>();
-
+    const studentResultsMap = new Map<string, ExamResult[]>();
     existingResults.forEach((result) => {
-      resultMap.set(result.studentDocId, result);
+      const docKey = result.studentDocId;
+      if (docKey) {
+        const list = studentResultsMap.get(docKey) || [];
+        list.push(result);
+        studentResultsMap.set(docKey, list);
+      }
+      const codeKey = result.studentId;
+      if (codeKey && codeKey !== docKey) {
+        const list = studentResultsMap.get(codeKey) || [];
+        list.push(result);
+        studentResultsMap.set(codeKey, list);
+      }
     });
 
     /*
-     * إنشاء صفوف الطلاب.
+     * إنشاء صفوف الطلاب مع دعم تعدد المحاولات
      */
-    const initialRows: ScoreRowState[] = relevantStudents.map(
-      (student) => {
-        const result = resultMap.get(student.id);
+    const initialRows: ScoreRowState[] = [];
 
-        return {
+    relevantStudents.forEach((student) => {
+      const studentResults =
+        studentResultsMap.get(student.id) ||
+        (student.studentId ? studentResultsMap.get(student.studentId) : undefined);
+
+      if (studentResults && studentResults.length > 0) {
+        // ترتيب محاولات الطالب تصاعدياً حسب رقم المحاولة
+        studentResults.sort((a, b) => (a.attemptNumber || 1) - (b.attemptNumber || 1));
+
+        studentResults.forEach((res, idx) => {
+          initialRows.push({
+            rowKey: res.id || `${student.id}_attempt_${idx + 1}`,
+            resultId: res.id,
+            studentDocId: student.id,
+            studentId: student.studentId,
+            studentName: student.name,
+            grade: student.grade,
+            group: student.group || '',
+            score: String(res.score),
+            notes: res.notes || '',
+            attachment: res.attachment || null,
+            attemptNumber: res.attemptNumber || (idx + 1),
+            attemptLabel: res.attemptLabel || (idx === 0 ? 'المحاولة الأساسية' : `تحسين درجة (محاولة ${idx + 1})`),
+            isImprovement: !!res.isImprovement || idx > 0,
+            previousScore: res.previousScore !== undefined ? res.previousScore : (idx > 0 ? studentResults[idx - 1]?.score : undefined),
+            isModified: false,
+            isExisting: true,
+          });
+        });
+      } else {
+        // طالب لم يُرصد له امتحان بعد
+        initialRows.push({
+          rowKey: `${student.id}_attempt_1`,
           studentDocId: student.id,
           studentId: student.studentId,
           studentName: student.name,
           grade: student.grade,
           group: student.group || '',
-          score:
-            result !== undefined
-              ? String(result.score)
-              : '',
-          notes: result?.notes || '',
-          attachment: result?.attachment || null,
+          score: '',
+          notes: '',
+          attachment: null,
+          attemptNumber: 1,
+          attemptLabel: 'المحاولة الأساسية',
+          isImprovement: false,
           isModified: false,
-          isExisting: result !== undefined,
-        };
+          isExisting: false,
+        });
       }
-    );
+    });
 
     /*
-     * نضيف أي طالب لديه نتيجة محفوظة لهذا الامتحان
-     * حتى لو تغير صفه أو بياناته لاحقًا.
-     *
-     * هذا مهم جدًا حتى لا تختفي النتائج القديمة.
+     * إضافة أي نتائج محفوظة لطلاب خارج القائمة المؤهلة
      */
     existingResults.forEach((result) => {
-      if (
-        !initialRows.find(
-          (row) =>
-            row.studentDocId === result.studentDocId
-        )
-      ) {
-        const student = students.find(
-          (studentItem) =>
-            studentItem.id === result.studentDocId
-        );
+      const alreadyAdded = initialRows.some(
+        (row) => (row.resultId && row.resultId === result.id) || (row.studentDocId === result.studentDocId && row.attemptNumber === (result.attemptNumber || 1))
+      );
 
+      if (!alreadyAdded) {
+        const student = students.find((s) => s.id === result.studentDocId);
         initialRows.push({
+          rowKey: result.id || `${result.studentDocId}_attempt_${result.attemptNumber || 1}_${Date.now()}`,
+          resultId: result.id,
           studentDocId: result.studentDocId,
-          studentId: student
-            ? student.studentId
-            : '-',
+          studentId: student ? student.studentId : '-',
           studentName: result.studentName,
           grade: student?.grade || '-',
           group: student?.group || '',
           score: String(result.score),
           notes: result.notes || '',
           attachment: result.attachment || null,
+          attemptNumber: result.attemptNumber || 1,
+          attemptLabel: result.attemptLabel || (result.isImprovement ? 'تحسين درجة' : 'المحاولة الأساسية'),
+          isImprovement: !!result.isImprovement,
+          previousScore: result.previousScore,
           isModified: false,
           isExisting: true,
         });
@@ -203,17 +229,16 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
     });
 
     /*
-     * ترتيب الطلاب أبجديًا.
+     * ترتيب صفوف الجدول أبجدياً حسب اسم الطالب، ثم حسب رقم المحاولة
      */
-    initialRows.sort((a, b) =>
-      a.studentName.localeCompare(
-        b.studentName,
-        'ar'
-      )
-    );
+    initialRows.sort((a, b) => {
+      const nameCompare = a.studentName.localeCompare(b.studentName, 'ar');
+      if (nameCompare !== 0) return nameCompare;
+      return a.attemptNumber - b.attemptNumber;
+    });
 
     setRows(initialRows);
-    setSearchTerm('');
+    setSearchTerm(preselectedStudent ? preselectedStudent.name : '');
     setSaveSuccess(false);
   }, [
     exam,
@@ -221,56 +246,120 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
     students,
     existingResults,
     showAllStudents,
+    preselectedStudent,
   ]);
 
   if (!isOpen || !exam) return null;
 
   /*
-   * تغيير الدرجة.
+   * تغيير الدرجة
    */
   const handleScoreChange = (
-    studentDocId: string,
+    rowKey: string,
     value: string
   ) => {
     setRows((previousRows) =>
       previousRows.map((row) => {
-        if (row.studentDocId === studentDocId) {
+        if (row.rowKey === rowKey) {
           return {
             ...row,
             score: value,
             isModified: true,
           };
         }
-
         return row;
       })
     );
   };
 
   /*
-   * تغيير الملاحظات.
+   * إضافة محاولة تحسين جديدة لنفس الطالب لنفس الامتحان
+   */
+  const handleAddImprovementAttempt = (studentDocId: string) => {
+    const studentRows = rows.filter((r) => r.studentDocId === studentDocId);
+    if (studentRows.length === 0) return;
+
+    const lastRow = studentRows[studentRows.length - 1];
+    const maxAttempt = Math.max(...studentRows.map((r) => r.attemptNumber), 1);
+    const nextAttempt = maxAttempt + 1;
+    const prevScoreNum = parseFloat(lastRow.score);
+
+    const newRowKey = `${studentDocId}_attempt_${nextAttempt}_${Date.now()}`;
+
+    const newRow: ScoreRowState = {
+      rowKey: newRowKey,
+      studentDocId: lastRow.studentDocId,
+      studentId: lastRow.studentId,
+      studentName: lastRow.studentName,
+      grade: lastRow.grade,
+      group: lastRow.group,
+      score: '',
+      notes: 'تحسين درجة بعد إعادة الامتحان',
+      attachment: null,
+      attemptNumber: nextAttempt,
+      attemptLabel: `تحسين درجة (محاولة ${nextAttempt})`,
+      isImprovement: true,
+      previousScore: !isNaN(prevScoreNum) ? prevScoreNum : undefined,
+      isModified: true,
+      isExisting: false,
+    };
+
+    // إدراج الصف الجديد مباشرة بعد صفوف هذا الطالب
+    const lastIndex = rows.map((r, idx) => ({ r, idx }))
+      .filter(({ r }) => r.studentDocId === studentDocId)
+      .pop()?.idx ?? rows.length - 1;
+
+    const updated = [...rows];
+    updated.splice(lastIndex + 1, 0, newRow);
+    setRows(updated);
+
+    // التركيز التلقائي على حقل الدرجة الجديد
+    setTimeout(() => {
+      inputRefs.current[newRowKey]?.focus();
+    }, 60);
+  };
+
+  /*
+   * حذف أو إلغاء محاولة تحسين
+   */
+  const handleRemoveAttempt = async (rowKey: string, resultId?: string) => {
+    if (resultId) {
+      try {
+        if (onDeleteResult) {
+          await onDeleteResult(resultId);
+        } else {
+          await deleteResult(resultId);
+        }
+      } catch (err) {
+        console.error('Delete attempt error:', err);
+      }
+    }
+    setRows((prev) => prev.filter((r) => r.rowKey !== rowKey));
+  };
+
+  /*
+   * تغيير الملاحظات
    */
   const handleNotesChange = (
-    studentDocId: string,
+    rowKey: string,
     value: string
   ) => {
     setRows((previousRows) =>
       previousRows.map((row) => {
-        if (row.studentDocId === studentDocId) {
+        if (row.rowKey === rowKey) {
           return {
             ...row,
             notes: value,
             isModified: true,
           };
         }
-
         return row;
       })
     );
   };
 
   /*
-   * التنقل بين درجات الطلاب بالكيبورد.
+   * التنقل بين درجات الطلاب بالكيبورد
    */
   const handleKeyDown = (
     event: React.KeyboardEvent<HTMLInputElement>,
@@ -287,15 +376,10 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
 
       if (
         nextRow &&
-        inputRefs.current[nextRow.studentDocId]
+        inputRefs.current[nextRow.rowKey]
       ) {
-        inputRefs.current[
-          nextRow.studentDocId
-        ]?.focus();
-
-        inputRefs.current[
-          nextRow.studentDocId
-        ]?.select();
+        inputRefs.current[nextRow.rowKey]?.focus();
+        inputRefs.current[nextRow.rowKey]?.select();
       }
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
@@ -305,23 +389,16 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
 
       if (
         previousRow &&
-        inputRefs.current[
-          previousRow.studentDocId
-        ]
+        inputRefs.current[previousRow.rowKey]
       ) {
-        inputRefs.current[
-          previousRow.studentDocId
-        ]?.focus();
-
-        inputRefs.current[
-          previousRow.studentDocId
-        ]?.select();
+        inputRefs.current[previousRow.rowKey]?.focus();
+        inputRefs.current[previousRow.rowKey]?.select();
       }
     }
   };
 
   /*
-   * إعطاء الدرجة الكاملة للجميع.
+   * إعطاء الدرجة الكاملة للجميع
    */
   const handleSetFullScoreForAll = () => {
     if (
@@ -342,7 +419,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   };
 
   /*
-   * إعطاء درجة النجاح للطلاب الذين لم يتم رصد درجاتهم.
+   * إعطاء درجة النجاح للطلاب الذين لم يتم رصد درجاتهم
    */
   const handleSetPassingScoreForEmpty = () => {
     setRows((previousRows) =>
@@ -354,14 +431,13 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
             isModified: true,
           };
         }
-
         return row;
       })
     );
   };
 
   /*
-   * البحث.
+   * البحث
    */
   const filteredRows = rows.filter((row) => {
     const term = searchTerm
@@ -381,7 +457,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   });
 
   /*
-   * الإحصائيات.
+   * الإحصائيات
    */
   const filledRows = rows.filter(
     (row) =>
@@ -397,15 +473,13 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   ).length;
 
   /*
-   * حفظ النتائج.
+   * حفظ النتائج مع دعم التعدد ومحاولات التحسين
    */
   const handleSave = async () => {
     try {
       setLoading(true);
 
-      const toSave: Array<
-        Omit<ExamResult, 'id'>
-      > = [];
+      const toSave: ExamResult[] = [];
 
       for (const row of rows) {
         if (row.score.trim() === '') {
@@ -444,6 +518,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           clampedScore >= exam.passScore;
 
         toSave.push({
+          id: row.resultId || '',
           examId: exam.id,
           studentId: row.studentId,
           studentDocId: row.studentDocId,
@@ -457,66 +532,77 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           passed,
           notes: row.notes,
           attachment: row.attachment || null,
-          updatedAt:
-            new Date().toISOString(),
+          attemptNumber: row.attemptNumber,
+          attemptLabel: row.attemptLabel,
+          isImprovement: row.isImprovement,
+          previousScore: row.previousScore,
+          updatedAt: new Date().toISOString(),
         });
       }
 
-      const saveFn =
-        onSaveBatch || onSaveScores;
-
-      if (saveFn) {
-        await saveFn(toSave);
+      if (toSave.length === 0) {
+        setErrorMessage('لم يتم إدخال أي درجات للحفظ. يرجى إدخال درجة واحدة على الأقل.');
+        return;
       }
 
-      setSaveSuccess(true);
+      setErrorMessage('');
 
+      // حفظ موحد إما عبر معالج الحفظ الممرر أو عبر saveBatchResults مباشرة
+      const saveFn = onSaveBatch || onSaveScores;
+      if (saveFn) {
+        await saveFn(toSave);
+      } else {
+        await saveBatchResults(toSave);
+      }
+
+      // تحديث حالة الصفوف لتعيينها كبيانات محفوظة ومثبتة
+      setRows((prev) =>
+        prev.map((r) => {
+          if (r.score.trim() !== '') {
+            return {
+              ...r,
+              isModified: false,
+              isExisting: true,
+            };
+          }
+          return r;
+        })
+      );
+
+      setSaveSuccess(true);
       setTimeout(() => {
         setSaveSuccess(false);
-      }, 2500);
+      }, 3500);
     } catch (error) {
-      console.error(error);
-      alert(
-        'حدث خطأ أثناء حفظ النتائج'
-      );
+      console.error('Error saving batch scores in modal:', error);
+      setErrorMessage('حدث خطأ أثناء حفظ النتائج. يرجى المحاولة مرة أخرى.');
     } finally {
       setLoading(false);
     }
   };
 
   /*
-   * تصدير نتائج الامتحان إلى Excel.
+   * تصدير نتائج الامتحان إلى Excel مع تفاصيل التحسين
    */
   const handleExportExcel = () => {
-    const resultsForExport: ExamResult[] =
-      [];
+    const resultsForExport: ExamResult[] = [];
 
     for (const row of rows) {
       if (row.score.trim() === '') {
         continue;
       }
 
-      const numericScore = parseFloat(
-        row.score
-      );
-
-      if (isNaN(numericScore)) {
-        continue;
-      }
+      const numericScore = parseFloat(row.score);
+      if (isNaN(numericScore)) continue;
 
       const clampedScore = Math.max(
         0,
-        Math.min(
-          exam.totalScore,
-          numericScore
-        )
+        Math.min(exam.totalScore, numericScore)
       );
 
       const percentage =
         Math.round(
-          (clampedScore /
-            exam.totalScore) *
-            1000
+          (clampedScore / exam.totalScore) * 1000
         ) / 10;
 
       const rating = getGradeRating(
@@ -524,13 +610,10 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
         settings.gradingScale
       );
 
-      const passed =
-        clampedScore >= exam.passScore;
+      const passed = clampedScore >= exam.passScore;
 
       resultsForExport.push({
-        id:
-          'tmp_' +
-          row.studentDocId,
+        id: row.resultId || 'tmp_' + row.rowKey,
         examId: exam.id,
         studentId: row.studentId,
         studentDocId: row.studentDocId,
@@ -543,8 +626,11 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
         gradeRating: rating.label,
         passed,
         notes: row.notes,
-        updatedAt:
-          new Date().toISOString(),
+        attemptNumber: row.attemptNumber,
+        attemptLabel: row.attemptLabel,
+        isImprovement: row.isImprovement,
+        previousScore: row.previousScore,
+        updatedAt: new Date().toISOString(),
       });
     }
 
@@ -575,7 +661,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-extrabold text-slate-900 dark:text-white text-lg">
-                  رصد درجات يدوياً: {exam.title}
+                  رصد درجات الامتحان: {exam.title}
                 </h3>
 
                 <span className="px-2.5 py-0.5 text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg">
@@ -620,15 +706,15 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           </div>
         </div>
 
-        {/* Stats */}
+        {/* Stats & Quick Actions */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 my-3 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-700/60 text-xs">
           <div>
             <span className="text-slate-400 dark:text-slate-500 block">
-              إجمالي الطلاب في الكشف:
+              إجمالي الصفوف والنتائج:
             </span>
 
             <span className="font-bold text-slate-800 dark:text-slate-100 text-sm">
-              {rows.length} طالب
+              {rows.length} نتيجة
             </span>
           </div>
 
@@ -661,9 +747,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           <div className="flex items-center justify-end gap-1.5 flex-wrap">
             <button
               type="button"
-              onClick={
-                handleSetFullScoreForAll
-              }
+              onClick={handleSetFullScoreForAll}
               className="px-2.5 py-1 text-[11px] font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg cursor-pointer transition-colors"
               title="رصد الدرجة الكاملة للكل"
             >
@@ -672,9 +756,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
 
             <button
               type="button"
-              onClick={
-                handleSetPassingScoreForEmpty
-              }
+              onClick={handleSetPassingScoreForEmpty}
               className="px-2.5 py-1 text-[11px] font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg cursor-pointer transition-colors"
               title="رصد درجة النجاح لمن لم يرصد بعد"
             >
@@ -683,16 +765,14 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           </div>
         </div>
 
-        {/* Search */}
+        {/* Search & Improvement note */}
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div className="relative flex-1 min-w-[200px]">
             <input
               type="text"
               value={searchTerm}
               onChange={(event) =>
-                setSearchTerm(
-                  event.target.value
-                )
+                setSearchTerm(event.target.value)
               }
               placeholder="ابحث عن طالب بالاسم أو الرقم التعريفي..."
               className="w-full pr-9 pl-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white text-right"
@@ -701,69 +781,55 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
             <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
           </div>
 
-          <button
-            type="button"
-            onClick={() =>
-              setShowAllStudents(
-                !showAllStudents
-              )
-            }
-            className="px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer"
-          >
-            {showAllStudents
-              ? '← إظهار طلاب المادة والصف فقط'
-              : 'عرض جميع الطلاب المسجلين'}
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setShowAllStudents(!showAllStudents)}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer"
+            >
+              {showAllStudents
+                ? '← إظهار طلاب المادة والصف فقط'
+                : 'عرض جميع الطلاب المسجلين'}
+            </button>
 
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
-            <ArrowDown className="w-3.5 h-3.5 text-amber-500" />
-            اضغط Enter أو السهم للأسفل للتنقل الفوري للسطر التالي
+            <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800/50">
+              💡 يمكنك إضافة أكثر من درجة لنفس الامتحان إذا قام الطالب بالتحسين بالضغط على "+ تحسين"
+            </span>
           </div>
         </div>
+
+        {errorMessage && (
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center justify-between animate-in fade-in">
+            <span>{errorMessage}</span>
+            <button
+              onClick={() => setErrorMessage('')}
+              className="text-rose-500 hover:text-rose-700 font-bold px-2 py-0.5 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Table */}
         <div className="flex-1 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-2xl">
           <table className="w-full text-right text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10">
               <tr>
-                <th className="py-2.5 px-3 w-10 text-center">
-                  #
-                </th>
-
-                <th className="py-2.5 px-3">
-                  اسم الطالب
-                </th>
-
-                <th className="py-2.5 px-3 w-28">
-                  الصف
-                </th>
-
+                <th className="py-2.5 px-3 w-10 text-center">#</th>
+                <th className="py-2.5 px-3">اسم الطالب والمحاولة</th>
+                <th className="py-2.5 px-3 w-24">الصف</th>
                 <th className="py-2.5 px-3 w-32 text-center">
                   الدرجة{' '}
                   <span className="text-slate-400 font-normal">
                     / {exam.totalScore}
                   </span>
                 </th>
-
-                <th className="py-2.5 px-3 w-20 text-center">
-                  النسبة %
-                </th>
-
-                <th className="py-2.5 px-3 w-24 text-center">
-                  التقدير
-                </th>
-
-                <th className="py-2.5 px-3 w-20 text-center">
-                  الحالة
-                </th>
-
-                <th className="py-2.5 px-3 min-w-[140px]">
-                  ملاحظات
-                </th>
-
-                <th className="py-2.5 px-3 w-28 text-center">
-                  إثبات ومرفق
-                </th>
+                <th className="py-2.5 px-3 w-20 text-center">النسبة %</th>
+                <th className="py-2.5 px-3 w-24 text-center">التقدير</th>
+                <th className="py-2.5 px-3 w-20 text-center">الحالة</th>
+                <th className="py-2.5 px-3 min-w-[140px]">ملاحظات</th>
+                <th className="py-2.5 px-3 w-24 text-center">المرفق</th>
+                <th className="py-2.5 px-3 w-28 text-center">التحسين</th>
               </tr>
             </thead>
 
@@ -771,228 +837,230 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
               {filteredRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="py-10 text-center text-slate-400 dark:text-slate-500"
                   >
                     لا يوجد طلاب مسجلون في مادة{' '}
-                    <strong>
-                      {exam.subject}
-                    </strong>{' '}
-                    ومطابقون للصف المحدد.
+                    <strong>{exam.subject}</strong> ومطابقون للصف المحدد.
                   </td>
                 </tr>
               ) : (
-                filteredRows.map(
-                  (row, index) => {
-                    const scoreNum =
-                      parseFloat(row.score);
+                filteredRows.map((row, index) => {
+                  const scoreNum = parseFloat(row.score);
+                  const isEntered = row.score.trim() !== '' && !isNaN(scoreNum);
+                  const clamped = isEntered
+                    ? Math.max(0, Math.min(exam.totalScore, scoreNum))
+                    : 0;
+                  const percent = isEntered
+                    ? Math.round((clamped / exam.totalScore) * 1000) / 10
+                    : 0;
+                  const rating = isEntered
+                    ? getGradeRating(percent, settings.gradingScale)
+                    : null;
+                  const isPassed = isEntered ? clamped >= exam.passScore : null;
+                  const isInvalid = isEntered && scoreNum > exam.totalScore;
 
-                    const isEntered =
-                      row.score.trim() !== '' &&
-                      !isNaN(scoreNum);
+                  const isImprovement = row.attemptNumber > 1 || row.isImprovement;
 
-                    const clamped = isEntered
-                      ? Math.max(
-                          0,
-                          Math.min(
-                            exam.totalScore,
-                            scoreNum
-                          )
-                        )
-                      : 0;
+                  return (
+                    <tr
+                      key={row.rowKey}
+                      className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors ${
+                        isImprovement
+                          ? 'bg-amber-50/40 dark:bg-amber-950/20 border-r-4 border-r-amber-500'
+                          : row.isModified
+                          ? 'bg-amber-500/10 dark:bg-amber-950/20'
+                          : ''
+                      }`}
+                    >
+                      <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
+                        {index + 1}
+                      </td>
 
-                    const percent = isEntered
-                      ? Math.round(
-                          (clamped /
-                            exam.totalScore) *
-                            1000
-                        ) / 10
-                      : 0;
-
-                    const rating = isEntered
-                      ? getGradeRating(
-                          percent,
-                          settings.gradingScale
-                        )
-                      : null;
-
-                    const isPassed =
-                      isEntered
-                        ? clamped >=
-                          exam.passScore
-                        : null;
-
-                    const isInvalid =
-                      isEntered &&
-                      scoreNum >
-                        exam.totalScore;
-
-                    return (
-                      <tr
-                        key={
-                          row.studentDocId
-                        }
-                        className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors ${
-                          row.isModified
-                            ? 'bg-amber-500/10 dark:bg-amber-950/20'
-                            : ''
-                        }`}
-                      >
-                        <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
-                          {index + 1}
-                        </td>
-
-                        {/* Student */}
-                        <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
-                          <div className="flex items-center gap-1.5">
-                            <span>
-                              {
-                                row.studentName
-                              }
-                            </span>
-
+                      {/* Student Name & Attempt details */}
+                      <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span>{row.studentName}</span>
                             <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
                               {row.studentId}
                             </span>
                           </div>
-                        </td>
 
-                        {/* Grade */}
-                        <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400 text-[11px]">
-                          {row.grade}
-                        </td>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {isImprovement ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                                <Sparkles className="w-2.5 h-2.5 text-amber-600" />
+                                تحسين (محاولة {row.attemptNumber})
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                                المحاولة الأساسية
+                              </span>
+                            )}
 
-                        {/* Score */}
-                        <td className="py-2.5 px-3 text-center">
-                          <div className="relative inline-block w-24">
-                            <input
-                              ref={(element) => {
-                                inputRefs.current[
-                                  row.studentDocId
-                                ] = element;
-                              }}
-                              type="number"
-                              step="0.5"
-                              min="0"
-                              max={
-                                exam.totalScore
-                              }
-                              value={row.score}
-                              onChange={(
-                                event
-                              ) =>
-                                handleScoreChange(
-                                  row.studentDocId,
-                                  event.target
-                                    .value
-                                )
-                              }
-                              onKeyDown={(
-                                event
-                              ) =>
-                                handleKeyDown(
-                                  event,
-                                  index
-                                )
-                              }
-                              placeholder="-"
-                              className={`w-full text-center py-1.5 px-2 rounded-xl font-bold font-mono text-sm border transition-all focus:outline-hidden focus:ring-2 ${
-                                isInvalid
-                                  ? 'border-rose-400 bg-rose-50 text-rose-700 focus:ring-rose-400/30'
-                                  : isEntered
-                                  ? isPassed
-                                    ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 focus:ring-emerald-500/30'
-                                    : 'border-rose-300 dark:border-rose-800 bg-rose-50/60 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300 focus:ring-rose-500/30'
-                                  : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-amber-500/30'
-                              }`}
-                            />
+                            {row.previousScore !== undefined && (
+                              <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                                (الدرجة السابقة: {row.previousScore})
+                              </span>
+                            )}
+
+                            {isImprovement && isEntered && row.previousScore !== undefined && (
+                              <span className={`text-[10px] font-mono font-bold ${
+                                clamped > row.previousScore
+                                  ? 'text-emerald-600'
+                                  : clamped < row.previousScore
+                                  ? 'text-rose-600'
+                                  : 'text-slate-500'
+                              }`}>
+                                {clamped > row.previousScore ? `+${(clamped - row.previousScore).toFixed(1)} ↑` : `${(clamped - row.previousScore).toFixed(1)}`}
+                              </span>
+                            )}
                           </div>
-                        </td>
+                        </div>
+                      </td>
 
-                        {/* Percentage */}
-                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-800 dark:text-slate-200">
-                          {isEntered
-                            ? `${percent}%`
-                            : '-'}
-                        </td>
+                      {/* Grade */}
+                      <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400 text-[11px]">
+                        {row.grade}
+                      </td>
 
-                        {/* Rating */}
-                        <td className="py-2.5 px-3 text-center">
-                          {rating ? (
-                            <span
-                              className={`inline-block px-2 py-0.5 rounded-md font-bold text-[11px] border ${rating.badgeBg}`}
-                            >
-                              {rating.label}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300 dark:text-slate-600">
-                              -
-                            </span>
-                          )}
-                        </td>
-
-                        {/* Status */}
-                        <td className="py-2.5 px-3 text-center">
-                          {isPassed !== null ? (
-                            <span
-                              className={`inline-flex items-center gap-1 font-bold text-[11px] ${
-                                isPassed
-                                  ? 'text-emerald-600 dark:text-emerald-400'
-                                  : 'text-rose-600 dark:text-rose-400'
-                              }`}
-                            >
-                              {isPassed ? (
-                                <>
-                                  <Check className="w-3.5 h-3.5" />
-                                  ناجح
-                                </>
-                              ) : (
-                                <>
-                                  <AlertCircle className="w-3.5 h-3.5" />
-                                  راسب
-                                </>
-                              )}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300 dark:text-slate-600">
-                              -
-                            </span>
-                          )}
-                        </td>
-
-                        {/* Notes */}
-                        <td className="py-2.5 px-3">
+                      {/* Score Input */}
+                      <td className="py-2.5 px-3 text-center">
+                        <div className="relative inline-block w-24">
                           <input
-                            type="text"
-                            value={row.notes}
+                            ref={(element) => {
+                              inputRefs.current[row.rowKey] = element;
+                            }}
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            max={exam.totalScore}
+                            value={row.score}
                             onChange={(event) =>
-                              handleNotesChange(
-                                row.studentDocId,
-                                event.target.value
-                              )
+                              handleScoreChange(row.rowKey, event.target.value)
                             }
-                            placeholder="ملاحظات فردية..."
-                            className="w-full text-xs py-1 px-2 bg-transparent border-b border-transparent focus:border-slate-300 dark:focus:border-slate-600 focus:bg-slate-50 dark:focus:bg-slate-800 rounded transition-all text-right text-slate-800 dark:text-slate-200"
+                            onKeyDown={(event) =>
+                              handleKeyDown(event, index)
+                            }
+                            placeholder="-"
+                            className={`w-full text-center py-1.5 px-2 rounded-xl font-bold font-mono text-sm border transition-all focus:outline-hidden focus:ring-2 ${
+                              isInvalid
+                                ? 'border-rose-400 bg-rose-50 text-rose-700 focus:ring-rose-400/30'
+                                : isEntered
+                                ? isPassed
+                                  ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 focus:ring-emerald-500/30'
+                                  : 'border-rose-300 dark:border-rose-800 bg-rose-50/60 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300 focus:ring-rose-500/30'
+                                : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-900 focus:ring-amber-500/30'
+                            }`}
                           />
-                        </td>
+                        </div>
+                      </td>
 
-                        {/* Attachment / Proof */}
-                        <td className="py-2.5 px-3 text-center">
-                          <div className="flex items-center justify-center">
-                            <AttachmentThumbnail
-                              attachment={row.attachment}
-                              size="sm"
-                              showLabel={!row.attachment}
-                              tooltipPrefix={`طالب: ${row.studentName}`}
-                              onClick={() => setAttachmentTargetRow(row)}
-                              onAttach={() => setAttachmentTargetRow(row)}
-                            />
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  }
-                )
+                      {/* Percentage */}
+                      <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-800 dark:text-slate-200">
+                        {isEntered ? `${percent}%` : '-'}
+                      </td>
+
+                      {/* Rating */}
+                      <td className="py-2.5 px-3 text-center">
+                        {rating ? (
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-md font-bold text-[11px] border ${rating.badgeBg}`}
+                          >
+                            {rating.label}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-600">
+                            -
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-2.5 px-3 text-center">
+                        {isPassed !== null ? (
+                          <span
+                            className={`inline-flex items-center gap-1 font-bold text-[11px] ${
+                              isPassed
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : 'text-rose-600 dark:text-rose-400'
+                            }`}
+                          >
+                            {isPassed ? (
+                              <>
+                                <Check className="w-3.5 h-3.5" />
+                                ناجح
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle className="w-3.5 h-3.5" />
+                                راسب
+                              </>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-600">
+                            -
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Notes */}
+                      <td className="py-2.5 px-3">
+                        <input
+                          type="text"
+                          value={row.notes}
+                          onChange={(event) =>
+                            handleNotesChange(row.rowKey, event.target.value)
+                          }
+                          placeholder="ملاحظات فردية..."
+                          className="w-full text-xs py-1 px-2 bg-transparent border-b border-transparent focus:border-slate-300 dark:focus:border-slate-600 focus:bg-slate-50 dark:focus:bg-slate-800 rounded transition-all text-right text-slate-800 dark:text-slate-200"
+                        />
+                      </td>
+
+                      {/* Attachment / Proof */}
+                      <td className="py-2.5 px-3 text-center">
+                        <div className="flex items-center justify-center">
+                          <AttachmentThumbnail
+                            attachment={row.attachment}
+                            size="sm"
+                            showLabel={!row.attachment}
+                            tooltipPrefix={`طالب: ${row.studentName}`}
+                            onClick={() => setAttachmentTargetRow(row)}
+                            onAttach={() => setAttachmentTargetRow(row)}
+                          />
+                        </div>
+                      </td>
+
+                      {/* Improvement & Actions */}
+                      <td className="py-2.5 px-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleAddImprovementAttempt(row.studentDocId)}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-300/80 dark:border-amber-700/80 rounded-lg transition-all cursor-pointer shadow-2xs"
+                            title="إضافة درجة تحسين جديدة لنفس الطالب لنفس الامتحان"
+                          >
+                            <Plus className="w-3 h-3" />
+                            تحسين
+                          </button>
+
+                          {isImprovement && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAttempt(row.rowKey, row.resultId)}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded cursor-pointer transition-colors"
+                              title="حذف محاولة التحسين"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -1011,7 +1079,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
             {saveSuccess && (
               <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 animate-in fade-in duration-300">
                 <CheckCircle2 className="w-4 h-4" />
-                تم حفظ الدرجات بنجاح في قاعدة البيانات وملفات الطلاب!
+                تم حفظ الدرجات ومحاولات التحسين بنجاح!
               </span>
             )}
           </div>
@@ -1035,8 +1103,8 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
               <Save className="w-4 h-4" />
 
               {loading
-                ? 'جاري الحفظ في Firestore...'
-                : 'حفظ الدرجات للجميع'}
+                ? 'جاري الحفظ الآمن...'
+                : 'حفظ جميع الدرجات'}
             </button>
           </div>
         </div>
@@ -1051,7 +1119,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           onSave={(attachment) => {
             setRows((prev) =>
               prev.map((r) =>
-                r.studentDocId === attachmentTargetRow.studentDocId
+                r.rowKey === attachmentTargetRow.rowKey
                   ? { ...r, attachment, isModified: true }
                   : r
               )

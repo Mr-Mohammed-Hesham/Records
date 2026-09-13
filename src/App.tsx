@@ -735,6 +735,15 @@ export default function App() {
           studentData
         );
 
+        const updatedStudent: Student = {
+          id: studentToEdit.id,
+          ...studentData,
+        };
+
+        setStudents((prev) =>
+          prev.map((s) => (s.id === studentToEdit.id ? updatedStudent : s))
+        );
+
         addToast(
           `تم تحديث بيانات الطالب "${studentData.name}" بنجاح`
         );
@@ -744,18 +753,25 @@ export default function App() {
           selectedStudent.id ===
             studentToEdit.id
         ) {
-          setSelectedStudent({
-            id: studentToEdit.id,
-            ...studentData,
-          });
+          setSelectedStudent(updatedStudent);
         }
       } else {
-        await addStudent(
+        const addedId = await addStudent(
           studentData
         );
 
+        const newStudent: Student = {
+          id: addedId,
+          ...studentData,
+        };
+
+        setStudents((prev) => [
+          newStudent,
+          ...prev.filter((s) => s.id !== addedId),
+        ]);
+
         addToast(
-          `تمت إضافة الطالب "${studentData.name}" برقم تعريفي (${studentData.studentId})`
+          `تمت إضافة وحفظ الطالب "${studentData.name}" برقم تعريفي (${studentData.studentId})`
         );
       }
 
@@ -864,17 +880,30 @@ export default function App() {
   };
 
   const handleSaveExam = async (
-    examData: Omit<Exam, 'id'>
+    examData: Omit<Exam, 'id'>,
+    examId?: string,
+    openGradingImmediately: boolean = true
   ) => {
     try {
-      if (examToEdit) {
+      const targetId = examId || (examToEdit ? examToEdit.id : undefined);
+
+      if (targetId) {
         await updateExam(
-          examToEdit.id,
+          targetId,
           examData
         );
 
+        const updatedExamObj: Exam = {
+          id: targetId,
+          ...examData,
+        };
+
+        setExams((prev) =>
+          prev.map((e) => (e.id === targetId ? updatedExamObj : e))
+        );
+
         addToast(
-          `تم تحديث بيانات امتحان "${examData.title}"`
+          `تم تحديث وحفظ بيانات امتحان "${examData.title}" بنجاح`
         );
       } else {
         const added =
@@ -882,24 +911,31 @@ export default function App() {
             examData
           );
 
-        addToast(
-          `تم تسجيل امتحان "${examData.title}" بنجاح`
-        );
-
-        setActiveScoringExam({
+        const newExamObj: Exam = {
           id: added,
           ...examData,
-        });
+        };
 
-        setIsExamModalOpen(
-          false
+        setExams((prev) => [
+          newExamObj,
+          ...prev.filter((e) => e.id !== added),
+        ]);
+
+        addToast(
+          `تم تسجيل وحفظ امتحان "${examData.title}" بنجاح!`
         );
 
-        setIsScoreModalOpen(
-          true
-        );
+        if (openGradingImmediately) {
+          setActiveScoringExam(newExamObj);
+          setIsScoreModalOpen(
+            true
+          );
+        }
       }
 
+      setIsExamModalOpen(
+        false
+      );
       setExamToEdit(null);
     } catch (err) {
       console.error(
@@ -991,7 +1027,8 @@ export default function App() {
   };
 
   const handleOpenScoringForStudent = (
-    student: Student
+    student: Student,
+    specificExam?: Exam
   ) => {
     if (exams.length === 0) {
       addToast(
@@ -1004,7 +1041,8 @@ export default function App() {
       return;
     }
 
-    const sortedExams =
+    const examToUse =
+      specificExam ||
       [...exams].sort(
         (a, b) =>
           new Date(
@@ -1013,10 +1051,10 @@ export default function App() {
           new Date(
             a.date
           ).getTime()
-      );
+      )[0];
 
     setActiveScoringExam(
-      sortedExams[0]
+      examToUse
     );
 
     setPreselectedStudentForScore(
@@ -1069,16 +1107,23 @@ export default function App() {
         validScores.map(
           (score) => ({
             ...score,
-            id: '',
+            id: (score as any).id || '',
           })
         );
 
-      await saveBatchResults(
+      const savedBatch = await saveBatchResults(
         resultsToSave
       );
 
+      setResults((prev) => {
+        const map = new Map<string, ExamResult>();
+        prev.forEach((r) => map.set(r.id, r));
+        savedBatch.forEach((r) => map.set(r.id, r));
+        return Array.from(map.values());
+      });
+
       addToast(
-        `تم حفظ وتحديث نتائج ${validScores.length} طالب بنجاح!`
+        `تم حفظ وتثبيت نتائج ${validScores.length} محاولة/طالب بنجاح!`
       );
     } catch (err) {
       console.error(
@@ -2483,6 +2528,9 @@ export default function App() {
         }
         onSaveScores={
           handleSaveBatchScores
+        }
+        onDeleteResult={
+          handleDeleteResult
         }
         preselectedStudent={
           preselectedStudentForScore

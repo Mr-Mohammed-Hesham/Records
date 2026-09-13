@@ -74,6 +74,10 @@ export interface ExamResult {
   passed: boolean;
   notes?: string;
   attachment?: ResultAttachment | null;
+  attemptNumber?: number; // 1 للمحاولة الأساسية، 2 للتحسين، 3، إلخ
+  attemptLabel?: string; // e.g. "المحاولة 1" أو "تحسين درجة"
+  isImprovement?: boolean; // هل هي درجة تحسين؟
+  previousScore?: number; // الدرجة السابقة قبل التحسين
   createdAt?: string;
   updatedAt?: string;
 }
@@ -114,6 +118,7 @@ export interface StudentStats {
   latestScore: number | null;
   latestPercentage: number | null;
   latestExamTitle: string | null;
+  improvementsCount?: number; // عدد الامتحانات التي تم تحسينها
   status: 'ممتاز' | 'جيد' | 'يحتاج متابعة';
   trend: 'improving' | 'steady' | 'declining';
   trendMessage: string;

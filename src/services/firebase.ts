@@ -363,46 +363,152 @@ export async function ensureAuthenticated(): Promise<User | VerifiedTeacherUser>
 }
 
 /* =========================================================
+   LOCAL STORAGE & DUAL PERSISTENCE CACHE
+   ضمان عدم فقدان أي بيانات وحفظ الاختبارات فوراً محلياً وسحابياً
+   ========================================================= */
+
+export const CACHE_KEYS = {
+  EXAMS: 'mmh_cached_exams',
+  STUDENTS: 'mmh_cached_students',
+  RESULTS: 'mmh_cached_results',
+  SETTINGS: 'mmh_cached_settings',
+};
+
+export function getCachedData<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+export function setCachedData<T>(key: string, data: T): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (err) {
+    console.warn('LocalStorage caching error:', err);
+  }
+}
+
+/**
+ * تطهير الكائنات الموجهة لقاعدة بيانات Firestore
+ * يزيل أي خصائص بقيمة undefined لتجنب أخطاء فايربيز القاتلة
+ */
+export function sanitizeForFirestore<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return null as unknown as T;
+  }
+  if (Array.isArray(obj)) {
+    return obj
+      .filter((item) => item !== undefined)
+      .map((item) => sanitizeForFirestore(item)) as unknown as T;
+  }
+  if (typeof obj === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, any>)) {
+      if (value !== undefined) {
+        cleaned[key] = sanitizeForFirestore(value);
+      }
+    }
+    return cleaned as T;
+  }
+  return obj;
+}
+
+const realtimeSubscribers = new Set<(data: RealtimeData) => void>();
+
+export function notifySubscribers(): void {
+  const currentStudents = getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
+  const currentExams = getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []);
+  const currentResults = getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
+  const currentSettings = getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS);
+
+  const data: RealtimeData = {
+    students: currentStudents,
+    exams: currentExams,
+    results: currentResults,
+    settings: currentSettings,
+  };
+
+  realtimeSubscribers.forEach((cb) => {
+    try {
+      cb(data);
+    } catch (err) {
+      console.warn('Realtime subscriber notification error:', err);
+    }
+  });
+}
+
+/* =========================================================
    STUDENTS
    ========================================================= */
 
 export async function getStudents(): Promise<Student[]> {
-  const snapshot = await getDocs(
-    collection(db, 'students')
-  );
+  try {
+    const snapshot = await getDocs(
+      collection(db, 'students')
+    );
 
-  return snapshot.docs.map((item) => ({
-    id: item.id,
-    ...item.data(),
-  })) as Student[];
+    const items = snapshot.docs.map((item) => ({
+      id: item.id,
+      ...item.data(),
+    })) as Student[];
+
+    if (items.length > 0) {
+      setCachedData(CACHE_KEYS.STUDENTS, items);
+    }
+    return items;
+  } catch (err) {
+    console.warn('getStudents from Firestore failed, fallback to cache:', err);
+    return getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
+  }
 }
 
 export async function getStudent(
   studentId: string
 ): Promise<Student | null> {
-  const snapshot = await getDoc(
-    doc(db, 'students', studentId)
-  );
+  try {
+    const snapshot = await getDoc(
+      doc(db, 'students', studentId)
+    );
 
-  if (!snapshot.exists()) {
-    return null;
+    if (snapshot.exists()) {
+      return {
+        id: snapshot.id,
+        ...snapshot.data(),
+      } as Student;
+    }
+  } catch (err) {
+    console.warn('getStudent Firestore error:', err);
   }
 
-  return {
-    id: snapshot.id,
-    ...snapshot.data(),
-  } as Student;
+  const cached = getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
+  return cached.find(s => s.id === studentId) || null;
 }
 
 export async function addStudent(
   student: Omit<Student, 'id'>
 ): Promise<string> {
-  const reference = await addDoc(
-    collection(db, 'students'),
-    student
-  );
+  const docRef = doc(collection(db, 'students'));
+  const id = docRef.id;
+  const newStudent: Student = { id, ...student };
 
-  return reference.id;
+  // حفظ فوري في التخزين المحلي لضمان عدم ضياع أي بيانات
+  const current = getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
+  setCachedData(CACHE_KEYS.STUDENTS, [newStudent, ...current.filter(s => s.id !== id)]);
+  notifySubscribers();
+
+  // مزامنة مع Firestore مع تطهير البيانات من أي undefined
+  try {
+    const cleanData = sanitizeForFirestore(student);
+    await setDoc(docRef, cleanData);
+  } catch (err) {
+    console.error('Firestore addStudent error (preserved in local storage):', err);
+  }
+
+  return id;
 }
 
 export async function createStudent(
@@ -415,18 +521,45 @@ export async function updateStudent(
   studentId: string,
   data: Partial<Student>
 ): Promise<void> {
-  await updateDoc(
-    doc(db, 'students', studentId),
-    data
+  // تحديث فوري محلي
+  const current = getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
+  setCachedData(
+    CACHE_KEYS.STUDENTS,
+    current.map(s => s.id === studentId ? { ...s, ...data } : s)
   );
+  notifySubscribers();
+
+  // تحديث سحابي
+  try {
+    const cleanData = sanitizeForFirestore(data);
+    await updateDoc(
+      doc(db, 'students', studentId),
+      cleanData
+    );
+  } catch (err) {
+    console.error('Firestore updateStudent error (updated locally):', err);
+  }
 }
 
 export async function deleteStudent(
   studentId: string
 ): Promise<void> {
-  await deleteDoc(
-    doc(db, 'students', studentId)
+  // حذف فوري محلي
+  const current = getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
+  setCachedData(
+    CACHE_KEYS.STUDENTS,
+    current.filter(s => s.id !== studentId)
   );
+  notifySubscribers();
+
+  // حذف سحابي
+  try {
+    await deleteDoc(
+      doc(db, 'students', studentId)
+    );
+  } catch (err) {
+    console.error('Firestore deleteStudent error (deleted locally):', err);
+  }
 }
 
 /* =========================================================
@@ -494,42 +627,69 @@ export function subscribeToStudents(
    ========================================================= */
 
 export async function getExams(): Promise<Exam[]> {
-  const snapshot = await getDocs(
-    collection(db, 'exams')
-  );
+  try {
+    const snapshot = await getDocs(
+      collection(db, 'exams')
+    );
 
-  return snapshot.docs.map((item) => ({
-    id: item.id,
-    ...item.data(),
-  })) as Exam[];
+    const items = snapshot.docs.map((item) => ({
+      id: item.id,
+      ...item.data(),
+    })) as Exam[];
+
+    if (items.length > 0) {
+      setCachedData(CACHE_KEYS.EXAMS, items);
+    }
+    return items;
+  } catch (err) {
+    console.warn('getExams from Firestore error, fallback to cache:', err);
+    return getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []);
+  }
 }
 
 export async function getExam(
   examId: string
 ): Promise<Exam | null> {
-  const snapshot = await getDoc(
-    doc(db, 'exams', examId)
-  );
+  try {
+    const snapshot = await getDoc(
+      doc(db, 'exams', examId)
+    );
 
-  if (!snapshot.exists()) {
-    return null;
+    if (snapshot.exists()) {
+      return {
+        id: snapshot.id,
+        ...snapshot.data(),
+      } as Exam;
+    }
+  } catch (err) {
+    console.warn('getExam Firestore error:', err);
   }
 
-  return {
-    id: snapshot.id,
-    ...snapshot.data(),
-  } as Exam;
+  const cached = getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []);
+  return cached.find(e => e.id === examId) || null;
 }
 
 export async function addExam(
   exam: Omit<Exam, 'id'>
 ): Promise<string> {
-  const reference = await addDoc(
-    collection(db, 'exams'),
-    exam
-  );
+  const docRef = doc(collection(db, 'exams'));
+  const id = docRef.id;
+  const newExam: Exam = { id, ...exam };
 
-  return reference.id;
+  // حفظ فوري في التخزين المحلي فوراً حتى لا يضيع الامتحان أبداً
+  const current = getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []);
+  setCachedData(CACHE_KEYS.EXAMS, [newExam, ...current.filter(e => e.id !== id)]);
+  notifySubscribers();
+
+  // حفظ سحابي في Firestore مع تطهير البيانات من أي undefined
+  try {
+    const cleanData = sanitizeForFirestore(exam);
+    await setDoc(docRef, cleanData);
+  } catch (err) {
+    console.error('Firestore addExam sync error (saved locally):', err);
+  }
+
+  return id;
 }
 
 export async function createExam(
@@ -542,18 +702,45 @@ export async function updateExam(
   examId: string,
   data: Partial<Exam>
 ): Promise<void> {
-  await updateDoc(
-    doc(db, 'exams', examId),
-    data
+  // تحديث فوري محلي
+  const current = getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []);
+  setCachedData(
+    CACHE_KEYS.EXAMS,
+    current.map(e => e.id === examId ? { ...e, ...data } : e)
   );
+  notifySubscribers();
+
+  // تحديث سحابي
+  try {
+    const cleanData = sanitizeForFirestore(data);
+    await updateDoc(
+      doc(db, 'exams', examId),
+      cleanData
+    );
+  } catch (err) {
+    console.error('Firestore updateExam warning (updated locally):', err);
+  }
 }
 
 export async function deleteExam(
   examId: string
 ): Promise<void> {
-  await deleteDoc(
-    doc(db, 'exams', examId)
+  // حذف فوري محلي
+  const current = getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []);
+  setCachedData(
+    CACHE_KEYS.EXAMS,
+    current.filter(e => e.id !== examId)
   );
+  notifySubscribers();
+
+  // حذف سحابي
+  try {
+    await deleteDoc(
+      doc(db, 'exams', examId)
+    );
+  } catch (err) {
+    console.error('Firestore deleteExam warning (deleted locally):', err);
+  }
 }
 
 /* =========================================================
@@ -563,6 +750,12 @@ export async function deleteExam(
 export function subscribeToExams(
   callback: (exams: Exam[]) => void
 ): () => void {
+  // بث البيانات المحفوظة محلياً فوراً
+  const cached = getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []);
+  if (cached.length > 0) {
+    callback(cached);
+  }
+
   return onSnapshot(
     collection(db, 'exams'),
     (snapshot) => {
@@ -573,7 +766,11 @@ export function subscribeToExams(
         })
       ) as Exam[];
 
+      setCachedData(CACHE_KEYS.EXAMS, exams);
       callback(exams);
+    },
+    (err) => {
+      console.warn('Realtime exams listener error, keeping cached:', err);
     }
   );
 }
@@ -583,42 +780,67 @@ export function subscribeToExams(
    ========================================================= */
 
 export async function getResults(): Promise<ExamResult[]> {
-  const snapshot = await getDocs(
-    collection(db, 'results')
-  );
+  try {
+    const snapshot = await getDocs(
+      collection(db, 'results')
+    );
 
-  return snapshot.docs.map((item) => ({
-    id: item.id,
-    ...item.data(),
-  })) as ExamResult[];
+    const items = snapshot.docs.map((item) => ({
+      id: item.id,
+      ...item.data(),
+    })) as ExamResult[];
+
+    if (items.length > 0) {
+      setCachedData(CACHE_KEYS.RESULTS, items);
+    }
+    return items;
+  } catch (err) {
+    console.warn('getResults from Firestore failed, fallback to cache:', err);
+    return getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
+  }
 }
 
 export async function getResult(
   resultId: string
 ): Promise<ExamResult | null> {
-  const snapshot = await getDoc(
-    doc(db, 'results', resultId)
-  );
+  try {
+    const snapshot = await getDoc(
+      doc(db, 'results', resultId)
+    );
 
-  if (!snapshot.exists()) {
-    return null;
+    if (snapshot.exists()) {
+      return {
+        id: snapshot.id,
+        ...snapshot.data(),
+      } as ExamResult;
+    }
+  } catch (err) {
+    console.warn('getResult Firestore error:', err);
   }
 
-  return {
-    id: snapshot.id,
-    ...snapshot.data(),
-  } as ExamResult;
+  const cached = getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
+  return cached.find(r => r.id === resultId) || null;
 }
 
 export async function addResult(
   result: Omit<ExamResult, 'id'>
 ): Promise<string> {
-  const reference = await addDoc(
-    collection(db, 'results'),
-    result
-  );
+  const docRef = doc(collection(db, 'results'));
+  const id = docRef.id;
+  const newResult: ExamResult = { id, ...result };
 
-  return reference.id;
+  const current = getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
+  setCachedData(CACHE_KEYS.RESULTS, [newResult, ...current.filter(r => r.id !== id)]);
+  notifySubscribers();
+
+  try {
+    const cleanData = sanitizeForFirestore(result);
+    await setDoc(docRef, cleanData);
+  } catch (err) {
+    console.error('Firestore addResult error (saved locally):', err);
+  }
+
+  return id;
 }
 
 export async function createResult(
@@ -631,10 +853,22 @@ export async function updateResult(
   resultId: string,
   data: Partial<ExamResult>
 ): Promise<void> {
-  await updateDoc(
-    doc(db, 'results', resultId),
-    data
+  const current = getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
+  setCachedData(
+    CACHE_KEYS.RESULTS,
+    current.map(r => r.id === resultId ? { ...r, ...data } : r)
   );
+  notifySubscribers();
+
+  try {
+    const cleanData = sanitizeForFirestore(data);
+    await updateDoc(
+      doc(db, 'results', resultId),
+      cleanData
+    );
+  } catch (err) {
+    console.error('Firestore updateResult error (updated locally):', err);
+  }
 }
 
 export async function updateSingleResult(
@@ -647,9 +881,20 @@ export async function updateSingleResult(
 export async function deleteResult(
   resultId: string
 ): Promise<void> {
-  await deleteDoc(
-    doc(db, 'results', resultId)
+  const current = getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
+  setCachedData(
+    CACHE_KEYS.RESULTS,
+    current.filter(r => r.id !== resultId)
   );
+  notifySubscribers();
+
+  try {
+    await deleteDoc(
+      doc(db, 'results', resultId)
+    );
+  } catch (err) {
+    console.error('Firestore deleteResult error (deleted locally):', err);
+  }
 }
 
 /* =========================================================
@@ -658,37 +903,41 @@ export async function deleteResult(
 
 export async function saveBatchResults(
   results: ExamResult[]
-): Promise<void> {
-  const batch = writeBatch(db);
-
-  results.forEach((result) => {
-    const { id, ...data } = result;
-
-    if (id) {
-      const resultRef = doc(
-        db,
-        'results',
-        id
-      );
-
-      batch.set(
-        resultRef,
-        data,
-        { merge: true }
-      );
-    } else {
-      const resultRef = doc(
-        collection(db, 'results')
-      );
-
-      batch.set(
-        resultRef,
-        data
-      );
+): Promise<ExamResult[]> {
+  // 1. إعطاء معرّف فريد لكل نتيجة جديدة لا تملك معرّفاً
+  const preparedResults: ExamResult[] = results.map((result) => {
+    if (result.id && result.id.trim() !== '') {
+      return result;
     }
+    const newDocRef = doc(collection(db, 'results'));
+    return { ...result, id: newDocRef.id };
   });
 
-  await batch.commit();
+  // 2. تحديث التخزين المحلي فوراً لضمان سرعة الاستجابة وعدم الفقدان
+  const currentResults = getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
+  const resultMap = new Map<string, ExamResult>();
+  currentResults.forEach(r => resultMap.set(r.id, r));
+  preparedResults.forEach(r => resultMap.set(r.id, r));
+  setCachedData(CACHE_KEYS.RESULTS, Array.from(resultMap.values()));
+  notifySubscribers();
+
+  // 3. الحفظ السحابي في Firestore عبر Batch مع تطهير الحقول من أي undefined
+  try {
+    const batch = writeBatch(db);
+
+    preparedResults.forEach((result) => {
+      const { id, ...data } = result;
+      const cleanData = sanitizeForFirestore(data);
+      const resultRef = doc(db, 'results', id);
+      batch.set(resultRef, cleanData, { merge: true });
+    });
+
+    await batch.commit();
+  } catch (err) {
+    console.error('Firestore batch save error (results cached locally):', err);
+  }
+
+  return preparedResults;
 }
 
 /* =========================================================
@@ -792,30 +1041,46 @@ export function subscribeToStudentResults(
 const SETTINGS_ID = 'teacher';
 
 export async function getTeacherSettings(): Promise<TeacherSettings> {
-  const snapshot = await getDoc(
-    doc(db, 'settings', SETTINGS_ID)
-  );
+  try {
+    const snapshot = await getDoc(
+      doc(db, 'settings', SETTINGS_ID)
+    );
 
-  if (!snapshot.exists()) {
-    return DEFAULT_SETTINGS;
+    if (snapshot.exists()) {
+      const s = {
+        ...DEFAULT_SETTINGS,
+        ...snapshot.data(),
+      } as TeacherSettings;
+      setCachedData(CACHE_KEYS.SETTINGS, s);
+      return s;
+    }
+  } catch (err) {
+    console.warn('getTeacherSettings Firestore error:', err);
   }
 
-  return {
-    ...DEFAULT_SETTINGS,
-    ...snapshot.data(),
-  } as TeacherSettings;
+  return getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS);
 }
 
 export async function saveTeacherSettings(
   settings: Partial<TeacherSettings>
 ): Promise<void> {
-  await setDoc(
-    doc(db, 'settings', SETTINGS_ID),
-    settings,
-    {
-      merge: true,
-    }
-  );
+  const current = getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS);
+  const merged = { ...current, ...settings };
+  setCachedData(CACHE_KEYS.SETTINGS, merged);
+  notifySubscribers();
+
+  try {
+    const cleanData = sanitizeForFirestore(settings);
+    await setDoc(
+      doc(db, 'settings', SETTINGS_ID),
+      cleanData,
+      {
+        merge: true,
+      }
+    );
+  } catch (err) {
+    console.error('saveTeacherSettings Firestore error (saved locally):', err);
+  }
 }
 
 /* =========================================================
@@ -825,6 +1090,9 @@ export async function saveTeacherSettings(
 export function subscribeToTeacherSettings(
   callback: (settings: TeacherSettings) => void
 ): () => void {
+  const cached = getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS);
+  callback(cached);
+
   return onSnapshot(
     doc(db, 'settings', SETTINGS_ID),
     (snapshot) => {
@@ -838,7 +1106,11 @@ export function subscribeToTeacherSettings(
         ...snapshot.data(),
       };
 
+      setCachedData(CACHE_KEYS.SETTINGS, settings);
       callback(settings);
+    },
+    (err) => {
+      console.warn('Realtime settings error, keeping cached:', err);
     }
   );
 }
@@ -857,41 +1129,51 @@ export interface RealtimeData {
 export function subscribeToRealtimeData(
   callback: (data: RealtimeData) => void
 ): () => void {
-  let students: Student[] = [];
-  let exams: Exam[] = [];
-  let results: ExamResult[] = [];
-  let settings: TeacherSettings = DEFAULT_SETTINGS;
+  // إضافة إلى المشتركين المباشرين للتحديث الفوري بدون انتظار
+  realtimeSubscribers.add(callback);
 
-  let studentsReady = false;
-  let examsReady = false;
-  let resultsReady = false;
-  let settingsReady = false;
+  // 1. تحميل فوري للبيانات المحفوظة محلياً لبدء التطبيق فوراً بدون أي تأخير أو فقدان
+  let students: Student[] = getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
+  let exams: Exam[] = getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []);
+  let results: ExamResult[] = getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
+  let settings: TeacherSettings = getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS);
 
   const emit = () => {
     callback({
-      students,
-      exams,
-      results,
-      settings,
+      students: getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []),
+      exams: getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []),
+      results: getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []),
+      settings: getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS),
     });
   };
+
+  // بث البيانات المخبأة محلياً فوراً
+  emit();
 
   const unsubscribeStudents = onSnapshot(
     collection(db, 'students'),
     (snapshot) => {
-      students = snapshot.docs.map(
+      const firestoreStudents = snapshot.docs.map(
         (item) => ({
           id: item.id,
           ...item.data(),
         })
       ) as Student[];
 
-      studentsReady = true;
-      emit();
+      const localStudents = getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
+      const studentMap = new Map<string, Student>();
+      firestoreStudents.forEach(s => studentMap.set(s.id, s));
+      localStudents.forEach(s => {
+        if (!studentMap.has(s.id)) {
+          studentMap.set(s.id, s);
+        }
+      });
+      students = Array.from(studentMap.values());
+      setCachedData(CACHE_KEYS.STUDENTS, students);
+      notifySubscribers();
     },
     (err) => {
       console.warn('Realtime students listener:', err.message);
-      studentsReady = true;
       emit();
     }
   );
@@ -899,19 +1181,27 @@ export function subscribeToRealtimeData(
   const unsubscribeExams = onSnapshot(
     collection(db, 'exams'),
     (snapshot) => {
-      exams = snapshot.docs.map(
+      const firestoreExams = snapshot.docs.map(
         (item) => ({
           id: item.id,
           ...item.data(),
         })
       ) as Exam[];
 
-      examsReady = true;
-      emit();
+      const localExams = getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []);
+      const examMap = new Map<string, Exam>();
+      firestoreExams.forEach(e => examMap.set(e.id, e));
+      localExams.forEach(e => {
+        if (!examMap.has(e.id)) {
+          examMap.set(e.id, e);
+        }
+      });
+      exams = Array.from(examMap.values());
+      setCachedData(CACHE_KEYS.EXAMS, exams);
+      notifySubscribers();
     },
     (err) => {
       console.warn('Realtime exams listener:', err.message);
-      examsReady = true;
       emit();
     }
   );
@@ -919,19 +1209,27 @@ export function subscribeToRealtimeData(
   const unsubscribeResults = onSnapshot(
     collection(db, 'results'),
     (snapshot) => {
-      results = snapshot.docs.map(
+      const firestoreResults = snapshot.docs.map(
         (item) => ({
           id: item.id,
           ...item.data(),
         })
       ) as ExamResult[];
 
-      resultsReady = true;
-      emit();
+      const localResults = getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
+      const resultMap = new Map<string, ExamResult>();
+      firestoreResults.forEach(r => resultMap.set(r.id, r));
+      localResults.forEach(r => {
+        if (!resultMap.has(r.id)) {
+          resultMap.set(r.id, r);
+        }
+      });
+      results = Array.from(resultMap.values());
+      setCachedData(CACHE_KEYS.RESULTS, results);
+      notifySubscribers();
     },
     (err) => {
       console.warn('Realtime results listener:', err.message);
-      resultsReady = true;
       emit();
     }
   );
@@ -939,26 +1237,23 @@ export function subscribeToRealtimeData(
   const unsubscribeSettings = onSnapshot(
     doc(db, 'settings', SETTINGS_ID),
     (snapshot) => {
-      if (!snapshot.exists()) {
-        settings = DEFAULT_SETTINGS;
-      } else {
+      if (snapshot.exists()) {
         settings = {
           ...DEFAULT_SETTINGS,
           ...snapshot.data(),
         } as TeacherSettings;
+        setCachedData(CACHE_KEYS.SETTINGS, settings);
+        notifySubscribers();
       }
-
-      settingsReady = true;
-      emit();
     },
     (err) => {
       console.warn('Realtime settings listener:', err.message);
-      settingsReady = true;
       emit();
     }
   );
 
   return () => {
+    realtimeSubscribers.delete(callback);
     unsubscribeStudents();
     unsubscribeExams();
     unsubscribeResults();

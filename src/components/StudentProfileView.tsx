@@ -42,7 +42,7 @@ interface StudentProfileViewProps {
   onDeleteResult: (resultId: string) => Promise<void>;
   onUpdateResult: (resultId: string, updatedScore: number, notes: string) => Promise<void>;
   onUpdateResultAttachment?: (resultId: string, attachment: ResultAttachment | null) => Promise<void>;
-  onAddScoreForStudent: (student: Student) => void;
+  onAddScoreForStudent: (student: Student, specificExam?: Exam) => void;
 }
 
 export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
@@ -302,6 +302,12 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {(stats.improvementsCount ?? 0) > 0 && (
+              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 inline-flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                {stats.improvementsCount} تحسين درجات
+              </span>
+            )}
             <span className="text-xs text-slate-400">حالة المسار:</span>
             <span className={`px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1.5 ${
               stats.trend === 'improving'
@@ -464,7 +470,35 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                     <tr key={res.id} className="hover:bg-slate-50 transition-colors">
                       {/* Exam Title */}
                       <td className="py-3 px-3.5 font-semibold text-slate-900">
-                        {res.examTitle}
+                        <div className="flex flex-col gap-1">
+                          <span>{res.examTitle}</span>
+                          {(res.isImprovement || (res.attemptNumber && res.attemptNumber > 1)) && (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                <Sparkles className="w-2.5 h-2.5 text-amber-600" />
+                                {res.attemptLabel || `تحسين (محاولة ${res.attemptNumber})`}
+                              </span>
+                              {res.previousScore !== undefined && (
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  (السابقة: {res.previousScore})
+                                </span>
+                              )}
+                              {res.previousScore !== undefined && (
+                                <span className={`text-[10px] font-mono font-bold ${
+                                  res.score > res.previousScore
+                                    ? 'text-emerald-600'
+                                    : res.score < res.previousScore
+                                    ? 'text-rose-600'
+                                    : 'text-slate-500'
+                                }`}>
+                                  {res.score > res.previousScore
+                                    ? `+${(res.score - res.previousScore).toFixed(1)} ↑`
+                                    : `${(res.score - res.previousScore).toFixed(1)}`}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       {/* Date */}
@@ -573,6 +607,17 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                             </>
                           ) : (
                             <>
+                              <button
+                                onClick={() => {
+                                  const examObj = exams.find((e) => e.id === res.examId);
+                                  onAddScoreForStudent(student, examObj);
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 rounded-lg border border-amber-200 transition cursor-pointer"
+                                title="إضافة محاولة تحسين جديدة لهذا الامتحان"
+                              >
+                                <Plus className="w-3 h-3" />
+                                تحسين
+                              </button>
                               <button
                                 onClick={() => handleStartEdit(res)}
                                 className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"

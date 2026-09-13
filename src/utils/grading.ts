@@ -123,6 +123,10 @@ export function calculateStudentStats(
   const avgScore = Math.round((totalScoreSum / count) * 10) / 10;
   const passRate = Math.round((passedCount / count) * 100);
 
+  const improvementsCount = results.filter(
+    (r) => !!r.isImprovement || (r.attemptNumber !== undefined && r.attemptNumber > 1)
+  ).length;
+
   const latest = sorted[sorted.length - 1];
 
   // Determine overall status
@@ -139,7 +143,10 @@ export function calculateStudentStats(
   let trend: 'improving' | 'steady' | 'declining' = 'steady';
   let trendMessage = 'أداء الطالب مستقر على وتيرة ثابتة.';
 
-  if (sorted.length >= 2) {
+  if (improvementsCount > 0) {
+    trend = 'improving';
+    trendMessage = `قام الطالب بإجراء ${improvementsCount} محاولة تحسين لدرجاته بنجاح، مما يعكس حرصه العالي على التطور ورفع مستواه.`;
+  } else if (sorted.length >= 2) {
     const recentScores = sorted.slice(-Math.min(3, sorted.length)).map(r => r.percentage);
     const pastScores = sorted.slice(0, Math.max(1, sorted.length - recentScores.length)).map(r => r.percentage);
 
@@ -173,6 +180,7 @@ export function calculateStudentStats(
     latestScore: latest ? latest.score : null,
     latestPercentage: latest ? Math.round(latest.percentage * 10) / 10 : null,
     latestExamTitle: latest ? latest.examTitle : null,
+    improvementsCount,
     status,
     trend,
     trendMessage,
