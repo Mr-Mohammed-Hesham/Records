@@ -24,6 +24,8 @@ import { AttachmentThumbnail } from './AttachmentThumbnail';
 interface ScoreEntryModalProps {
   isOpen: boolean;
   exam: Exam | null;
+  exams?: Exam[];
+  onSelectExam?: (exam: Exam) => void;
   students?: Student[];
   existingResults?: ExamResult[];
   settings?: TeacherSettings;
@@ -61,6 +63,8 @@ interface ScoreRowState {
 export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   isOpen,
   exam,
+  exams,
+  onSelectExam,
   students = [],
   existingResults = [],
   settings = DEFAULT_SETTINGS,
@@ -741,6 +745,27 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                 <h3 className="font-extrabold text-slate-900 dark:text-white text-lg">
                   رصد درجات الامتحان: {exam.title}
                 </h3>
+
+                {exams && exams.length > 1 && onSelectExam && (
+                  <div className="flex items-center gap-1.5 bg-indigo-50/80 dark:bg-indigo-950/60 px-2 py-1 rounded-xl border border-indigo-200 dark:border-indigo-800/80">
+                    <span className="text-[11px] text-indigo-700 dark:text-indigo-300 font-bold">تغيير الامتحان:</span>
+                    <select
+                      id="score-modal-exam-dropdown"
+                      value={exam.id}
+                      onChange={(e) => {
+                        const chosen = exams.find((x) => x.id === e.target.value);
+                        if (chosen) onSelectExam(chosen);
+                      }}
+                      className="bg-white dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-100 rounded-lg px-2 py-1 border border-slate-200 dark:border-slate-700 focus:outline-hidden cursor-pointer"
+                    >
+                      {exams.map((ex) => (
+                        <option key={ex.id} value={ex.id}>
+                          {ex.title} ({ex.grade || 'عام'} - {ex.subject})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <span className="px-2.5 py-0.5 text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg">
                   {exam.grade}

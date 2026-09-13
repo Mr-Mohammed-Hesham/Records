@@ -2503,6 +2503,10 @@ export default function App() {
         exam={
           activeScoringExam
         }
+        exams={exams}
+        onSelectExam={(newExam) =>
+          setActiveScoringExam(newExam)
+        }
         students={
           students
         }
