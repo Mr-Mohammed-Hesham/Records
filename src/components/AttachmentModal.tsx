@@ -161,13 +161,15 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
   return (
     <div
       id="attachment-modal-overlay"
-      className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200"
+      className="fixed inset-0 z-[70] flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200"
       onClick={(e) => {
+        e.stopPropagation();
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         id="attachment-modal-container"
+        onClick={(e) => e.stopPropagation()}
         className="w-full max-w-2xl bg-white dark:bg-slate-900 sm:rounded-3xl rounded-t-3xl shadow-2xl border border-slate-200/80 dark:border-slate-800 flex flex-col max-h-[92dvh] sm:max-h-[90vh] overflow-hidden text-right transition-all"
         dir="rtl"
       >

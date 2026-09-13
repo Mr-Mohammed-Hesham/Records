@@ -36,6 +36,7 @@ interface ScoreEntryModalProps {
     results: Array<ExamResult>
   ) => Promise<void>;
   onDeleteResult?: (resultId: string) => Promise<void>;
+  onUpdateResultAttachment?: (resultId: string, attachment: ResultAttachment | null) => Promise<void>;
 }
 
 interface ScoreRowState {
@@ -68,6 +69,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   onSaveBatch,
   onSaveScores,
   onDeleteResult,
+  onUpdateResultAttachment,
 }) => {
   const [rows, setRows] = useState<ScoreRowState[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -473,6 +475,77 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   ).length;
 
   /*
+   * حفظ أو تحديث مرفق إثبات المصداقية للصف فوراً
+   */
+  const handleSaveAttachmentForRow = async (
+    targetRow: ScoreRowState,
+    attachment: ResultAttachment | null
+  ) => {
+    // 1. تحديث فوري للحالة في الجدول
+    setRows((prev) =>
+      prev.map((r) =>
+        r.rowKey === targetRow.rowKey
+          ? { ...r, attachment, isModified: true }
+          : r
+      )
+    );
+    setAttachmentTargetRow(null);
+
+    // 2. إذا كانت النتيجة مسجلة ولها معرف (resultId)، يتم الحفظ المباشر في قاعدة البيانات
+    if (targetRow.resultId) {
+      try {
+        if (onUpdateResultAttachment) {
+          await onUpdateResultAttachment(targetRow.resultId, attachment);
+        }
+      } catch (err) {
+        console.error('Error saving attachment immediately for existing result:', err);
+      }
+    } else if (targetRow.score.trim() !== '' && exam) {
+      // 3. إذا كان المعلم قد رصد درجة بالفعل ولكن لم يضغط حفظ الكل، ننشئ النتيجة فوراً متضمنة المرفق
+      const numericScore = parseFloat(targetRow.score);
+      if (!isNaN(numericScore)) {
+        const clampedScore = Math.max(0, Math.min(exam.totalScore, numericScore));
+        const percentage = Math.round((clampedScore / exam.totalScore) * 1000) / 10;
+        const rating = getGradeRating(percentage, settings.gradingScale);
+        const passed = clampedScore >= exam.passScore;
+
+        const resultToSave: ExamResult = {
+          id: targetRow.resultId || '',
+          examId: exam.id,
+          studentId: targetRow.studentId,
+          studentDocId: targetRow.studentDocId,
+          studentName: targetRow.studentName,
+          examTitle: exam.title,
+          examDate: exam.date,
+          score: clampedScore,
+          totalScore: exam.totalScore,
+          percentage,
+          gradeRating: rating.label,
+          passed,
+          notes: targetRow.notes,
+          attachment: attachment || null,
+          attemptNumber: targetRow.attemptNumber,
+          attemptLabel: targetRow.attemptLabel,
+          isImprovement: targetRow.isImprovement,
+          previousScore: targetRow.previousScore,
+          updatedAt: new Date().toISOString(),
+        };
+
+        try {
+          const saveFn = onSaveBatch || onSaveScores;
+          if (saveFn) {
+            await saveFn([resultToSave]);
+          } else {
+            await saveBatchResults([resultToSave]);
+          }
+        } catch (err) {
+          console.error('Error auto-saving result with attachment:', err);
+        }
+      }
+    }
+  };
+
+  /*
    * حفظ النتائج مع دعم التعدد ومحاولات التحسين
    */
   const handleSave = async () => {
@@ -642,10 +715,15 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   };
 
   return (
-    <div 
-      className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden"
-      onClick={onClose}
-    >
+    <>
+      <div 
+        className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            onClose();
+          }
+        }}
+      >
       <div
         id="score-entry-modal"
         onClick={(e) => e.stopPropagation()}
@@ -878,12 +956,14 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                       </td>
 
                       {/* Student Name & Attempt details */}
-                      <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
+                      <td className="py-2.5 px-3">
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span>{row.studentName}</span>
-                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                              {row.studentId}
+                            <span className="font-extrabold text-slate-900 dark:text-slate-50 text-sm">
+                              {row.studentName}
+                            </span>
+                            <span className="text-[10px] text-slate-600 dark:text-slate-300 font-mono font-bold bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                              #{row.studentId}
                             </span>
                           </div>
 
@@ -1022,14 +1102,35 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                       {/* Attachment / Proof */}
                       <td className="py-2.5 px-3 text-center">
                         <div className="flex items-center justify-center">
-                          <AttachmentThumbnail
-                            attachment={row.attachment}
-                            size="sm"
-                            showLabel={!row.attachment}
-                            tooltipPrefix={`طالب: ${row.studentName}`}
-                            onClick={() => setAttachmentTargetRow(row)}
-                            onAttach={() => setAttachmentTargetRow(row)}
-                          />
+                          {row.attachment ? (
+                            <div className="inline-flex items-center gap-1.5 bg-emerald-50/90 dark:bg-emerald-950/50 py-1 px-2 rounded-xl border border-emerald-300/90 dark:border-emerald-700/80 shadow-2xs">
+                              <AttachmentThumbnail
+                                attachment={row.attachment}
+                                size="sm"
+                                tooltipPrefix={`طالب: ${row.studentName}`}
+                                onClick={() => setAttachmentTargetRow(row)}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setAttachmentTargetRow(row)}
+                                className="text-[11px] font-extrabold text-emerald-800 dark:text-emerald-300 hover:underline cursor-pointer flex items-center gap-0.5"
+                                title="معاينة أو استبدال المرفق"
+                              >
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                <span>معتمد</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setAttachmentTargetRow(row)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-300/80 dark:border-amber-700/80 rounded-xl transition-all cursor-pointer shadow-2xs group"
+                              title="إرفاق ورقة الإجابة أو صورة إثبات المصداقية"
+                            >
+                              <Paperclip className="w-3.5 h-3.5 group-hover:rotate-12 transition-transform text-amber-600 dark:text-amber-400" />
+                              <span>إرفاق ورقة</span>
+                            </button>
+                          )}
                         </div>
                       </td>
 
@@ -1110,25 +1211,19 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
         </div>
       </div>
 
+      </div>
+
+      {/* Attachment Modal rendered outside backdrop to avoid closing ScoreEntryModal */}
       {attachmentTargetRow && exam && (
         <AttachmentModal
           isOpen={!!attachmentTargetRow}
           title="إثبات ومرفق مصداقية النتيجة"
           subtitle={`طالب: ${attachmentTargetRow.studentName} | امتحان: ${exam.title} | الدرجة: ${attachmentTargetRow.score || '-'}/${exam.totalScore}`}
           attachment={attachmentTargetRow.attachment || null}
-          onSave={(attachment) => {
-            setRows((prev) =>
-              prev.map((r) =>
-                r.rowKey === attachmentTargetRow.rowKey
-                  ? { ...r, attachment, isModified: true }
-                  : r
-              )
-            );
-            setAttachmentTargetRow(null);
-          }}
+          onSave={(attachment) => handleSaveAttachmentForRow(attachmentTargetRow, attachment)}
           onClose={() => setAttachmentTargetRow(null)}
         />
       )}
-    </div>
+    </>
   );
 };

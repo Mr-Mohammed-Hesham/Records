@@ -509,10 +509,10 @@ className="w-full h-full object-cover rounded-[14px]"
                       {idx + 1}
                     </span>
                     <div>
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                      <h4 className="text-sm font-extrabold text-slate-900 dark:text-slate-50 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
                         {student.name}
                       </h4>
-                      <p className="text-[11px] text-slate-400">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
                         {student.grade} • {student.group}
                       </p>
                     </div>
@@ -560,10 +560,10 @@ className="w-full h-full object-cover rounded-[14px]"
                   className="py-3 flex items-center justify-between hover:bg-rose-50/40 dark:hover:bg-rose-950/20 px-3 rounded-xl transition cursor-pointer group"
                 >
                   <div>
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+                    <h4 className="text-sm font-extrabold text-slate-900 dark:text-slate-50 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
                       {student.name}
                     </h4>
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
                       {student.grade} • {student.group}
                     </p>
                   </div>

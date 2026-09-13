@@ -2532,6 +2532,9 @@ export default function App() {
         onDeleteResult={
           handleDeleteResult
         }
+        onUpdateResultAttachment={
+          handleUpdateResultAttachment
+        }
         preselectedStudent={
           preselectedStudentForScore
         }

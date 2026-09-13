@@ -508,7 +508,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
                     >
                       <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">{i + 1}</td>
-                      <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">{st.name}</td>
+                      <td className="py-2.5 px-3 font-extrabold text-slate-900 dark:text-slate-50">{st.name}</td>
                       <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{st.grade}</td>
                       <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{st.group}</td>
                       <td className="py-2.5 px-3 text-center font-mono text-slate-700 dark:text-slate-200">{stStats.totalExams}</td>
@@ -572,7 +572,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 {currentExamResults.map((r, i) => (
                   <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                     <td className="py-2 px-3 text-center text-slate-400 font-mono text-[11px]">{i + 1}</td>
-                    <td className="py-2 px-3 font-semibold text-slate-900 dark:text-white">{r.studentName}</td>
+                    <td className="py-2 px-3 font-extrabold text-slate-900 dark:text-slate-50">{r.studentName}</td>
                     <td className="py-2 px-3 text-center font-mono font-bold text-slate-800 dark:text-slate-100">{r.score}/{r.totalScore}</td>
                     <td className="py-2 px-3 text-center font-mono font-bold text-amber-600 dark:text-amber-400">{r.percentage}%</td>
                     <td className="py-2 px-3 text-center">
@@ -639,7 +639,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       onClick={() => onOpenStudentProfile(st)}
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
                     >
-                      <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">{st.name}</td>
+                      <td className="py-2.5 px-3 font-extrabold text-slate-900 dark:text-slate-50">{st.name}</td>
                       <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400 font-mono">{st.studentId}</td>
                       <td className="py-2.5 px-3 text-center font-mono text-slate-700 dark:text-slate-200">{stStats.totalExams}</td>
                       <td className="py-2.5 px-3 text-center font-mono font-bold text-amber-600 dark:text-amber-400">{stStats.averagePercentage}%</td>

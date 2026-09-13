@@ -498,19 +498,19 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                     {student.name.charAt(0)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h4 className="font-bold text-slate-900 dark:text-white text-sm truncate hover:text-amber-500 transition-colors">
+                    <h4 className="font-extrabold text-slate-900 dark:text-slate-50 text-base truncate hover:text-amber-500 dark:hover:text-amber-400 transition-colors">
                       {student.name}
                     </h4>
                     <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      <span className="font-mono font-bold text-slate-600 dark:text-slate-300 text-[11px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                      <span className="font-mono font-bold text-slate-700 dark:text-slate-200 text-[11px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                         #{student.studentId}
                       </span>
                       <span>•</span>
-                      <span>{student.grade}</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">{student.grade}</span>
                       {student.group && (
                         <>
                           <span>•</span>
-                          <span>{student.group}</span>
+                          <span className="font-medium text-slate-700 dark:text-slate-300">{student.group}</span>
                         </>
                       )}
                     </div>
@@ -681,45 +681,45 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                   }) => (
                     <tr
                       key={student.id}
-                      className="hover:bg-slate-50/70 transition-colors group cursor-pointer"
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition-colors group cursor-pointer"
                       onClick={() =>
                         onOpenProfile(student)
                       }
                     >
                       {/* Student ID */}
-                      <td className="py-3.5 px-4 font-mono font-bold text-slate-600 text-[11px]">
-                        <span className="bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                      <td className="py-3.5 px-4 font-mono font-bold text-slate-700 dark:text-slate-200 text-[11px]">
+                        <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
                           {student.studentId}
                         </span>
                       </td>
 
                       {/* Name */}
-                      <td className="py-3.5 px-4 font-bold text-slate-900">
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
+                      <td className="py-3.5 px-4 font-extrabold text-slate-900 dark:text-slate-50">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold text-xs shrink-0 border border-indigo-200/50 dark:border-indigo-800/50">
                             {student.name.charAt(0)}
                           </div>
 
-                          <span className="group-hover:text-indigo-600 transition-colors">
+                          <span className="group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors text-sm font-extrabold">
                             {student.name}
                           </span>
                         </div>
                       </td>
 
                       {/* Grade */}
-                      <td className="py-3.5 px-3 text-slate-600">
+                      <td className="py-3.5 px-3 font-medium text-slate-700 dark:text-slate-200">
                         {student.grade}
                       </td>
 
                       {/* Group */}
-                      <td className="py-3.5 px-3 text-slate-600">
-                        <span className="px-2 py-0.5 bg-slate-100 rounded text-[11px]">
+                      <td className="py-3.5 px-3 text-slate-700 dark:text-slate-300">
+                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-[11px]">
                           {student.group || '-'}
                         </span>
                       </td>
 
                       {/* Subjects */}
-                      <td className="py-3.5 px-3 text-slate-600">
+                      <td className="py-3.5 px-3 text-slate-700 dark:text-slate-300">
                         <div className="flex flex-wrap gap-1 justify-end">
                           {subjects.length > 0 ? (
                             subjects.map(subject => (
@@ -727,15 +727,15 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                                 key={subject}
                                 className={`px-2 py-0.5 rounded text-[10px] border ${
                                   subjectFilter === subject
-                                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200 font-bold'
-                                    : 'bg-slate-100 text-slate-600 border-slate-200'
+                                    ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 font-bold'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                                 }`}
                               >
                                 {subject}
                               </span>
                             ))
                           ) : (
-                            <span className="text-slate-300">
+                            <span className="text-slate-400 dark:text-slate-600">
                               -
                             </span>
                           )}

@@ -131,7 +131,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
       </div>
 
       {/* Basic Student Info Card */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200/80 dark:border-slate-800">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
             {/* Avatar / Photo */}
@@ -150,31 +150,31 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
 
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="text-xl font-bold text-slate-900">{student.name}</h1>
-                <span className="font-mono text-xs px-2.5 py-0.5 bg-indigo-50 text-indigo-700 font-bold rounded-lg border border-indigo-100">
+                <h1 className="text-2xl font-black text-slate-900 dark:text-slate-50">{student.name}</h1>
+                <span className="font-mono text-xs px-2.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-bold rounded-lg border border-indigo-100 dark:border-indigo-800">
                   {student.studentId}
                 </span>
                 <span className={`px-2.5 py-0.5 rounded-lg text-xs font-bold ${
                   stats.status === 'ممتاز'
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                     : stats.status === 'جيد'
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                    : 'bg-rose-50 text-rose-700 border border-rose-200'
+                    ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                    : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
                 }`}>
                   مستوى الطالب: {stats.status}
                 </span>
               </div>
 
-              <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-3">
-                <span>الصف: <strong className="text-slate-700">{student.grade}</strong></span>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 flex flex-wrap items-center gap-3">
+                <span>الصف: <strong className="text-slate-700 dark:text-slate-200">{student.grade}</strong></span>
                 <span>•</span>
-                <span>المجموعة: <strong className="text-slate-700">{student.group}</strong></span>
+                <span>المجموعة: <strong className="text-slate-700 dark:text-slate-200">{student.group}</strong></span>
                 <span>•</span>
-                <span>المادة: <strong className="text-slate-700">{student.subject}</strong></span>
+                <span>المادة: <strong className="text-slate-700 dark:text-slate-200">{student.subject}</strong></span>
                 {student.school && (
                   <>
                     <span>•</span>
-                    <span>المدرسة: <strong className="text-slate-700">{student.school}</strong></span>
+                    <span>المدرسة: <strong className="text-slate-700 dark:text-slate-200">{student.school}</strong></span>
                   </>
                 )}
               </p>
@@ -182,36 +182,36 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           </div>
 
           {/* Contact Details */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-100 w-full md:w-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 dark:bg-slate-800/80 p-3.5 rounded-xl border border-slate-100 dark:border-slate-700/80 w-full md:w-auto">
             <div>
-              <span className="text-slate-400 block mb-0.5">هاتف الطالب:</span>
-              <span className="font-mono font-bold text-slate-800" dir="ltr">
+              <span className="text-slate-400 dark:text-slate-500 block mb-0.5">هاتف الطالب:</span>
+              <span className="font-mono font-bold text-slate-800 dark:text-slate-100" dir="ltr">
                 {student.phone || 'غير مسجل'}
               </span>
             </div>
             <div>
-              <span className="text-slate-400 block mb-0.5">هاتف ولي الأمر:</span>
-              <span className="font-mono font-bold text-slate-800" dir="ltr">
+              <span className="text-slate-400 dark:text-slate-500 block mb-0.5">هاتف ولي الأمر:</span>
+              <span className="font-mono font-bold text-slate-800 dark:text-slate-100" dir="ltr">
                 {student.parentPhone || 'غير مسجل'}
               </span>
             </div>
             {student.email && (
               <div className="sm:col-span-2">
-                <span className="text-slate-400 block mb-0.5">البريد الإلكتروني:</span>
-                <span className="font-mono text-slate-700" dir="ltr">
+                <span className="text-slate-400 dark:text-slate-500 block mb-0.5">البريد الإلكتروني:</span>
+                <span className="font-mono text-slate-700 dark:text-slate-200" dir="ltr">
                   {student.email}
                 </span>
               </div>
             )}
-            <div className="sm:col-span-2 text-[11px] text-slate-400">
+            <div className="sm:col-span-2 text-[11px] text-slate-400 dark:text-slate-500">
               تاريخ الإضافة: {student.createdAt ? new Date(student.createdAt).toLocaleDateString('ar-EG') : '-'}
             </div>
           </div>
         </div>
 
         {student.notes && (
-          <div className="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-600 bg-amber-50/40 p-3 rounded-xl border border-amber-100">
-            <strong className="text-amber-900 block mb-1">ملاحظات المدرس الخاصة:</strong>
+          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 bg-amber-50/40 dark:bg-amber-950/30 p-3 rounded-xl border border-amber-100 dark:border-amber-800/60">
+            <strong className="text-amber-900 dark:text-amber-300 block mb-1">ملاحظات المدرس الخاصة:</strong>
             <p>{student.notes}</p>
           </div>
         )}
@@ -238,66 +238,66 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
         </div>
 
         {/* Highest Score */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
-          <span className="text-xs text-slate-500 block mb-1">أعلى درجة</span>
-          <span className="text-2xl font-black text-emerald-600 font-mono">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+          <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">أعلى درجة</span>
+          <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
             {stats.highestPercentage}%
           </span>
-          <span className="text-[11px] text-emerald-700/70 block mt-0.5 font-mono">
+          <span className="text-[11px] text-emerald-700/70 dark:text-emerald-400/80 block mt-0.5 font-mono">
             ({stats.highestScore} درجة)
           </span>
         </div>
 
         {/* Lowest Score */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
-          <span className="text-xs text-slate-500 block mb-1">أقل درجة</span>
-          <span className="text-2xl font-black text-rose-600 font-mono">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+          <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">أقل درجة</span>
+          <span className="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">
             {stats.lowestPercentage}%
           </span>
-          <span className="text-[11px] text-rose-700/70 block mt-0.5 font-mono">
+          <span className="text-[11px] text-rose-700/70 dark:text-rose-400/80 block mt-0.5 font-mono">
             ({stats.lowestScore} درجة)
           </span>
         </div>
 
         {/* Latest Result */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
-          <span className="text-xs text-slate-500 block mb-1">آخر نتيجة</span>
-          <span className="text-2xl font-black text-sky-600 font-mono">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+          <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">آخر نتيجة</span>
+          <span className="text-2xl font-black text-sky-600 dark:text-sky-400 font-mono">
             {stats.latestPercentage !== null ? `${stats.latestPercentage}%` : '-'}
           </span>
-          <span className="text-[11px] text-slate-400 block mt-0.5 truncate" title={stats.latestExamTitle || ''}>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5 truncate" title={stats.latestExamTitle || ''}>
             {stats.latestExamTitle || 'لا يوجد'}
           </span>
         </div>
 
         {/* Pass Rate */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
-          <span className="text-xs text-slate-500 block mb-1">نسبة النجاح</span>
-          <span className="text-2xl font-black text-emerald-700 font-mono">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+          <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">نسبة النجاح</span>
+          <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400 font-mono">
             {stats.passRate}%
           </span>
-          <span className="text-[11px] text-slate-400 block mt-0.5">في جميع الامتحانات</span>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5">في جميع الامتحانات</span>
         </div>
       </div>
 
       {/* Student Level Analysis & Progress Chart (تحليل مستوى الطالب) */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80">
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200/80 dark:border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className={`p-2 rounded-xl ${
               stats.trend === 'improving' 
-                ? 'bg-emerald-50 text-emerald-600' 
+                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400' 
                 : stats.trend === 'declining'
-                ? 'bg-rose-50 text-rose-600'
-                : 'bg-indigo-50 text-indigo-600'
+                ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
+                : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
             }`}>
               {stats.trend === 'improving' && <TrendingUp className="w-5 h-5" />}
               {stats.trend === 'declining' && <TrendingDown className="w-5 h-5" />}
               {stats.trend === 'steady' && <Minus className="w-5 h-5" />}
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 text-base">تحليل مستوى الطالب ومسار التطور</h3>
-              <p className="text-xs text-slate-500">متابعة درجات الطالب عبر الوقت وتحديد مؤشر التحسن</p>
+              <h3 className="font-bold text-slate-900 dark:text-white text-base">تحليل مستوى الطالب ومسار التطور</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">متابعة درجات الطالب عبر الوقت وتحديد مؤشر التحسن</p>
             </div>
           </div>
 
@@ -422,25 +422,25 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
       </div>
 
       {/* Exam History Table (سجل الامتحانات) */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80">
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200/80 dark:border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
           <div>
-            <h3 className="font-bold text-slate-900 text-base">سجل الامتحانات والنتائج التفصيلي</h3>
-            <p className="text-xs text-slate-500">جميع الامتحانات التي شارك بها الطالب مع إمكانية تعديل أو حذف أي نتيجة</p>
+            <h3 className="font-bold text-slate-900 dark:text-white text-base">سجل الامتحانات والنتائج التفصيلي</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">جميع الامتحانات التي شارك بها الطالب مع إمكانية تعديل أو حذف أي نتيجة</p>
           </div>
 
           <button
             onClick={() => onAddScoreForStudent(student)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors cursor-pointer border border-indigo-200"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-xl transition-colors cursor-pointer border border-indigo-200 dark:border-indigo-800"
           >
             <Plus className="w-4 h-4" />
             رصد نتيجة امتحان جديد لهذا الطالب
           </button>
         </div>
 
-        <div className="mt-4 overflow-x-auto border border-slate-200 rounded-xl">
+        <div className="mt-4 overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
           <table className="w-full text-right text-xs">
-            <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+            <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
               <tr>
                 <th className="py-3 px-3.5">اسم الامتحان</th>
                 <th className="py-3 px-3.5">التاريخ</th>
@@ -454,10 +454,10 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                 <th className="py-3 px-3.5 text-center">إجراءات</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {results.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-8 text-center text-slate-400">
+                  <td colSpan={10} className="py-8 text-center text-slate-400 dark:text-slate-500">
                     لم يتم تسجيل نتائج امتحانات لهذا الطالب بعد. اضغط "رصد نتيجة امتحان جديد" للإضافة.
                   </td>
                 </tr>
@@ -467,29 +467,29 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                   const rating = getGradeRating(res.percentage, settings.gradingScale);
 
                   return (
-                    <tr key={res.id} className="hover:bg-slate-50 transition-colors">
+                    <tr key={res.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
                       {/* Exam Title */}
-                      <td className="py-3 px-3.5 font-semibold text-slate-900">
+                      <td className="py-3 px-3.5 font-bold text-slate-900 dark:text-slate-100">
                         <div className="flex flex-col gap-1">
                           <span>{res.examTitle}</span>
                           {(res.isImprovement || (res.attemptNumber && res.attemptNumber > 1)) && (
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                                <Sparkles className="w-2.5 h-2.5 text-amber-600" />
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                                <Sparkles className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
                                 {res.attemptLabel || `تحسين (محاولة ${res.attemptNumber})`}
                               </span>
                               {res.previousScore !== undefined && (
-                                <span className="text-[10px] text-slate-400 font-mono">
+                                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
                                   (السابقة: {res.previousScore})
                                 </span>
                               )}
                               {res.previousScore !== undefined && (
                                 <span className={`text-[10px] font-mono font-bold ${
                                   res.score > res.previousScore
-                                    ? 'text-emerald-600'
+                                    ? 'text-emerald-600 dark:text-emerald-400'
                                     : res.score < res.previousScore
-                                    ? 'text-rose-600'
-                                    : 'text-slate-500'
+                                    ? 'text-rose-600 dark:text-rose-400'
+                                    : 'text-slate-500 dark:text-slate-400'
                                 }`}>
                                   {res.score > res.previousScore
                                     ? `+${(res.score - res.previousScore).toFixed(1)} ↑`
@@ -502,7 +502,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                       </td>
 
                       {/* Date */}
-                      <td className="py-3 px-3.5 text-slate-500 font-mono text-[11px]">
+                      <td className="py-3 px-3.5 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
                         {res.examDate}
                       </td>
 
@@ -516,22 +516,22 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                             max={res.totalScore}
                             value={editScoreVal}
                             onChange={(e) => setEditScoreVal(e.target.value)}
-                            className="w-16 px-1.5 py-1 border border-indigo-400 rounded text-center font-bold text-xs"
+                            className="w-16 px-1.5 py-1 border border-indigo-400 dark:border-indigo-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded text-center font-bold text-xs"
                           />
                         ) : (
-                          <span className="font-bold text-slate-900 text-sm font-mono">
+                          <span className="font-extrabold text-slate-900 dark:text-slate-50 text-sm font-mono">
                             {res.score}
                           </span>
                         )}
                       </td>
 
                       {/* Total Score */}
-                      <td className="py-3 px-3.5 text-center font-mono text-slate-500">
+                      <td className="py-3 px-3.5 text-center font-mono text-slate-500 dark:text-slate-400">
                         {res.totalScore}
                       </td>
 
                       {/* Percentage */}
-                      <td className="py-3 px-3.5 text-center font-bold font-mono text-slate-800">
+                      <td className="py-3 px-3.5 text-center font-bold font-mono text-slate-800 dark:text-slate-200">
                         {res.percentage}%
                       </td>
 
