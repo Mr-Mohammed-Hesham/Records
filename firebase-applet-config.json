@@ -1,12 +1,12 @@
 {
   "projectId": "records-2eedd",
-  "appId": "",
-  "apiKey": "",
+  "appId": "1:909170236632:web:194a138a4e137d20978bad",
+  "apiKey": "AIzaSyC2LHHPG7hn27LewZXmpU_PZAbysuL1TUc",
   "authDomain": "records-2eedd.firebaseapp.com",
   "firestoreDatabaseId": "(default)",
   "storageBucket": "records-2eedd.firebasestorage.app",
-  "messagingSenderId": "",
-  "measurementId": "",
+  "messagingSenderId": "909170236632",
+  "measurementId": "G-3W94L8Y977",
   "oAuthClientId": "",
   "recaptchaSiteKey": ""
 }

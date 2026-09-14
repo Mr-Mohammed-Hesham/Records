@@ -3,6 +3,8 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
   getFirestore,
   initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   type Firestore,
   collection,
   doc,
@@ -122,11 +124,27 @@ function initFirestore(): Firestore {
   try {
     return initializeFirestore(
       app,
-      { experimentalForceLongPolling: true },
+      {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+        experimentalAutoDetectLongPolling: true,
+        ignoreUndefinedProperties: true,
+      },
       FIRESTORE_DATABASE_ID
     );
   } catch {
-    return getFirestore(app, FIRESTORE_DATABASE_ID);
+    try {
+      return initializeFirestore(
+        app,
+        {
+          ignoreUndefinedProperties: true,
+        },
+        FIRESTORE_DATABASE_ID
+      );
+    } catch {
+      return getFirestore(app, FIRESTORE_DATABASE_ID);
+    }
   }
 }
 
@@ -447,23 +465,27 @@ export function notifySubscribers(): void {
 
 export async function getStudents(): Promise<Student[]> {
   try {
-    const snapshot = await getDocs(
-      collection(db, 'students')
+    const fetchPromise = getDocs(collection(db, 'students'));
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 3000)
     );
+    const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
 
-    const items = snapshot.docs.map((item) => ({
-      id: item.id,
-      ...item.data(),
-    })) as Student[];
+    if (snapshot) {
+      const items = snapshot.docs.map((item) => ({
+        id: item.id,
+        ...item.data(),
+      })) as Student[];
 
-    if (items.length > 0) {
-      setCachedData(CACHE_KEYS.STUDENTS, items);
+      if (items.length > 0) {
+        setCachedData(CACHE_KEYS.STUDENTS, items);
+      }
+      return items;
     }
-    return items;
   } catch (err) {
     console.warn('getStudents from Firestore failed, fallback to cache:', err);
-    return getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
   }
+  return getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
 }
 
 export async function getStudent(
@@ -628,23 +650,27 @@ export function subscribeToStudents(
 
 export async function getExams(): Promise<Exam[]> {
   try {
-    const snapshot = await getDocs(
-      collection(db, 'exams')
+    const fetchPromise = getDocs(collection(db, 'exams'));
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 3000)
     );
+    const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
 
-    const items = snapshot.docs.map((item) => ({
-      id: item.id,
-      ...item.data(),
-    })) as Exam[];
+    if (snapshot) {
+      const items = snapshot.docs.map((item) => ({
+        id: item.id,
+        ...item.data(),
+      })) as Exam[];
 
-    if (items.length > 0) {
-      setCachedData(CACHE_KEYS.EXAMS, items);
+      if (items.length > 0) {
+        setCachedData(CACHE_KEYS.EXAMS, items);
+      }
+      return items;
     }
-    return items;
   } catch (err) {
     console.warn('getExams from Firestore error, fallback to cache:', err);
-    return getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []);
   }
+  return getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []);
 }
 
 export async function getExam(
@@ -781,23 +807,27 @@ export function subscribeToExams(
 
 export async function getResults(): Promise<ExamResult[]> {
   try {
-    const snapshot = await getDocs(
-      collection(db, 'results')
+    const fetchPromise = getDocs(collection(db, 'results'));
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 3000)
     );
+    const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
 
-    const items = snapshot.docs.map((item) => ({
-      id: item.id,
-      ...item.data(),
-    })) as ExamResult[];
+    if (snapshot) {
+      const items = snapshot.docs.map((item) => ({
+        id: item.id,
+        ...item.data(),
+      })) as ExamResult[];
 
-    if (items.length > 0) {
-      setCachedData(CACHE_KEYS.RESULTS, items);
+      if (items.length > 0) {
+        setCachedData(CACHE_KEYS.RESULTS, items);
+      }
+      return items;
     }
-    return items;
   } catch (err) {
     console.warn('getResults from Firestore failed, fallback to cache:', err);
-    return getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
   }
+  return getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
 }
 
 export async function getResult(
@@ -1002,6 +1032,11 @@ export function subscribeToResults(
       ) as ExamResult[];
 
       callback(results);
+    },
+    (error) => {
+      console.warn('Realtime results listener offline/warning:', error.message);
+      const cached = getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
+      callback(cached);
     }
   );
 }
@@ -1030,6 +1065,11 @@ export function subscribeToStudentResults(
       ) as ExamResult[];
 
       callback(results);
+    },
+    (error) => {
+      console.warn('Realtime student results listener offline/warning:', error.message);
+      const cached = getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
+      callback(cached.filter(r => r.studentId === studentId));
     }
   );
 }
@@ -1041,12 +1081,19 @@ export function subscribeToStudentResults(
 const SETTINGS_ID = 'teacher';
 
 export async function getTeacherSettings(): Promise<TeacherSettings> {
-  try {
-    const snapshot = await getDoc(
-      doc(db, 'settings', SETTINGS_ID)
-    );
+  const cached = getCachedData<TeacherSettings>(
+    CACHE_KEYS.SETTINGS,
+    DEFAULT_SETTINGS
+  );
 
-    if (snapshot.exists()) {
+  try {
+    const fetchPromise = getDoc(doc(db, 'settings', SETTINGS_ID));
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 2500)
+    );
+    const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (snapshot && snapshot.exists()) {
       const s = {
         ...DEFAULT_SETTINGS,
         ...snapshot.data(),
@@ -1055,10 +1102,10 @@ export async function getTeacherSettings(): Promise<TeacherSettings> {
       return s;
     }
   } catch (err) {
-    console.warn('getTeacherSettings Firestore error:', err);
+    console.warn('getTeacherSettings Firestore info:', err);
   }
 
-  return getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS);
+  return cached;
 }
 
 export async function saveTeacherSettings(

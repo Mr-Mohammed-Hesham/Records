@@ -590,43 +590,26 @@ export default function App() {
 
     async function init() {
       try {
-        setLoading(true);
-        const loadedSettings =
-          await getTeacherSettings();
+        // Start realtime subscription immediately - this instantly serves local cache
+        unsubscribe = subscribeToRealtimeData((data) => {
+          setStudents(data.students);
+          setExams(data.exams);
+          setResults(data.results);
+          setSettings(data.settings);
+          setLoading(false);
+        });
 
-        setSettings(
-          loadedSettings
-        );
-
-        unsubscribe =
-          subscribeToRealtimeData(
-            (data) => {
-              setStudents(
-                data.students
-              );
-
-              setExams(
-                data.exams
-              );
-
-              setResults(
-                data.results
-              );
-
-              setSettings(
-                data.settings
-              );
-              setLoading(false);
-            }
-          );
-
-        setLoading(false);
+        // Background sync for latest teacher settings
+        getTeacherSettings()
+          .then((loadedSettings) => {
+            setSettings((prev) => ({ ...prev, ...loadedSettings }));
+          })
+          .catch((err) => {
+            console.warn('Background settings sync:', err);
+          });
       } catch (err) {
-        console.warn(
-          'Initialization info:',
-          err
-        );
-
+        console.warn('Initialization info:', err);
+      } finally {
         setLoading(false);
       }
     }
@@ -1933,7 +1916,7 @@ export default function App() {
 
         {/* Desktop Sidebar */}
         <aside className="w-64 shrink-0 hidden lg:block">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm border border-slate-200 dark:border-slate-800 sticky top-24 space-y-6 transition-colors">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm border border-slate-200 dark:border-slate-800 sticky top-24 space-y-6 transition-colors max-h-[calc(100vh-7rem)] overflow-y-auto scroll-smooth">
 
             <div className="pb-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl p-0.5 bg-gradient-to-br from-amber-400 via-orange-500 to-amber-600 shadow-md shadow-amber-500/20 shrink-0 overflow-hidden">
@@ -2003,22 +1986,24 @@ export default function App() {
                           );
                         }
                       }}
-                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm transition cursor-pointer ${
+                      className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm transition-all duration-200 cursor-pointer ${
                         isActive
-                          ? 'bg-gradient-to-r from-amber-500/15 to-orange-500/10 text-amber-700 dark:text-amber-400 border-r-4 border-amber-500 font-bold shadow-xs'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 font-medium'
+                          ? 'bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-transparent text-amber-800 dark:text-amber-300 border-r-4 border-amber-500 font-black shadow-sm dark:shadow-none ring-1 ring-amber-500/30'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <Icon
-                          className={`w-4 h-4 ${
+                        <div
+                          className={`p-1.5 rounded-xl transition-colors ${
                             isActive
-                              ? 'text-amber-600 dark:text-amber-400'
-                              : 'text-slate-400'
+                              ? 'bg-amber-500 text-slate-950 shadow-xs shadow-amber-500/40'
+                              : 'text-slate-400 dark:text-slate-500'
                           }`}
-                        />
+                        >
+                          <Icon className="w-4 h-4" />
+                        </div>
 
-                        <span>
+                        <span className={isActive ? 'font-black tracking-tight' : 'font-medium'}>
                           {
                             item.label
                           }
@@ -2032,7 +2017,7 @@ export default function App() {
                           <span
                             className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
                               isActive
-                                ? 'bg-amber-200 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300'
+                                ? 'bg-amber-500 text-slate-950 shadow-xs'
                                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                             }`}
                           >

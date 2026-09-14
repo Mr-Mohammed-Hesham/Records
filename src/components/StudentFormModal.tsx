@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   UserPlus,
@@ -10,9 +10,11 @@ import {
   Mail,
   Hash,
   Check,
+  AlertTriangle,
 } from 'lucide-react';
 import { Student, TeacherSettings } from '../types';
 import { DEFAULT_SETTINGS, UAE_GRADES } from '../services/firebase';
+import { ConfirmModal } from './ConfirmModal';
 
 interface StudentFormModalProps {
   isOpen: boolean;
@@ -55,6 +57,22 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showConfirmClose, setShowConfirmClose] = useState(false);
+
+  // Snapshot of initial values to compute isDirty
+  const [initialSnapshot, setInitialSnapshot] = useState({
+    name: '',
+    studentId: '',
+    grade: '',
+    subjects: [] as string[],
+    isCustomSubject: false,
+    customSubjectText: '',
+    school: '',
+    phone: '',
+    parentPhone: '',
+    email: '',
+    notes: '',
+  });
 
   const configuredGrades =
     settings?.grades && settings.grades.length > 0
@@ -136,35 +154,127 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
       setParentPhone(activeStudent.parentPhone || '');
       setEmail(activeStudent.email || '');
       setNotes(activeStudent.notes || '');
-    } else {
-      setName('');
-      setStudentId(generateNextId());
-      setGrade(gradeList[0] || 'الصف العاشر (Grade 10)');
 
+      setInitialSnapshot({
+        name: activeStudent.name || '',
+        studentId: activeStudent.studentId || '',
+        grade: activeStudent.grade || '',
+        subjects: existingSubjects,
+        isCustomSubject: !!customExistingSubject,
+        customSubjectText: customExistingSubject || '',
+        school: activeStudent.school || '',
+        phone: activeStudent.phone || '',
+        parentPhone: activeStudent.parentPhone || '',
+        email: activeStudent.email || '',
+        notes: activeStudent.notes || '',
+      });
+    } else {
+      const generatedId = generateNextId();
+      const initialGrade = gradeList[0] || 'الصف العاشر (Grade 10)';
       const defaultSubject =
         settings?.defaultSubject ||
         availableSubjects?.[0] ||
         'الفيزياء';
+      const initialSubs = defaultSubject ? [defaultSubject] : [];
 
-      setSubjects(defaultSubject ? [defaultSubject] : []);
-
+      setName('');
+      setStudentId(generatedId);
+      setGrade(initialGrade);
+      setSubjects(initialSubs);
       setIsCustomSubject(false);
       setCustomSubjectText('');
-
       setSchool('');
       setPhone('');
       setParentPhone('');
       setEmail('');
       setNotes('');
+
+      setInitialSnapshot({
+        name: '',
+        studentId: generatedId,
+        grade: initialGrade,
+        subjects: initialSubs,
+        isCustomSubject: false,
+        customSubjectText: '',
+        school: '',
+        phone: '',
+        parentPhone: '',
+        email: '',
+        notes: '',
+      });
     }
 
     setError('');
+    setShowConfirmClose(false);
   }, [
     activeStudent,
     isOpen,
     existingStudents?.length,
     settings,
   ]);
+
+  // Determine if form has unsaved modifications
+  const isDirty = useMemo(() => {
+    if (!isOpen) return false;
+    if (name !== initialSnapshot.name) return true;
+    if (studentId !== initialSnapshot.studentId) return true;
+    if (grade !== initialSnapshot.grade) return true;
+    if (school !== initialSnapshot.school) return true;
+    if (phone !== initialSnapshot.phone) return true;
+    if (parentPhone !== initialSnapshot.parentPhone) return true;
+    if (email !== initialSnapshot.email) return true;
+    if (notes !== initialSnapshot.notes) return true;
+    if (isCustomSubject !== initialSnapshot.isCustomSubject) return true;
+    if (customSubjectText !== initialSnapshot.customSubjectText) return true;
+    if (
+      subjects.length !== initialSnapshot.subjects.length ||
+      subjects.some((s, idx) => s !== initialSnapshot.subjects[idx])
+    ) {
+      return true;
+    }
+    return false;
+  }, [
+    isOpen,
+    name,
+    studentId,
+    grade,
+    school,
+    phone,
+    parentPhone,
+    email,
+    notes,
+    isCustomSubject,
+    customSubjectText,
+    subjects,
+    initialSnapshot,
+  ]);
+
+  // Prevent accidental tab/browser closure if form has unsaved edits
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isOpen && isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isOpen, isDirty]);
+
+  // Safe close handler that checks for unsaved changes
+  const handleRequestClose = () => {
+    if (isDirty) {
+      setShowConfirmClose(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const handleForceClose = () => {
+    setShowConfirmClose(false);
+    onClose();
+  };
 
   if (!isOpen) return null;
 
@@ -280,47 +390,55 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
   };
 
   return (
-    <div 
-      className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden"
-      onClick={onClose}
-    >
-      <div
-        id="student-form-modal"
-        onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-2xl w-full flex flex-col max-h-[92dvh] sm:max-h-[90vh] shadow-2xl border border-slate-200 dark:border-slate-800 text-right overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+    <>
+      <div 
+        className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden"
+        onClick={handleRequestClose}
       >
-        {/* Header */}
-        <div className="shrink-0 p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl">
-              {activeStudent ? (
-                <User className="w-5 h-5" />
-              ) : (
-                <UserPlus className="w-5 h-5" />
-              )}
+        <div
+          id="student-form-modal"
+          onClick={(e) => e.stopPropagation()}
+          className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-2xl w-full flex flex-col max-h-[92dvh] sm:max-h-[90vh] shadow-2xl border border-slate-200 dark:border-slate-800 text-right overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        >
+          {/* Header */}
+          <div className="shrink-0 p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl">
+                {activeStudent ? (
+                  <User className="w-5 h-5" />
+                ) : (
+                  <UserPlus className="w-5 h-5" />
+                )}
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-extrabold text-slate-900 dark:text-white text-base sm:text-lg">
+                    {activeStudent
+                      ? 'تعديل بيانات الطالب'
+                      : 'إضافة طالب جديد'}
+                  </h3>
+                  {isDirty && (
+                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse">
+                      تعديلات غير محفوظة
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  سجل بيانات الطالب (منهج الإمارات - صفوف 1 إلى 12)
+                </p>
+              </div>
             </div>
 
-            <div>
-              <h3 className="font-extrabold text-slate-900 dark:text-white text-base sm:text-lg">
-                {activeStudent
-                  ? 'تعديل بيانات الطالب'
-                  : 'إضافة طالب جديد'}
-              </h3>
-
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                سجل بيانات الطالب (منهج الإمارات - صفوف 1 إلى 12)
-              </p>
-            </div>
+            <button
+              onClick={handleRequestClose}
+              type="button"
+              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-
-          <button
-            onClick={onClose}
-            type="button"
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
         {/* Error */}
         {error && (
@@ -620,7 +738,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
           <div className="shrink-0 p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-sm flex items-center justify-end gap-3 pb-safe">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleRequestClose}
               className="px-4 py-2.5 text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
             >
               إلغاء
@@ -644,5 +762,19 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
         </form>
       </div>
     </div>
+
+    {/* Confirmation dialog for unsaved changes */}
+    <ConfirmModal
+      isOpen={showConfirmClose}
+      title="تنبيه: تعديلات غير محفوظة"
+      message={`هناك بيانات أو تعديلات تم إدخالها لطالب "${name.trim() || 'بدون اسم'}" ولم يتم حفظها بعد. هل أنت متأكد من رغبتك في إغلاق النموذج وتجاهل التعديلات؟`}
+      confirmText="نعم، تجاهل التغييرات وأغلق"
+      cancelText="الرجوع ومتابعة الحفظ"
+      isDestructive={true}
+      onConfirm={handleForceClose}
+      onCancel={() => setShowConfirmClose(false)}
+      onClose={() => setShowConfirmClose(false)}
+    />
+  </>
   );
 };

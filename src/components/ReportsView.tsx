@@ -14,8 +14,22 @@ import {
   GraduationCap,
   TrendingUp,
   Download,
-  Eye
+  Eye,
+  PieChart as PieChartIcon
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Cell,
+  CartesianGrid,
+  PieChart,
+  Pie,
+  Legend
+} from 'recharts';
 import { Student, Exam, ExamResult, TeacherSettings } from '../types';
 import { calculateStudentStats } from '../utils/grading';
 import { 
@@ -92,6 +106,74 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const currentExamResults = useMemo(() => {
     return dateFilteredResults.filter(r => r.examId === selectedExamId);
   }, [dateFilteredResults, selectedExamId]);
+
+  // Grade rating distribution for selected exam (Recharts data)
+  const examRatingDistribution = useMemo(() => {
+    if (!currentExamResults.length) return [];
+    
+    // Default standard rating buckets
+    const ratingBuckets: Record<string, { label: string; count: number; color: string; order: number }> = {
+      'ممتاز مرتفع (A+)': { label: 'A+ ممتاز مرتفع', count: 0, color: '#10b981', order: 1 },
+      'ممتاز (A)': { label: 'A ممتاز', count: 0, color: '#059669', order: 2 },
+      'جيد جداً (B)': { label: 'B جيد جداً', count: 0, color: '#0284c7', order: 3 },
+      'جيد (C)': { label: 'C جيد', count: 0, color: '#f59e0b', order: 4 },
+      'مقبول (D)': { label: 'D مقبول', count: 0, color: '#f97316', order: 5 },
+      'راسب (F)': { label: 'F راسب', count: 0, color: '#ef4444', order: 6 },
+    };
+
+    currentExamResults.forEach(r => {
+      const rating = r.gradeRating || 'غير محدد';
+      if (ratingBuckets[rating]) {
+        ratingBuckets[rating].count += 1;
+      } else {
+        // Look up by partial match or fallback
+        const matchedKey = Object.keys(ratingBuckets).find(k => k.includes(rating) || rating.includes(k));
+        if (matchedKey) {
+          ratingBuckets[matchedKey].count += 1;
+        } else {
+          ratingBuckets[rating] = { label: rating, count: 1, color: '#64748b', order: 99 };
+        }
+      }
+    });
+
+    return Object.values(ratingBuckets)
+      .filter(b => b.count > 0 || ['ممتاز مرتفع (A+)', 'ممتاز (A)', 'جيد جداً (B)', 'جيد (C)', 'مقبول (D)', 'راسب (F)'].includes(b.label))
+      .sort((a, b) => a.order - b.order);
+  }, [currentExamResults]);
+
+  // Pass / Fail distribution for pie chart
+  const examPassFailDistribution = useMemo(() => {
+    if (!currentExamResults.length) return [];
+    const passed = currentExamResults.filter(r => r.passed).length;
+    const failed = currentExamResults.length - passed;
+    return [
+      { name: 'ناجح', value: passed, color: '#10b981' },
+      { name: 'راسب / يحتاج تحسين', value: failed, color: '#f43f5e' },
+    ];
+  }, [currentExamResults]);
+
+  // Score intervals distribution for score bands (e.g., 90-100%, 80-89%, etc.)
+  const examScoreBands = useMemo(() => {
+    if (!currentExamResults.length) return [];
+    const bands = [
+      { range: '90% - 100%', count: 0, color: '#10b981' },
+      { range: '80% - 89%', count: 0, color: '#0ea5e9' },
+      { range: '70% - 79%', count: 0, color: '#f59e0b' },
+      { range: '60% - 69%', count: 0, color: '#f97316' },
+      { range: 'أقل من 60%', count: 0, color: '#ef4444' },
+    ];
+
+    currentExamResults.forEach(r => {
+      const p = r.percentage;
+      if (p >= 90) bands[0].count += 1;
+      else if (p >= 80) bands[1].count += 1;
+      else if (p >= 70) bands[2].count += 1;
+      else if (p >= 60) bands[3].count += 1;
+      else bands[4].count += 1;
+    });
+
+    return bands;
+  }, [currentExamResults]);
 
   // Grade reports
   const gradeStudents = useMemo(() => {
@@ -535,14 +617,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
       {/* 3. Single Exam Report */}
       {reportType === 'single_exam' && currentExam && (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-7 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-4">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-7 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
             <div>
               <h3 className="font-bold text-slate-900 dark:text-white text-lg">
                 تقرير نتائج امتحان: {currentExam.title}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                التاريخ: {currentExam.date} | الدرجة الكلية: {currentExam.totalScore} | درجة النجاح: {currentExam.passScore}
+                التاريخ: {currentExam.date} | الدرجة الكلية: {currentExam.totalScore} | درجة النجاح: {currentExam.passScore} | إجمالي الطلاب المتقدمين: {currentExamResults.length}
               </p>
             </div>
             <button
@@ -553,6 +635,145 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               تصدير نتائج الامتحان إلى Excel
             </button>
           </div>
+
+          {/* Recharts Visual Grade Distribution Section */}
+          {currentExamResults.length > 0 ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-amber-500" />
+                <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">
+                  توزيع درجات الطلاب ونسب النجاح بصرياً (Recharts)
+                </h4>
+              </div>
+
+              {/* Visual Charts Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                {/* 1. Bar Chart: Rating Distribution (A+, A, B, C, D, F) */}
+                <div className="lg:col-span-7 bg-slate-50/80 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      توزيع الطلاب حسب التقدير الأكاديمي
+                    </span>
+                    <span className="text-[11px] font-mono text-slate-400">
+                      إجمالي: {currentExamResults.length} طالب
+                    </span>
+                  </div>
+
+                  <div className="h-64 w-full" dir="ltr">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={examRatingDistribution}
+                        margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" opacity={0.6} />
+                        <XAxis 
+                          dataKey="label" 
+                          tick={{ fontSize: 11, fill: '#64748b' }} 
+                          tickLine={false}
+                          interval={0}
+                        />
+                        <YAxis 
+                          allowDecimals={false} 
+                          tick={{ fontSize: 11, fill: '#64748b' }} 
+                          tickLine={false} 
+                          axisLine={false}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#0f172a',
+                            borderRadius: '12px',
+                            border: 'none',
+                            color: '#fff',
+                            fontSize: '12px',
+                            direction: 'rtl',
+                            textAlign: 'right'
+                          }}
+                          formatter={(value: any) => [`${value} طالب`, 'العدد']}
+                          labelFormatter={(label) => `التقدير: ${label}`}
+                        />
+                        <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                          {examRatingDistribution.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* 2. Pie Chart & Score Bands breakdown */}
+                <div className="lg:col-span-5 bg-slate-50/80 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <PieChartIcon className="w-3.5 h-3.5 text-amber-500" />
+                      نسبة النجاح ونطاقات الدرجات
+                    </span>
+                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                      نجاح {Math.round((currentExamResults.filter(r => r.passed).length / currentExamResults.length) * 100)}%
+                    </span>
+                  </div>
+
+                  <div className="h-44 w-full" dir="ltr">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={examPassFailDistribution}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={45}
+                          outerRadius={70}
+                          paddingAngle={4}
+                          dataKey="value"
+                        >
+                          {examPassFailDistribution.map((entry, index) => (
+                            <Cell key={`pie-cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#0f172a',
+                            borderRadius: '12px',
+                            border: 'none',
+                            color: '#fff',
+                            fontSize: '12px',
+                            direction: 'rtl',
+                            textAlign: 'right'
+                          }}
+                          formatter={(value: any, name: any) => [`${value} طالب (${Math.round((Number(value) / currentExamResults.length) * 100)}%)`, name]}
+                        />
+                        <Legend 
+                          verticalAlign="bottom" 
+                          height={30} 
+                          formatter={(value) => <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 mr-2">{value}</span>}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Percentage bands summary bar */}
+                  <div className="pt-2 border-t border-slate-200/70 dark:border-slate-700/60 space-y-1.5 mt-1">
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
+                      توزيع الشرائح المئوية:
+                    </span>
+                    <div className="grid grid-cols-5 gap-1 text-center">
+                      {examScoreBands.map((band, i) => (
+                        <div key={i} className="p-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700/60">
+                          <div className="text-[10px] text-slate-400 font-medium truncate">{band.range}</div>
+                          <div className="text-xs font-mono font-black" style={{ color: band.color }}>
+                            {band.count}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-6 text-center text-slate-400 text-xs bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+              لا توجد درجات مرصودة لهذا الامتحان بعد لإظهار الرسم البياني.
+            </div>
+          )}
 
           <div className="overflow-x-auto border border-slate-200 dark:border-slate-700/80 rounded-2xl">
             <table className="w-full text-right text-xs">

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, FileSpreadsheet, Save, Calendar, Award, CheckSquare, Layers, BookOpen, Plus } from 'lucide-react';
 import { Exam, ExamType, TeacherSettings } from '../types';
 import { DEFAULT_SETTINGS, UAE_GRADES } from '../services/firebase';
+import { ConfirmModal } from './ConfirmModal';
 
 interface ExamFormModalProps {
   isOpen: boolean;
@@ -33,6 +34,21 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showConfirmClose, setShowConfirmClose] = useState(false);
+
+  // Snapshot for dirty check
+  const [initialSnapshot, setInitialSnapshot] = useState({
+    title: '',
+    subject: '',
+    isCustomSubject: false,
+    customSubjectText: '',
+    grade: '',
+    date: '',
+    totalScore: 20,
+    passScore: 12,
+    type: 'Quiz' as ExamType,
+    notes: '',
+  });
 
   const configuredGrades =
     settings?.grades && settings.grades.length > 0
@@ -50,38 +66,121 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
 
   useEffect(() => {
     if (activeExam) {
-      setTitle(activeExam.title);
       const availableSubjects = settings?.subjects || [];
-      if (availableSubjects.includes(activeExam.subject)) {
-        setSubject(activeExam.subject);
-        setIsCustomSubject(false);
-        setCustomSubjectText('');
-      } else {
-        setSubject(activeExam.subject);
-        setIsCustomSubject(true);
-        setCustomSubjectText(activeExam.subject);
-      }
-      setGrade(activeExam.grade || gradeList[0]);
+      const isCustom = !availableSubjects.includes(activeExam.subject);
+      const sub = activeExam.subject;
+      const gr = activeExam.grade || gradeList[0];
+
+      setTitle(activeExam.title);
+      setSubject(sub);
+      setIsCustomSubject(isCustom);
+      setCustomSubjectText(isCustom ? sub : '');
+      setGrade(gr);
       setDate(activeExam.date);
       setTotalScore(activeExam.totalScore);
       setPassScore(activeExam.passScore);
       setType(activeExam.type);
       setNotes(activeExam.notes || '');
+
+      setInitialSnapshot({
+        title: activeExam.title || '',
+        subject: sub,
+        isCustomSubject: isCustom,
+        customSubjectText: isCustom ? sub : '',
+        grade: gr,
+        date: activeExam.date || '',
+        totalScore: activeExam.totalScore,
+        passScore: activeExam.passScore,
+        type: activeExam.type,
+        notes: activeExam.notes || '',
+      });
     } else {
       const today = new Date().toISOString().split('T')[0];
+      const initialSub = settings?.defaultSubject || settings?.subjects?.[0] || 'الفيزياء';
+      const initialGr = gradeList[0] || 'الصف العاشر (Grade 10)';
+
       setTitle('');
-      setSubject(settings?.defaultSubject || settings?.subjects?.[0] || 'الفيزياء');
+      setSubject(initialSub);
       setIsCustomSubject(false);
       setCustomSubjectText('');
-      setGrade(gradeList[0] || 'الصف العاشر (Grade 10)');
+      setGrade(initialGr);
       setDate(today);
       setTotalScore(20);
       setPassScore(12);
       setType('Quiz');
       setNotes('');
+
+      setInitialSnapshot({
+        title: '',
+        subject: initialSub,
+        isCustomSubject: false,
+        customSubjectText: '',
+        grade: initialGr,
+        date: today,
+        totalScore: 20,
+        passScore: 12,
+        type: 'Quiz',
+        notes: '',
+      });
     }
     setError('');
+    setShowConfirmClose(false);
   }, [activeExam, isOpen, settings]);
+
+  // Compute dirty status
+  const isDirty = useMemo(() => {
+    if (!isOpen) return false;
+    if (title !== initialSnapshot.title) return true;
+    if (subject !== initialSnapshot.subject) return true;
+    if (isCustomSubject !== initialSnapshot.isCustomSubject) return true;
+    if (customSubjectText !== initialSnapshot.customSubjectText) return true;
+    if (grade !== initialSnapshot.grade) return true;
+    if (date !== initialSnapshot.date) return true;
+    if (totalScore !== initialSnapshot.totalScore) return true;
+    if (passScore !== initialSnapshot.passScore) return true;
+    if (type !== initialSnapshot.type) return true;
+    if (notes !== initialSnapshot.notes) return true;
+    return false;
+  }, [
+    isOpen,
+    title,
+    subject,
+    isCustomSubject,
+    customSubjectText,
+    grade,
+    date,
+    totalScore,
+    passScore,
+    type,
+    notes,
+    initialSnapshot,
+  ]);
+
+  // Before unload protection
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isOpen && isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isOpen, isDirty]);
+
+  const handleRequestClose = () => {
+    if (isDirty) {
+      setShowConfirmClose(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const handleForceClose = () => {
+    setShowConfirmClose(false);
+    onClose();
+  };
 
   // When total score changes, auto-suggest pass score (default 60%)
   const handleTotalScoreChange = (val: number) => {
@@ -141,36 +240,44 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
   };
 
   return (
-    <div 
-      className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden"
-      onClick={onClose}
-    >
+    <>
       <div 
-        id="exam-form-modal"
-        onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-xl w-full flex flex-col max-h-[92dvh] sm:max-h-[90vh] shadow-2xl border border-slate-200 dark:border-slate-800 text-right overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden"
+        onClick={handleRequestClose}
       >
-        <div className="shrink-0 p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl">
-              <FileSpreadsheet className="w-5 h-5" />
+        <div 
+          id="exam-form-modal"
+          onClick={(e) => e.stopPropagation()}
+          className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-xl w-full flex flex-col max-h-[92dvh] sm:max-h-[90vh] shadow-2xl border border-slate-200 dark:border-slate-800 text-right overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        >
+          <div className="shrink-0 p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl">
+                <FileSpreadsheet className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-extrabold text-slate-900 dark:text-white text-base sm:text-lg">
+                    {exam ? 'تعديل بيانات الامتحان' : 'تسجيل درجات امتحان جديد'}
+                  </h3>
+                  {isDirty && (
+                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse">
+                      تعديلات غير محفوظة
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  حدد بيانات الامتحان والدرجة الكلية لبدء رصد درجات الطلاب يدوياً
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-extrabold text-slate-900 dark:text-white text-base sm:text-lg">
-                {exam ? 'تعديل بيانات الامتحان' : 'تسجيل درجات امتحان جديد'}
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                حدد بيانات الامتحان والدرجة الكلية لبدء رصد درجات الطلاب يدوياً
-              </p>
-            </div>
+            <button
+              onClick={handleRequestClose}
+              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
         {error && (
           <div className="mx-4 sm:mx-6 mt-4 p-3.5 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs sm:text-sm rounded-xl">
@@ -342,7 +449,7 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
         <div className="shrink-0 p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-sm flex flex-wrap items-center justify-between gap-3 pb-safe">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleRequestClose}
             className="px-4 py-2 text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
           >
             إلغاء
@@ -361,6 +468,20 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
         </div>
       </div>
     </div>
+
+    {/* Unsaved changes confirmation dialog */}
+    <ConfirmModal
+      isOpen={showConfirmClose}
+      title="تنبيه: تعديلات غير محفوظة"
+      message={`هناك بيانات أو تعديلات تم إدخالها في امتحان "${title.trim() || 'بدون عنوان'}" ولم يتم حفظها بعد. هل أنت متأكد من رغبتك في إغلاق النموذج وتجاهل التعديلات؟`}
+      confirmText="نعم، تجاهل التغييرات وأغلق"
+      cancelText="الرجوع ومتابعة الحفظ"
+      isDestructive={true}
+      onConfirm={handleForceClose}
+      onCancel={() => setShowConfirmClose(false)}
+      onClose={() => setShowConfirmClose(false)}
+    />
+  </>
   );
 };
 
