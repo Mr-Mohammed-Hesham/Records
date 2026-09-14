@@ -47,6 +47,7 @@ import {
   DEFAULT_SETTINGS,
   getStoredTeacherSession,
   saveTeacherSession,
+  clearTeacherSession,
   isAllowedEmail,
 } from './services/firebase';
 
@@ -218,7 +219,10 @@ export default function App() {
             setCurrentUser(user);
           } else if (!user) {
             const fallback = getStoredTeacherSession();
-            setCurrentUser(fallback as any);
+            setCurrentUser(fallback ? (fallback as any) : null);
+          } else {
+            clearTeacherSession();
+            setCurrentUser(null);
           }
           setAuthInitialized(true);
         }
@@ -229,15 +233,7 @@ export default function App() {
 
   const isAuthorized =
     !!currentUser &&
-    (OFFICIAL_EMAILS.some(
-      (email) =>
-        email.toLowerCase() ===
-        (
-          currentUser.email || ''
-        )
-          .trim()
-          .toLowerCase()
-    ) || (currentUser as any)?.isVerifiedTeacher);
+    isAllowedEmail(currentUser.email);
 
   /* =======================================================
      MODALS
@@ -1477,14 +1473,18 @@ export default function App() {
         const user =
           await signInWithGoogle();
 
-        addToast(
-          `مرحباً بك! تم تسجيل الدخول: ${
-            user.displayName ||
-            user.email ||
-            ''
-          }`,
-          'success'
-        );
+        if (user && isAllowedEmail(user.email)) {
+          saveTeacherSession(user);
+          setCurrentUser(user);
+          addToast(
+            `مرحباً بك! تم تسجيل الدخول: ${
+              user.displayName ||
+              user.email ||
+              ''
+            }`,
+            'success'
+          );
+        }
       } catch (err: any) {
         if (
           err?.code !==
@@ -1506,16 +1506,23 @@ export default function App() {
   const handleGoogleLogout =
     async () => {
       try {
+        clearTeacherSession();
         await signOutTeacher();
-
-        addToast(
-          'تم تسجيل الخروج بنجاح',
-          'info'
-        );
       } catch (err) {
         console.error(
           'Logout error:',
           err
+        );
+      } finally {
+        clearTeacherSession();
+        setCurrentUser(null);
+        setConfirmModalConfig((prev) => ({
+          ...prev,
+          isOpen: false,
+        }));
+        addToast(
+          'تم تسجيل الخروج بنجاح',
+          'info'
         );
       }
     };
@@ -1525,7 +1532,7 @@ export default function App() {
       isOpen: true,
       title: 'تأكيد تسجيل الخروج',
       message:
-        'هل أنت متأكد من رغبتك في تسجيل الخروج من حسابك؟ يمكنك تسجيل الدخول مجددًا في أي وقت.',
+        'هل أنت متأكد من رغبتك في تسجيل الخروج من حسابك؟ يمكنك تسجيل الدخول مجددًا في أي وقت عبر حساب Google الرسمي.',
       confirmText: 'تسجيل الخروج',
       cancelText: 'إلغاء',
       isDestructive: true,
@@ -1683,13 +1690,15 @@ export default function App() {
       <LoginPage
         currentUser={currentUser}
         onAuthorizedLogin={(user) => {
-          if (user) {
+          if (user && isAllowedEmail(user.email)) {
             saveTeacherSession(user);
             setCurrentUser(user);
           } else {
-            handleGoogleLogin();
+            clearTeacherSession();
+            setCurrentUser(null);
           }
         }}
+        onSignOut={handleGoogleLogout}
       />
     );
   }
@@ -1894,13 +1903,15 @@ export default function App() {
                 </span>
 
                 <button
+                  id="btn-header-logout"
                   onClick={
                     requestGoogleLogout
                   }
-                  className="text-slate-400 hover:text-red-500 transition-colors p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer shrink-0"
-                  title="تسجيل الخروج"
+                  className="px-2 py-1 text-rose-600 dark:text-rose-400 hover:text-white hover:bg-rose-600 dark:hover:bg-rose-600 border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 dark:bg-rose-950/40 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shrink-0 text-xs font-bold active:scale-95 shadow-xs"
+                  title="تسجيل الخروج من الحساب"
                 >
-                  <LogOut className="w-3.5 h-3.5" />
+                  <LogOut className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden sm:inline">تسجيل الخروج</span>
                 </button>
               </div>
             )}
@@ -2058,6 +2069,17 @@ export default function App() {
                   </p>
                 </div>
               </div>
+
+              <button
+                id="btn-sidebar-logout"
+                type="button"
+                onClick={requestGoogleLogout}
+                className="w-full mt-3 py-2 px-3 flex items-center justify-center gap-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:text-white bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 dark:hover:bg-rose-600 border border-rose-200/60 dark:border-rose-900/40 transition-all cursor-pointer shadow-xs active:scale-98"
+                title="تسجيل الخروج من المنصة"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>تسجيل الخروج</span>
+              </button>
             </div>
           </div>
         </aside>
@@ -2205,14 +2227,15 @@ export default function App() {
 
                 {currentUser && (
                   <button
+                    id="btn-mobile-logout"
                     onClick={() => {
                       setMobileMenuOpen(false);
                       requestGoogleLogout();
                     }}
-                    className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                    className="w-full py-2.5 px-4 text-rose-600 dark:text-rose-400 hover:text-white bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 dark:hover:bg-rose-600 border border-rose-200/60 dark:border-rose-900/40 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98"
                   >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>خروج</span>
+                    <LogOut className="w-4 h-4" />
+                    <span>تسجيل الخروج</span>
                   </button>
                 )}
               </div>
@@ -2406,6 +2429,8 @@ export default function App() {
               allResults={
                 results
               }
+              currentUser={currentUser}
+              onLogout={requestGoogleLogout}
               onUpdateSettings={
                 handleUpdateSettings
               }

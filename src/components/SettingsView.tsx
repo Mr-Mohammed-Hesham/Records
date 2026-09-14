@@ -13,7 +13,10 @@ import {
   RefreshCw, 
   Check, 
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  LogOut,
+  ShieldCheck,
+  LockKeyhole
 } from 'lucide-react';
 import { TeacherSettings, GradingScaleItem, Student, Exam, ExamResult } from '../types';
 import { DEFAULT_SETTINGS, saveTeacherSettings } from '../services/firebase';
@@ -24,6 +27,8 @@ interface SettingsViewProps {
   students: Student[];
   exams: Exam[];
   allResults: ExamResult[];
+  currentUser?: any;
+  onLogout?: () => void;
   onUpdateSettings: (newSettings: TeacherSettings) => Promise<void>;
   onSeedSampleData: () => Promise<void>;
   onClearAllData: () => Promise<void>;
@@ -35,6 +40,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   students,
   exams,
   allResults,
+  currentUser,
+  onLogout,
   onUpdateSettings,
   onSeedSampleData,
   onClearAllData,
@@ -519,6 +526,44 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Account & Security Section */}
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+        <h3 className="font-bold text-slate-900 text-base pb-3 border-b border-slate-100 flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <LockKeyhole className="w-4 h-4 text-amber-600" />
+            الأمان والحساب الأكاديمي
+          </span>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            Google SSO محمي
+          </span>
+        </h3>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+          <div className="space-y-1">
+            <div className="text-xs text-slate-500">حساب Google النشط حالياً:</div>
+            <div className="font-mono font-bold text-slate-900 text-sm dir-ltr text-right sm:text-left">
+              {currentUser?.email || 'mr.mohamed.hesham93@gmail.com'}
+            </div>
+            <div className="text-[11px] text-slate-500">
+              تسجيل الدخول مقتصر على حسابات الأستاذ محمد هشام الرسمية المعتمدة فقط.
+            </div>
+          </div>
+
+          {onLogout && (
+            <button
+              id="btn-settings-logout"
+              type="button"
+              onClick={onLogout}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 hover:border-rose-600 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-xs active:scale-95"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>تسجيل الخروج من الحساب</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

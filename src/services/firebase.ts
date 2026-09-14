@@ -276,10 +276,15 @@ export function getStoredTeacherSession(): VerifiedTeacherUser | null {
   return null;
 }
 
-export function saveTeacherSession(user: { email?: string | null; displayName?: string | null; uid?: string; photoURL?: string | null }): VerifiedTeacherUser {
+export function saveTeacherSession(user: { email?: string | null; displayName?: string | null; uid?: string; photoURL?: string | null }): VerifiedTeacherUser | null {
+  const cleanEmail = (user.email || '').trim().toLowerCase();
+  if (!cleanEmail || !isAllowedEmail(cleanEmail)) {
+    return null;
+  }
+
   const verifiedUser: VerifiedTeacherUser = {
     uid: user.uid || 'teacher-admin-uid',
-    email: (user.email || 'mohammedhesham872@gmail.com').trim().toLowerCase(),
+    email: cleanEmail,
     displayName: user.displayName || 'Mr. Mohamed Hesham',
     photoURL: user.photoURL || null,
     isVerifiedTeacher: true,
@@ -298,6 +303,8 @@ export function clearTeacherSession(): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.removeItem(TEACHER_SESSION_STORAGE_KEY);
+    // Also remove any stale auth items
+    sessionStorage.removeItem(TEACHER_SESSION_STORAGE_KEY);
   } catch {}
 }
 
@@ -311,6 +318,7 @@ export async function signOutTeacher(): Promise<void> {
   } catch (err) {
     console.warn('Firebase signOut error:', err);
   }
+  clearTeacherSession();
 }
 
 /**
