@@ -11,9 +11,18 @@ import {
   Hash,
   Check,
   AlertTriangle,
+  Calendar,
+  Layers,
+  Compass,
 } from 'lucide-react';
 import { Student, TeacherSettings } from '../types';
-import { DEFAULT_SETTINGS, UAE_GRADES } from '../services/firebase';
+import { 
+  DEFAULT_SETTINGS, 
+  UAE_GRADES,
+  ACADEMIC_YEARS,
+  ACADEMIC_TERMS,
+  ACADEMIC_TRACKS,
+} from '../services/firebase';
 import { ConfirmModal } from './ConfirmModal';
 
 interface StudentFormModalProps {
@@ -43,6 +52,9 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
   const [name, setName] = useState('');
   const [studentId, setStudentId] = useState('');
   const [grade, setGrade] = useState('');
+  const [academicYear, setAcademicYear] = useState(ACADEMIC_YEARS[0] || '2025 - 2026');
+  const [term, setTerm] = useState(ACADEMIC_TERMS[0] || 'الفصل الأول');
+  const [track, setTrack] = useState(ACADEMIC_TRACKS[0] || 'عام');
 
   // Multiple subjects support
   const [subjects, setSubjects] = useState<string[]>([]);
@@ -64,6 +76,9 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
     name: '',
     studentId: '',
     grade: '',
+    academicYear: '',
+    term: '',
+    track: '',
     subjects: [] as string[],
     isCustomSubject: false,
     customSubjectText: '',
@@ -155,10 +170,21 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
       setEmail(activeStudent.email || '');
       setNotes(activeStudent.notes || '');
 
+      const loadedYear = activeStudent.academicYear || ACADEMIC_YEARS[0] || '2025 - 2026';
+      const loadedTerm = activeStudent.term || ACADEMIC_TERMS[0] || 'الفصل الأول';
+      const loadedTrack = activeStudent.track || ACADEMIC_TRACKS[0] || 'عام';
+
+      setAcademicYear(loadedYear);
+      setTerm(loadedTerm);
+      setTrack(loadedTrack);
+
       setInitialSnapshot({
         name: activeStudent.name || '',
         studentId: activeStudent.studentId || '',
         grade: activeStudent.grade || '',
+        academicYear: loadedYear,
+        term: loadedTerm,
+        track: loadedTrack,
         subjects: existingSubjects,
         isCustomSubject: !!customExistingSubject,
         customSubjectText: customExistingSubject || '',
@@ -176,10 +202,16 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
         availableSubjects?.[0] ||
         'الفيزياء';
       const initialSubs = defaultSubject ? [defaultSubject] : [];
+      const defaultYear = ACADEMIC_YEARS[0] || '2025 - 2026';
+      const defaultTerm = ACADEMIC_TERMS[0] || 'الفصل الأول';
+      const defaultTrack = ACADEMIC_TRACKS[0] || 'عام';
 
       setName('');
       setStudentId(generatedId);
       setGrade(initialGrade);
+      setAcademicYear(defaultYear);
+      setTerm(defaultTerm);
+      setTrack(defaultTrack);
       setSubjects(initialSubs);
       setIsCustomSubject(false);
       setCustomSubjectText('');
@@ -193,6 +225,9 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
         name: '',
         studentId: generatedId,
         grade: initialGrade,
+        academicYear: defaultYear,
+        term: defaultTerm,
+        track: defaultTrack,
         subjects: initialSubs,
         isCustomSubject: false,
         customSubjectText: '',
@@ -219,6 +254,9 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
     if (name !== initialSnapshot.name) return true;
     if (studentId !== initialSnapshot.studentId) return true;
     if (grade !== initialSnapshot.grade) return true;
+    if (academicYear !== initialSnapshot.academicYear) return true;
+    if (term !== initialSnapshot.term) return true;
+    if (track !== initialSnapshot.track) return true;
     if (school !== initialSnapshot.school) return true;
     if (phone !== initialSnapshot.phone) return true;
     if (parentPhone !== initialSnapshot.parentPhone) return true;
@@ -238,6 +276,9 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
     name,
     studentId,
     grade,
+    academicYear,
+    term,
+    track,
     school,
     phone,
     parentPhone,
@@ -356,6 +397,9 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
           name: name.trim(),
           studentId: studentId.trim(),
           grade: grade.trim(),
+          academicYear: academicYear.trim(),
+          term: term.trim(),
+          track: track.trim(),
           group: '',
 
           // Backward-compatible primary subject
@@ -529,6 +573,75 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                 </select>
 
                 <BookOpen className="w-4 h-4 text-slate-400 absolute right-3 top-3.5 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Academic Info Dropdowns: Academic Year, Term, and Track */}
+            <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-amber-500/5 dark:bg-amber-500/[0.03] p-3.5 rounded-2xl border border-amber-500/20">
+              {/* Academic Year */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-amber-500" />
+                  <span>السنة الدراسية</span>
+                </label>
+                <div className="relative">
+                  <select
+                    id="student-academic-year-select"
+                    value={academicYear}
+                    onChange={(e) => setAcademicYear(e.target.value)}
+                    className="w-full pr-8 pl-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer"
+                  >
+                    {ACADEMIC_YEARS.map((yr) => (
+                      <option key={yr} value={yr}>
+                        {yr}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Term (أول - ثاني - ثالث) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-amber-500" />
+                  <span>الفصل الدراسي</span>
+                </label>
+                <div className="relative">
+                  <select
+                    id="student-term-select"
+                    value={term}
+                    onChange={(e) => setTerm(e.target.value)}
+                    className="w-full pr-8 pl-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer"
+                  >
+                    {ACADEMIC_TERMS.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Track (عام - متقدم) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                  <Compass className="w-3.5 h-3.5 text-amber-500" />
+                  <span>المسار</span>
+                </label>
+                <div className="relative">
+                  <select
+                    id="student-track-select"
+                    value={track}
+                    onChange={(e) => setTrack(e.target.value)}
+                    className="w-full pr-8 pl-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer"
+                  >
+                    {ACADEMIC_TRACKS.map((tr) => (
+                      <option key={tr} value={tr}>
+                        {tr === 'عام' ? 'عام (General)' : tr === 'متقدم' ? 'متقدم (Advanced)' : tr}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 

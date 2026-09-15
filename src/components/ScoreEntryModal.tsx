@@ -115,6 +115,9 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
       const matchesGrade =
         !exam.grade || student.grade === exam.grade;
 
+      const matchesTrack =
+        !exam.track || !student.track || student.track === exam.track;
+
       const studentSubjects = getStudentSubjects(student);
       const hasNoSubjectData = studentSubjects.length === 0;
 
@@ -122,7 +125,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
         hasNoSubjectData ||
         studentSubjects.includes(exam.subject);
 
-      return matchesGrade && matchesSubject;
+      return matchesGrade && matchesTrack && matchesSubject;
     });
 
     const relevantStudents = showAllStudents
@@ -771,21 +774,49 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                   {exam.grade}
                 </span>
 
+                {exam.track && (
+                  <span className={`px-2.5 py-0.5 text-xs font-bold rounded-lg border ${
+                    exam.track === 'متقدم'
+                      ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+                      : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                  }`}>
+                    مسار {exam.track}
+                  </span>
+                )}
+
+                {exam.term && (
+                  <span className="px-2.5 py-0.5 text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg border border-slate-200 dark:border-slate-700">
+                    {exam.term}
+                  </span>
+                )}
+
                 <span className="px-2.5 py-0.5 text-xs font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 rounded-lg border border-amber-500/20">
                   {exam.subject}
                 </span>
               </div>
 
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                الدرجة الكلية:{' '}
-                <strong className="text-slate-800 dark:text-slate-200 font-mono">
-                  {exam.totalScore}
-                </strong>{' '}
-                | درجة النجاح:{' '}
-                <strong className="text-emerald-600 dark:text-emerald-400 font-mono">
-                  {exam.passScore}
-                </strong>{' '}
-                | التاريخ: {exam.date}
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-2">
+                <span>
+                  الدرجة الكلية:{' '}
+                  <strong className="text-slate-800 dark:text-slate-200 font-mono">
+                    {exam.totalScore}
+                  </strong>
+                </span>
+                <span>|</span>
+                <span>
+                  درجة النجاح:{' '}
+                  <strong className="text-emerald-600 dark:text-emerald-400 font-mono">
+                    {exam.passScore}
+                  </strong>
+                </span>
+                {exam.academicYear && (
+                  <>
+                    <span>|</span>
+                    <span>السنة: <strong className="text-slate-700 dark:text-slate-300 font-mono">{exam.academicYear}</strong></span>
+                  </>
+                )}
+                <span>|</span>
+                <span>التاريخ: {exam.date}</span>
               </p>
             </div>
           </div>

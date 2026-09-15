@@ -14,6 +14,11 @@ export interface Student {
   grade: string; // e.g. الأول الثانوي
   group: string; // e.g. مجموعة A
 
+  // الحقول الأكاديمية الجديدة
+  academicYear?: string; // e.g. 2025 - 2026
+  term?: string; // e.g. الفصل الأول / الفصل الثاني / الفصل الثالث
+  track?: string; // e.g. عام / متقدم
+
   // المادة القديمة - نحافظ عليها للتوافق مع البيانات الموجودة
   subject: string;
 
@@ -44,6 +49,9 @@ export interface Exam {
   title: string;
   subject: string;
   grade: string;
+  academicYear?: string;
+  term?: string;
+  track?: string;
   group: string;
   date: string;
   totalScore: number;

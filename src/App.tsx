@@ -78,6 +78,7 @@ import { ExamFormModal } from './components/ExamFormModal';
 import { ScoreEntryModal } from './components/ScoreEntryModal';
 import { QuickSearchModal } from './components/QuickSearchModal';
 import { ConfirmModal } from './components/ConfirmModal';
+import { Footer } from './components/Footer';
 
 import {
   ToastContainer,
@@ -2447,6 +2448,9 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* Global Platform Footer */}
+      <Footer />
 
       {/* =================================================
           MODALS

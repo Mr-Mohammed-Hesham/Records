@@ -187,19 +187,39 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
                 {/* Card Top */}
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <span className="px-2.5 py-0.5 text-[11px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 rounded-lg border border-amber-500/20">
                         {exam.type}
                       </span>
                       <span className="px-2.5 py-0.5 text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg">
                         {exam.grade}
                       </span>
+                      {exam.track && (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                          exam.track === 'متقدم'
+                            ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+                            : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                        }`}>
+                          مسار {exam.track}
+                        </span>
+                      )}
+                      {exam.term && (
+                        <span className="px-2 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                          {exam.term}
+                        </span>
+                      )}
                     </div>
                     <h3 className="font-extrabold text-slate-900 dark:text-white text-base mt-2">
                       {exam.title}
                     </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-2">
                       <span>المادة: <strong className="text-slate-700 dark:text-slate-300">{exam.subject}</strong></span>
+                      {exam.academicYear && (
+                        <>
+                          <span>•</span>
+                          <span className="text-slate-400 font-mono text-[11px]">{exam.academicYear}</span>
+                        </>
+                      )}
                       <span>•</span>
                       <span className="font-mono">{exam.date}</span>
                     </p>

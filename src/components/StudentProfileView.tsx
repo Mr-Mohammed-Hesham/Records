@@ -217,8 +217,30 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
 
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 flex flex-wrap items-center gap-3">
                 <span>الصف: <strong className="text-slate-700 dark:text-slate-200">{student.grade}</strong></span>
-                <span>•</span>
-                <span>المجموعة: <strong className="text-slate-700 dark:text-slate-200">{student.group}</strong></span>
+                {student.track && (
+                  <>
+                    <span>•</span>
+                    <span>المسار: <strong className="text-amber-600 dark:text-amber-400 font-bold">{student.track}</strong></span>
+                  </>
+                )}
+                {student.term && (
+                  <>
+                    <span>•</span>
+                    <span>الفصل: <strong className="text-slate-700 dark:text-slate-200">{student.term}</strong></span>
+                  </>
+                )}
+                {student.academicYear && (
+                  <>
+                    <span>•</span>
+                    <span>السنة الدراسية: <strong className="text-slate-700 dark:text-slate-200">{student.academicYear}</strong></span>
+                  </>
+                )}
+                {student.group && (
+                  <>
+                    <span>•</span>
+                    <span>المجموعة: <strong className="text-slate-700 dark:text-slate-200">{student.group}</strong></span>
+                  </>
+                )}
                 <span>•</span>
                 <span>المادة: <strong className="text-slate-700 dark:text-slate-200">{student.subject}</strong></span>
                 {student.school && (

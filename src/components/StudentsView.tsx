@@ -501,12 +501,31 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                     <h4 className="font-extrabold text-slate-900 dark:text-slate-50 text-base truncate hover:text-amber-500 dark:hover:text-amber-400 transition-colors">
                       {student.name}
                     </h4>
-                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                       <span className="font-mono font-bold text-slate-700 dark:text-slate-200 text-[11px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                         #{student.studentId}
                       </span>
                       <span>•</span>
                       <span className="font-medium text-slate-700 dark:text-slate-300">{student.grade}</span>
+                      {student.track && (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                          student.track === 'متقدم'
+                            ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+                            : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                        }`}>
+                          مسار {student.track}
+                        </span>
+                      )}
+                      {student.term && (
+                        <span className="px-2 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                          {student.term}
+                        </span>
+                      )}
+                      {student.academicYear && (
+                        <span className="text-[10px] text-slate-400">
+                          ({student.academicYear})
+                        </span>
+                      )}
                       {student.group && (
                         <>
                           <span>•</span>
@@ -706,9 +725,27 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                         </div>
                       </td>
 
-                      {/* Grade */}
+                      {/* Grade & Track */}
                       <td className="py-3.5 px-3 font-medium text-slate-700 dark:text-slate-200">
-                        {student.grade}
+                        <div>{student.grade}</div>
+                        {(student.track || student.term) && (
+                          <div className="flex flex-wrap items-center gap-1 mt-1">
+                            {student.track && (
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                                student.track === 'متقدم'
+                                  ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+                                  : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                              }`}>
+                                {student.track}
+                              </span>
+                            )}
+                            {student.term && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                {student.term}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* Group */}

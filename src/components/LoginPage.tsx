@@ -4,8 +4,7 @@ import {
   AlertTriangle, 
   Sparkles,
   LogOut,
-  RefreshCw,
-  LockKeyhole
+  RefreshCw
 } from 'lucide-react';
 import { 
   signInWithGoogle, 
@@ -140,24 +139,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             </p>
           </div>
 
-          {/* Security Notice Card */}
-          <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-right space-y-2">
-            <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
-              <LockKeyhole className="w-4 h-4 shrink-0" />
-              <span>تسجيل دخول موحد وآمن (Google SSO)</span>
-            </div>
-            <p className="text-[12px] text-slate-300 leading-relaxed">
-              تم قفل تسجيل الدخول بالبريد وكلمة المرور وحصر الوصول حصرياً عبر حساب Google الرسمي للأستاذ محمد هشام لحماية بيانات الطلاب ومنع أي وصول غير مصرح به.
-            </p>
-            <div className="pt-2 border-t border-amber-500/20 flex flex-wrap gap-1.5">
-              {OFFICIAL_EMAILS.slice(0, 2).map((em) => (
-                <span key={em} className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-800/90 text-amber-300 border border-amber-500/30 dir-ltr">
-                  {em}
-                </span>
-              ))}
-            </div>
-          </div>
-
           {/* Error notice */}
           {error && (
             <div className="mb-5 p-3.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-200 text-xs flex items-start gap-2.5 leading-relaxed">
@@ -190,13 +171,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </button>
 
           {/* Security Guarantee Footer */}
-          <div className="mt-6 pt-5 border-t border-slate-800/80 space-y-2 text-center">
+          <div className="mt-6 pt-5 border-t border-slate-800/80 space-y-1.5 text-center">
             <div className="flex items-center justify-center gap-2 text-[11px] text-emerald-400 font-semibold">
               <ShieldCheck className="w-4 h-4" />
-              <span>محمي بالكامل ببروتوكول Google Identity Services & Firebase</span>
+              <span>تسجيل دخول رسمي ومحمي للأستاذ محمد هشام</span>
             </div>
             <p className="text-[10px] text-slate-500">
-              تم إلغاء الدخول بكلمات المرور العادية لتعزيز أمان المنصة
+              Google SSO Verified Authentication
             </p>
           </div>
         </div>

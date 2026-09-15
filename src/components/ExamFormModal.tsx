@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, FileSpreadsheet, Save, Calendar, Award, CheckSquare, Layers, BookOpen, Plus } from 'lucide-react';
+import { X, FileSpreadsheet, Save, Calendar, Award, CheckSquare, Layers, BookOpen, Plus, Compass } from 'lucide-react';
 import { Exam, ExamType, TeacherSettings } from '../types';
-import { DEFAULT_SETTINGS, UAE_GRADES } from '../services/firebase';
+import { 
+  DEFAULT_SETTINGS, 
+  UAE_GRADES,
+  ACADEMIC_YEARS,
+  ACADEMIC_TERMS,
+  ACADEMIC_TRACKS,
+} from '../services/firebase';
 import { ConfirmModal } from './ConfirmModal';
 
 interface ExamFormModalProps {
@@ -27,6 +33,9 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
   const [isCustomSubject, setIsCustomSubject] = useState(false);
   const [customSubjectText, setCustomSubjectText] = useState('');
   const [grade, setGrade] = useState('');
+  const [academicYear, setAcademicYear] = useState(ACADEMIC_YEARS[0] || '2025 - 2026');
+  const [term, setTerm] = useState(ACADEMIC_TERMS[0] || 'الفصل الأول');
+  const [track, setTrack] = useState(ACADEMIC_TRACKS[0] || 'عام');
   const [date, setDate] = useState('');
   const [totalScore, setTotalScore] = useState<number>(20);
   const [passScore, setPassScore] = useState<number>(12);
@@ -43,6 +52,9 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
     isCustomSubject: false,
     customSubjectText: '',
     grade: '',
+    academicYear: '',
+    term: '',
+    track: '',
     date: '',
     totalScore: 20,
     passScore: 12,
@@ -70,12 +82,18 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
       const isCustom = !availableSubjects.includes(activeExam.subject);
       const sub = activeExam.subject;
       const gr = activeExam.grade || gradeList[0];
+      const loadedYear = activeExam.academicYear || ACADEMIC_YEARS[0] || '2025 - 2026';
+      const loadedTerm = activeExam.term || ACADEMIC_TERMS[0] || 'الفصل الأول';
+      const loadedTrack = activeExam.track || ACADEMIC_TRACKS[0] || 'عام';
 
       setTitle(activeExam.title);
       setSubject(sub);
       setIsCustomSubject(isCustom);
       setCustomSubjectText(isCustom ? sub : '');
       setGrade(gr);
+      setAcademicYear(loadedYear);
+      setTerm(loadedTerm);
+      setTrack(loadedTrack);
       setDate(activeExam.date);
       setTotalScore(activeExam.totalScore);
       setPassScore(activeExam.passScore);
@@ -88,6 +106,9 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
         isCustomSubject: isCustom,
         customSubjectText: isCustom ? sub : '',
         grade: gr,
+        academicYear: loadedYear,
+        term: loadedTerm,
+        track: loadedTrack,
         date: activeExam.date || '',
         totalScore: activeExam.totalScore,
         passScore: activeExam.passScore,
@@ -98,12 +119,18 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
       const today = new Date().toISOString().split('T')[0];
       const initialSub = settings?.defaultSubject || settings?.subjects?.[0] || 'الفيزياء';
       const initialGr = gradeList[0] || 'الصف العاشر (Grade 10)';
+      const defaultYear = ACADEMIC_YEARS[0] || '2025 - 2026';
+      const defaultTerm = ACADEMIC_TERMS[0] || 'الفصل الأول';
+      const defaultTrack = ACADEMIC_TRACKS[0] || 'عام';
 
       setTitle('');
       setSubject(initialSub);
       setIsCustomSubject(false);
       setCustomSubjectText('');
       setGrade(initialGr);
+      setAcademicYear(defaultYear);
+      setTerm(defaultTerm);
+      setTrack(defaultTrack);
       setDate(today);
       setTotalScore(20);
       setPassScore(12);
@@ -116,6 +143,9 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
         isCustomSubject: false,
         customSubjectText: '',
         grade: initialGr,
+        academicYear: defaultYear,
+        term: defaultTerm,
+        track: defaultTrack,
         date: today,
         totalScore: 20,
         passScore: 12,
@@ -135,6 +165,9 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
     if (isCustomSubject !== initialSnapshot.isCustomSubject) return true;
     if (customSubjectText !== initialSnapshot.customSubjectText) return true;
     if (grade !== initialSnapshot.grade) return true;
+    if (academicYear !== initialSnapshot.academicYear) return true;
+    if (term !== initialSnapshot.term) return true;
+    if (track !== initialSnapshot.track) return true;
     if (date !== initialSnapshot.date) return true;
     if (totalScore !== initialSnapshot.totalScore) return true;
     if (passScore !== initialSnapshot.passScore) return true;
@@ -148,6 +181,9 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
     isCustomSubject,
     customSubjectText,
     grade,
+    academicYear,
+    term,
+    track,
     date,
     totalScore,
     passScore,
@@ -220,6 +256,9 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
           title: title.trim(),
           subject: finalSubject,
           grade: grade.trim(),
+          academicYear: academicYear.trim(),
+          term: term.trim(),
+          track: track.trim(),
           group: '', // Groups removed per user request
           date: date || new Date().toISOString().split('T')[0],
           totalScore: Number(totalScore),
@@ -358,6 +397,69 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
                   <option key={g} value={g}>{g}</option>
                 ))}
               </select>
+            </div>
+
+            {/* Academic Info Dropdowns: Academic Year, Term, and Track */}
+            <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-amber-500/5 dark:bg-amber-500/[0.03] p-3.5 rounded-2xl border border-amber-500/20">
+              {/* Academic Year */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-amber-500" />
+                  <span>السنة الدراسية</span>
+                </label>
+                <select
+                  id="exam-academic-year-select"
+                  value={academicYear}
+                  onChange={(e) => setAcademicYear(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer"
+                >
+                  {ACADEMIC_YEARS.map((yr) => (
+                    <option key={yr} value={yr}>
+                      {yr}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Term (أول - ثاني - ثالث) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-amber-500" />
+                  <span>الفصل الدراسي</span>
+                </label>
+                <select
+                  id="exam-term-select"
+                  value={term}
+                  onChange={(e) => setTerm(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer"
+                >
+                  {ACADEMIC_TERMS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Track (عام - متقدم) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                  <Compass className="w-3.5 h-3.5 text-amber-500" />
+                  <span>المسار</span>
+                </label>
+                <select
+                  id="exam-track-select"
+                  value={track}
+                  onChange={(e) => setTrack(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer"
+                >
+                  {ACADEMIC_TRACKS.map((tr) => (
+                    <option key={tr} value={tr}>
+                      {tr === 'عام' ? 'عام (General)' : tr === 'متقدم' ? 'متقدم (Advanced)' : tr}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Exam Type */}
