@@ -867,6 +867,19 @@ export default function App() {
     try {
       const targetId = examId || (examToEdit ? examToEdit.id : undefined);
 
+      // Verify no duplicate exam name exists (ignoring current exam if updating)
+      const trimmedTitle = examData.title.trim();
+      const duplicate = exams.find(
+        (e) => (!targetId || e.id !== targetId) && e.title.trim().toLowerCase() === trimmedTitle.toLowerCase()
+      );
+      if (duplicate) {
+        addToast(
+          `عذراً، اسم الامتحان "${trimmedTitle}" غير متاح؛ يوجد امتحان مسجل مسبقاً بهذا الاسم!`,
+          'error'
+        );
+        throw new Error(`اسم الامتحان "${trimmedTitle}" مسجل مسبقاً وغير متاح`);
+      }
+
       if (targetId) {
         await updateExam(
           targetId,
@@ -2499,6 +2512,9 @@ export default function App() {
         }
         examToEdit={
           examToEdit
+        }
+        existingExams={
+          exams
         }
         settings={
           settings

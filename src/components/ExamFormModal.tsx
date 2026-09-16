@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, FileSpreadsheet, Save, Calendar, Award, CheckSquare, Layers, BookOpen, Plus, Compass } from 'lucide-react';
+import { X, FileSpreadsheet, Save, Calendar, Award, CheckSquare, Layers, BookOpen, Plus, Compass, AlertTriangle } from 'lucide-react';
 import { Exam, ExamType, TeacherSettings } from '../types';
 import { 
   DEFAULT_SETTINGS, 
@@ -14,6 +14,7 @@ interface ExamFormModalProps {
   isOpen: boolean;
   exam?: Exam | null; // If editing
   examToEdit?: Exam | null;
+  existingExams?: Exam[];
   settings?: TeacherSettings;
   onClose: () => void;
   onSave: (examData: Omit<Exam, 'id'>, examId?: string, openGrading?: boolean) => Promise<void>;
@@ -23,6 +24,7 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
   isOpen,
   exam,
   examToEdit,
+  existingExams = [],
   settings = DEFAULT_SETTINGS,
   onClose,
   onSave,
@@ -225,11 +227,30 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
     setPassScore(suggested);
   };
 
+  // Check if title already exists in another exam
+  const duplicateExam = useMemo(() => {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle || !existingExams || existingExams.length === 0) return null;
+    return (
+      existingExams.find((e) => {
+        // If editing an existing exam, skip itself
+        const currentId = activeExam?.id;
+        if (currentId && e.id === currentId) return false;
+        return e.title.trim().toLowerCase() === trimmedTitle.toLowerCase();
+      }) || null
+    );
+  }, [title, existingExams, activeExam]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (openGradingImmediately = true) => {
     if (!title.trim()) {
       setError('يرجى كتابة اسم الامتحان أو الاختبار');
+      return;
+    }
+
+    if (duplicateExam) {
+      setError(`اسم الامتحان "${title.trim()}" غير متاح؛ يوجد امتحان مسجل مسبقاً بهذا الاسم. يرجى اختيار اسم آخر.`);
       return;
     }
 
@@ -327,18 +348,51 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           {/* Exam Title */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-              اسم أو عنوان الامتحان <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                اسم أو عنوان الامتحان <span className="text-rose-500">*</span>
+              </label>
+              {duplicateExam && (
+                <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  اسم غير متاح (مكرر)
+                </span>
+              )}
+            </div>
             <input
               id="exam-title-input"
               type="text"
               required
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                if (error) setError('');
+              }}
               placeholder="مثال: اختبار شهر أكتوبر أو كويز قوانين نيوتن"
-              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right font-medium"
+              className={`w-full px-3.5 py-2.5 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 transition-all text-right font-medium ${
+                duplicateExam
+                  ? 'bg-rose-50/50 dark:bg-rose-950/20 border-2 border-rose-500 focus:ring-rose-500/20 focus:border-rose-500 text-slate-900 dark:text-white'
+                  : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white'
+              }`}
             />
+
+            {/* Duplicate exam warning box */}
+            {duplicateExam && (
+              <div className="mt-2 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800/80 rounded-xl flex items-start gap-2.5 text-rose-800 dark:text-rose-200 animate-fadeIn">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
+                <div className="text-xs leading-relaxed">
+                  <p className="font-extrabold text-rose-700 dark:text-rose-300">
+                    هذا الاسم غير متاح لوجود امتحان سابق بنفس الاسم:
+                  </p>
+                  <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+                    يوجد امتحان مسجل مسبقاً بعنوان <strong className="underline">"{duplicateExam.title}"</strong> ({duplicateExam.grade} - {duplicateExam.subject} - تاريخ: {duplicateExam.date}).
+                  </p>
+                  <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-0.5">
+                    يرجى تغيير الاسم أو إضافة تمييز له (مثال: "اختبار شهر أكتوبر - نموذج أ").
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -560,9 +614,10 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
           <button
             id="save-exam-btn"
             type="button"
-            disabled={loading}
+            disabled={loading || !!duplicateExam}
             onClick={() => handleSubmit(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-98 rounded-xl shadow-md shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50"
+            title={duplicateExam ? 'اسم الامتحان مستخدم مسبقاً، يرجى تغييره' : ''}
+            className="inline-flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-98 rounded-xl shadow-md shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <CheckSquare className="w-4 h-4" />
             {loading ? 'جاري الحفظ...' : exam ? 'حفظ التعديلات' : 'حفظ وبدء رصد الدرجات يدوياً'}
