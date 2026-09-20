@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   Users, 
   FileSpreadsheet, 
@@ -24,6 +24,7 @@ import {
 import { Student, Exam, ExamResult, TeacherSettings } from '../types';
 import { calculateStudentStats } from '../utils/grading';
 import { DEFAULT_SETTINGS } from '../services/firebase';
+import { HonorBoardModal } from './HonorBoardModal';
 
 interface DashboardViewProps {
   students?: Student[];
@@ -50,6 +51,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenQuickSearch,
   onExportAllExcel,
 }) => {
+  const [isHonorBoardOpen, setIsHonorBoardOpen] = useState(false);
   const safeStudents = students || [];
   const safeExams = exams || [];
   const safeResults = allResults || [];
@@ -484,12 +486,24 @@ className="w-full h-full object-cover rounded-[14px]"
               <Award className="w-5 h-5" />
               <h3 className="font-bold text-slate-900 dark:text-white text-base">لوحة شرف المتفوقين</h3>
             </div>
-            <button
-              onClick={() => onNavigate('students')}
-              className="text-xs text-amber-600 dark:text-amber-400 hover:underline font-semibold cursor-pointer"
-            >
-              عرض الجميع
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                id="open-honor-board-modal-btn"
+                type="button"
+                onClick={() => setIsHonorBoardOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
+                title="تصدير لوحة الشرف كصورة عالية الدقة مع توقيع المعلم لإرسالها لأولياء الأمور"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>تصدير كصورة 📸</span>
+              </button>
+              <button
+                onClick={() => onNavigate('students')}
+                className="text-xs text-slate-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 font-semibold cursor-pointer"
+              >
+                عرض الجميع
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
@@ -530,6 +544,24 @@ className="w-full h-full object-cover rounded-[14px]"
               ))
             )}
           </div>
+
+          {/* Honor Board Quick Export Banner */}
+          {topPerformers.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                <span>لوحة شرف وتكريم رسمي لأولياء الأمور</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsHonorBoardOpen(true)}
+                className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer flex items-center gap-1"
+              >
+                <span>تخصيص وتصدير اللوحة</span>
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Students Needing Follow-up */}
@@ -582,6 +614,16 @@ className="w-full h-full object-cover rounded-[14px]"
           </div>
         </div>
       </div>
+
+      {/* Honor Board Export Modal */}
+      <HonorBoardModal
+        isOpen={isHonorBoardOpen}
+        onClose={() => setIsHonorBoardOpen(false)}
+        students={safeStudents}
+        exams={safeExams}
+        allResults={safeResults}
+        settings={safeSettings}
+      />
     </div>
   );
 };

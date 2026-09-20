@@ -42,6 +42,7 @@ import { ExcelExportModal } from './ExcelExportModal';
 import { StudentAcademicReportModal } from './StudentAcademicReportModal';
 import { AttachmentThumbnail } from './AttachmentThumbnail';
 import { AttachmentModal } from './AttachmentModal';
+import { HonorBoardModal } from './HonorBoardModal';
 
 interface ReportsViewProps {
   students: Student[];
@@ -64,6 +65,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   // Modals state
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showHonorBoardModal, setShowHonorBoardModal] = useState(false);
   const [academicModalStudent, setAcademicModalStudent] = useState<Student | null>(null);
   const [previewAttachmentResult, setPreviewAttachmentResult] = useState<ExamResult | null>(null);
 
@@ -220,6 +222,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
         {/* Global Export Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowHonorBoardModal(true)}
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-black text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 rounded-xl transition-all cursor-pointer shadow-md shadow-amber-500/20 active:scale-98"
+          >
+            <Award className="w-4 h-4 text-slate-950" />
+            <span>تصدير لوحة الشرف 📸</span>
+          </button>
+
           <button
             onClick={() => setShowExportModal(true)}
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 rounded-xl transition-all cursor-pointer shadow-md shadow-amber-500/20 active:scale-98"
@@ -973,6 +983,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           onClose={() => setPreviewAttachmentResult(null)}
         />
       )}
+
+      {/* Honor Board Export Modal */}
+      <HonorBoardModal
+        isOpen={showHonorBoardModal}
+        onClose={() => setShowHonorBoardModal(false)}
+        students={students}
+        exams={exams}
+        allResults={allResults}
+        settings={settings}
+      />
     </div>
   );
 };
