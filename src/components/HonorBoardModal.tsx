@@ -215,9 +215,11 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     try {
       setIsExporting(true);
       const dataUrl = await toPng(boardRef.current, {
-        cacheBust: true,
-        pixelRatio: 3, // Ultra-sharp 3x resolution
-        quality: 1,
+        cacheBust: false,
+        skipFonts: true,
+        filter: (node: HTMLElement) => node.tagName !== 'LINK',
+        pixelRatio: 2, // Ultra-sharp 2x resolution
+        quality: 0.95,
         backgroundColor: boardTheme === 'classic-ivory' ? '#fbf9f4' : boardTheme === 'royal-blue' ? '#091326' : '#070b14',
       });
 
@@ -244,9 +246,11 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     try {
       setIsExporting(true);
       const blob = await toBlob(boardRef.current, {
-        cacheBust: true,
-        pixelRatio: 3,
-        quality: 1,
+        cacheBust: false,
+        skipFonts: true,
+        filter: (node: HTMLElement) => node.tagName !== 'LINK',
+        pixelRatio: 2,
+        quality: 0.95,
         backgroundColor: boardTheme === 'classic-ivory' ? '#fbf9f4' : boardTheme === 'royal-blue' ? '#091326' : '#070b14',
       });
 
