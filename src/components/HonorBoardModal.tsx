@@ -72,6 +72,13 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   const [title, setTitle] = useState<string>('لوحة شرف أوائل الطلبة والمتفوقين');
   const [customSubtitle, setCustomSubtitle] = useState<string>('');
   const [teacherName, setTeacherName] = useState<string>(settings.teacherName || 'Mr. Mohamed Hesham');
+  const [signatureText, setSignatureText] = useState<string>(() => {
+    if (settings.teacherName?.includes('Mohamed') || settings.teacherName?.includes('محمد')) {
+      return 'محمد هشام';
+    }
+    return settings.teacherName || 'محمد هشام';
+  });
+  const [signatureStyle, setSignatureStyle] = useState<'arabic_calligraphy' | 'cursive_script' | 'official_badge'>('arabic_calligraphy');
   const [teacherRole, setTeacherRole] = useState<string>('معلم المادة');
   const [schoolName, setSchoolName] = useState<string>('');
   const [congratsMessage, setCongratsMessage] = useState<string>(
@@ -513,15 +520,66 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                 <span>بيانات المعلم والاعتماد</span>
               </h3>
 
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">اسم المعلم المطبوع:</label>
+                  <input
+                    type="text"
+                    value={teacherName}
+                    onChange={(e) => setTeacherName(e.target.value)}
+                    placeholder="Mr. Mohamed Hesham"
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">نص التوقيع اليدوي:</label>
+                  <input
+                    type="text"
+                    value={signatureText}
+                    onChange={(e) => setSignatureText(e.target.value)}
+                    placeholder="محمد هشام"
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-amber-300 font-bold text-right focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="block text-[11px] text-slate-400 mb-1">اسم المعلم وتوقيعه:</label>
-                <input
-                  type="text"
-                  value={teacherName}
-                  onChange={(e) => setTeacherName(e.target.value)}
-                  placeholder="Mr. Mohamed Hesham"
-                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right focus:ring-1 focus:ring-amber-500"
-                />
+                <label className="block text-[11px] text-slate-400 mb-1.5">نمط وشكل التوقيع:</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSignatureStyle('arabic_calligraphy')}
+                    className={`px-2 py-1.5 rounded-xl text-[11px] font-bold border transition ${
+                      signatureStyle === 'arabic_calligraphy'
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                        : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-600'
+                    }`}
+                  >
+                    رقعة يدوي
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSignatureStyle('cursive_script')}
+                    className={`px-2 py-1.5 rounded-xl text-[11px] font-bold border transition ${
+                      signatureStyle === 'cursive_script'
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                        : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-600'
+                    }`}
+                  >
+                    انسيابي حديث
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSignatureStyle('official_badge')}
+                    className={`px-2 py-1.5 rounded-xl text-[11px] font-bold border transition ${
+                      signatureStyle === 'official_badge'
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                        : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-600'
+                    }`}
+                  >
+                    شارة اعتماد
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -555,7 +613,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     onChange={(e) => setShowSignature(e.target.checked)}
                     className="rounded text-amber-500 focus:ring-amber-400 cursor-pointer"
                   />
-                  <span>إظهار توقيع الأستاذ الرسمي بالخط العربي</span>
+                  <span>إظهار توقيع الأستاذ المعتمد</span>
                 </label>
 
                 <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
@@ -827,29 +885,73 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     </div>
 
                     {/* Left: Teacher Signature */}
-                    <div className="text-left flex flex-col items-end">
-                      <p className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                    <div className="flex flex-col items-center justify-center text-center min-w-[150px]">
+                      <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
                         {teacherRole}
                       </p>
-                      <p className="text-xs sm:text-sm font-extrabold text-amber-600 dark:text-amber-300 mt-0.5">
+                      <p className={`text-xs sm:text-sm font-extrabold mt-0.5 whitespace-nowrap ${
+                        boardTheme === 'classic-ivory' ? 'text-slate-900' : 'text-amber-400'
+                      }`}>
                         {teacherName}
                       </p>
 
                       {showSignature && (
-                        <div className="mt-1 flex flex-col items-center">
-                          {/* Elegant Calligraphic Signature Representation */}
-                          <div 
-                            style={{ fontFamily: "'Aref Ruqaa', 'Cairo', serif" }}
-                            className="text-lg font-bold text-amber-500 dark:text-amber-300 select-none transform rotate-[-3deg] tracking-wide"
-                          >
-                            {teacherName.includes('Mohamed') || teacherName.includes('محمد') 
-                              ? 'محمد هشام' 
-                              : teacherName}
-                          </div>
-                          <div className="w-24 h-0.5 bg-gradient-to-r from-transparent via-amber-500 to-transparent -mt-1" />
-                          <span className="text-[8px] text-slate-400 font-mono mt-0.5">
-                            توقيع رسمي معتمد
-                          </span>
+                        <div className="mt-1.5 flex flex-col items-center justify-center w-full">
+                          {signatureStyle === 'official_badge' ? (
+                            <div className="px-3 py-1 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center gap-1.5 mt-1 shadow-xs">
+                              <span className="text-xs font-black text-amber-500 whitespace-nowrap">
+                                {signatureText || teacherName}
+                              </span>
+                              <span className="text-[8px] px-1.5 py-0.5 bg-amber-500/20 text-amber-400 rounded font-mono font-bold">
+                                معتمد ✓
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center">
+                              {/* Signature text - guaranteed single line */}
+                              <div 
+                                className="whitespace-nowrap select-none font-bold text-amber-500 dark:text-amber-300 px-3 tracking-wide"
+                                style={{ 
+                                  fontFamily: signatureStyle === 'cursive_script' 
+                                    ? "'Plus Jakarta Sans', cursive, sans-serif" 
+                                    : "'Aref Ruqaa', 'Cairo', serif",
+                                  fontSize: '22px',
+                                  lineHeight: '1.2',
+                                  transform: 'rotate(-2.5deg)',
+                                  display: 'inline-block',
+                                }}
+                              >
+                                {signatureText || teacherName}
+                              </div>
+
+                              {/* Flowing pen stroke swoosh */}
+                              <svg 
+                                className="w-28 h-3.5 mt-0.5 text-amber-500 dark:text-amber-400 overflow-visible" 
+                                viewBox="0 0 110 14" 
+                                fill="none" 
+                                xmlns="http://www.w3.org/2000/svg"
+                              >
+                                <path 
+                                  d="M 5 6 C 35 14, 75 3, 105 8" 
+                                  stroke="currentColor" 
+                                  strokeWidth="1.8" 
+                                  strokeLinecap="round" 
+                                />
+                                <path 
+                                  d="M 22 10 C 50 13, 80 8, 96 10" 
+                                  stroke="currentColor" 
+                                  strokeWidth="0.8" 
+                                  strokeLinecap="round" 
+                                  opacity="0.6" 
+                                />
+                              </svg>
+
+                              <div className="flex items-center gap-1 mt-1 text-[9px] text-slate-400 font-mono whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <span>توقيع رسمي معتمد</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
