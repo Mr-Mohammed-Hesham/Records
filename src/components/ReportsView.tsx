@@ -992,6 +992,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         exams={exams}
         allResults={allResults}
         settings={settings}
+        initialStartDate={startDate}
+        initialEndDate={endDate}
       />
     </div>
   );

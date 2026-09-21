@@ -9,6 +9,7 @@ import {
   X, 
   Filter, 
   Calendar, 
+  RotateCcw,
   User, 
   BookOpen, 
   Crown, 
@@ -35,6 +36,8 @@ interface HonorBoardModalProps {
   settings?: TeacherSettings;
   initialGrade?: string;
   initialExamId?: string;
+  initialStartDate?: string;
+  initialEndDate?: string;
 }
 
 interface RankedStudent {
@@ -56,6 +59,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   settings = DEFAULT_SETTINGS,
   initialGrade,
   initialExamId,
+  initialStartDate,
+  initialEndDate,
 }) => {
   const boardRef = useRef<HTMLDivElement>(null);
 
@@ -64,6 +69,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   const [selectedExamId, setSelectedExamId] = useState<string>(initialExamId || (exams[0]?.id || ''));
   const [selectedGrade, setSelectedGrade] = useState<string>(initialGrade || 'all');
   const [selectedTrack, setSelectedTrack] = useState<string>('all');
+  const [startDate, setStartDate] = useState<string>(initialStartDate || '');
+  const [endDate, setEndDate] = useState<string>(initialEndDate || '');
   const [limitCount, setLimitCount] = useState<number>(5);
   const [minPercentage, setMinPercentage] = useState<number>(85);
   const [boardTheme, setBoardTheme] = useState<'dark-gold' | 'classic-ivory' | 'royal-blue'>('dark-gold');
@@ -106,15 +113,77 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     return Array.from(set);
   }, [settings.grades, students]);
 
+  // Date Filtered Results
+  const dateFilteredResults = useMemo(() => {
+    return allResults.filter(r => {
+      const rDate = r.examDate || exams.find(e => e.id === r.examId)?.date || '';
+      if (startDate && rDate && rDate < startDate) return false;
+      if (endDate && rDate && rDate > endDate) return false;
+      return true;
+    });
+  }, [allResults, exams, startDate, endDate]);
+
+  // Date Filtered Exams
+  const filteredExams = useMemo(() => {
+    return exams.filter(ex => {
+      if (startDate && ex.date && ex.date < startDate) return false;
+      if (endDate && ex.date && ex.date > endDate) return false;
+      return true;
+    });
+  }, [exams, startDate, endDate]);
+
+  // Period label for display on the board
+  const periodLabel = useMemo(() => {
+    if (!startDate && !endDate) return '';
+    if (startDate && endDate) {
+      return `الفترة: ${startDate} إلى ${endDate}`;
+    }
+    if (startDate) {
+      return `ابتداءً من: ${startDate}`;
+    }
+    return `حتى تاريخ: ${endDate}`;
+  }, [startDate, endDate]);
+
+  // Quick preset helper
+  const handleSetDatePreset = (preset: 'all' | 'this_month' | 'last_30' | 'last_7') => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (preset === 'all') {
+      setStartDate('');
+      setEndDate('');
+    } else if (preset === 'this_month') {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const firstDay = `${year}-${month}-01`;
+      setStartDate(firstDay);
+      setEndDate(todayStr);
+    } else if (preset === 'last_30') {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      setStartDate(d.toISOString().split('T')[0]);
+      setEndDate(todayStr);
+    } else if (preset === 'last_7') {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      setStartDate(d.toISOString().split('T')[0]);
+      setEndDate(todayStr);
+    }
+  };
+
   // Selected Exam (if exam mode)
   const currentExam = useMemo(() => {
+    if (filteredExams.length > 0) {
+      const match = filteredExams.find(e => e.id === selectedExamId);
+      if (match) return match;
+      return filteredExams[0];
+    }
     return exams.find(e => e.id === selectedExamId) || exams[0] || null;
-  }, [exams, selectedExamId]);
+  }, [filteredExams, exams, selectedExamId]);
 
   // Compute Ranked Students
   const rankedStudents = useMemo<RankedStudent[]>(() => {
     if (boardType === 'overall') {
-      // Overall GPA across exams
+      // Overall GPA across date-filtered exams
       let list = students.filter(st => {
         if (selectedGrade !== 'all' && st.grade !== selectedGrade) return false;
         if (selectedTrack !== 'all' && st.track && st.track !== selectedTrack) return false;
@@ -122,7 +191,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
       });
 
       const withStats = list.map(st => {
-        const studentResults = allResults.filter(r => r.studentDocId === st.id);
+        const studentResults = dateFilteredResults.filter(r => r.studentDocId === st.id);
         const stats = calculateStudentStats(studentResults, settings.gradingScale);
         return {
           student: st,
@@ -132,7 +201,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         };
       });
 
-      // Filter by min percentage and at least 1 exam
+      // Filter by min percentage and at least 1 exam in the period
       const filtered = withStats.filter(item => item.totalExams > 0 && item.percentage >= minPercentage);
 
       // Sort by highest percentage, then highest total exams
@@ -155,7 +224,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
       // Specific Exam Top Students
       if (!currentExam) return [];
 
-      const examResults = allResults.filter(r => r.examId === currentExam.id);
+      const examResults = dateFilteredResults.filter(r => r.examId === currentExam.id);
       const studentMap = new Map<string, Student>();
       students.forEach(s => studentMap.set(s.id, s));
 
@@ -164,8 +233,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
       examResults.forEach(r => {
         const st = studentMap.get(r.studentDocId);
         if (!st) return;
-        if (selectedGrade !== 'all' && st.grade !== selectedGrade) return false;
-        if (selectedTrack !== 'all' && st.track && st.track !== selectedTrack) return false;
+        if (selectedGrade !== 'all' && st.grade !== selectedGrade) return;
+        if (selectedTrack !== 'all' && st.track && st.track !== selectedTrack) return;
         if (r.percentage < minPercentage) return;
         validList.push({ student: st, result: r });
       });
@@ -186,7 +255,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   }, [
     boardType,
     students,
-    allResults,
+    dateFilteredResults,
     selectedGrade,
     selectedTrack,
     minPercentage,
@@ -285,6 +354,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     // Generate polite parent message
     const subjectText = displaySubject;
     const gradeText = selectedGrade === 'all' ? 'أبنائنا وبناتنا' : `طلبة ${selectedGrade}`;
+    const periodMsg = periodLabel ? `\n📅 *${periodLabel}*` : '';
     const topStudentsList = rankedStudents
       .slice(0, 5)
       .map(s => `🏅 المركز ${s.rank}: ${s.student.name} (${s.percentage}%)`)
@@ -292,7 +362,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
     const msg = `🏆 *${title}* 🏆\n\n` +
       `السلام عليكم ورحمة الله وبركاته،\n` +
-      `أولياء أمورنا الأفاضل، يسرنا أن نشارككم لوحة شرف المتفوقين في مادة *${subjectText}* لـ *${gradeText}* تقديراً لاجتهادهم وتميزهم المشرف:\n\n` +
+      `أولياء أمورنا الأفاضل، يسرنا أن نشارككم لوحة شرف المتفوقين في مادة *${subjectText}* لـ *${gradeText}*${periodMsg} تقديراً لاجتهادهم وتميزهم المشرف:\n\n` +
       `${topStudentsList}\n\n` +
       `نسأل الله لأبنائنا وبناتنا دوام التفوق والنجاح الباهر 🌟\n` +
       `مع تحيات: *${teacherName}* (${teacherRole})`;
@@ -389,14 +459,109 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   onChange={(e) => setSelectedExamId(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-medium text-white focus:ring-2 focus:ring-amber-500/30 text-right cursor-pointer"
                 >
-                  {exams.map(ex => (
-                    <option key={ex.id} value={ex.id}>
-                      {ex.title} ({ex.grade} - {ex.subject})
-                    </option>
-                  ))}
+                  {filteredExams.length > 0 ? (
+                    filteredExams.map(ex => (
+                      <option key={ex.id} value={ex.id}>
+                        {ex.title} ({ex.grade} - {ex.subject}{ex.date ? ` • ${ex.date}` : ''})
+                      </option>
+                    ))
+                  ) : (
+                    <option value="" disabled>لا توجد امتحانات في هذه الفترة الزمنية</option>
+                  )}
                 </select>
               </div>
             )}
+
+            {/* Filter by Date Range (From - To) */}
+            <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>الفترة الزمنية للاختبارات (من - إلى)</span>
+                </h3>
+                {(startDate || endDate) && (
+                  <button
+                    type="button"
+                    onClick={() => { setStartDate(''); setEndDate(''); }}
+                    className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 hover:underline cursor-pointer"
+                    title="إعادة تعيين الفترة"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>إعادة ضبط</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Quick Presets */}
+              <div className="grid grid-cols-4 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleSetDatePreset('all')}
+                  className={`px-1.5 py-1 text-[11px] font-bold rounded-lg border transition cursor-pointer text-center ${
+                    !startDate && !endDate
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 font-extrabold shadow-xs'
+                      : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-600'
+                  }`}
+                >
+                  كافة الفترات
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetDatePreset('this_month')}
+                  className="px-1.5 py-1 text-[11px] font-bold rounded-lg border bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-600 hover:text-amber-300 transition cursor-pointer text-center"
+                >
+                  هذا الشهر
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetDatePreset('last_30')}
+                  className="px-1.5 py-1 text-[11px] font-bold rounded-lg border bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-600 hover:text-amber-300 transition cursor-pointer text-center"
+                >
+                  آخر 30 يوم
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetDatePreset('last_7')}
+                  className="px-1.5 py-1 text-[11px] font-bold rounded-lg border bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-600 hover:text-amber-300 transition cursor-pointer text-center"
+                >
+                  آخر 7 أيام
+                </button>
+              </div>
+
+              {/* Custom Date Pickers */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">من تاريخ:</label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">إلى تاريخ:</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Context info tag */}
+              <div className="text-[10px] text-slate-400 flex items-center justify-between pt-0.5">
+                <span>النتائج المشمولة: <strong className="text-amber-400">{dateFilteredResults.length}</strong> درجة</span>
+                {periodLabel ? (
+                  <span className="text-amber-400 font-mono truncate max-w-[160px]" title={periodLabel}>
+                    {periodLabel}
+                  </span>
+                ) : (
+                  <span className="text-slate-500">العام الدراسي كاملاً</span>
+                )}
+              </div>
+            </div>
 
             {/* Filter by Grade & Track */}
             <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-3">
@@ -709,8 +874,14 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       <span className="px-2.5 py-1 text-[11px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30 rounded-lg inline-block">
                         {displayGrade} {displayTrack}
                       </span>
+                      {periodLabel && (
+                        <div className="mt-1 flex items-center justify-end gap-1 text-[10px] font-mono text-amber-500 dark:text-amber-300 font-semibold">
+                          <Calendar className="w-3 h-3 inline shrink-0" />
+                          <span>{periodLabel}</span>
+                        </div>
+                      )}
                       {showDate && (
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 font-mono">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
                           {displayDate}
                         </p>
                       )}
@@ -739,8 +910,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     {/* Subtitle / Exam Title */}
                     <p className="text-xs sm:text-sm font-semibold text-amber-600 dark:text-amber-400 mt-1">
                       {boardType === 'exam' && currentExam
-                        ? `نتائج أوائل: ${currentExam.title} (الدرجة الكاملة: ${currentExam.totalScore})`
-                        : customSubtitle || `لوحة الشرف العامة لأوائل الطلبة • ${displaySubject}`}
+                        ? `نتائج أوائل: ${currentExam.title} (الدرجة الكاملة: ${currentExam.totalScore})${periodLabel ? ` • ${periodLabel}` : ''}`
+                        : customSubtitle || `لوحة الشرف العامة لأوائل الطلبة • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`}
                     </p>
 
                     {/* Encouraging Note for Parents & Students */}
