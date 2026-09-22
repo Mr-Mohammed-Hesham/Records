@@ -20,7 +20,12 @@ import {
   GraduationCap,
   Star,
   CheckCircle2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Type,
+  Palette,
+  Minus,
+  Plus,
+  ChevronDown
 } from 'lucide-react';
 import { toPng, toBlob } from 'html-to-image';
 import { Student, Exam, ExamResult, TeacherSettings } from '../types';
@@ -50,6 +55,34 @@ interface RankedStudent {
   gradeLabel: string;
 }
 
+export interface FontOption {
+  id: string;
+  name: string;
+  family: string;
+  category: string;
+  desc: string;
+}
+
+export const FONT_OPTIONS: FontOption[] = [
+  { id: 'cairo', name: 'خط كايرو (Cairo)', family: "'Cairo', sans-serif", category: 'عصري وواضح', desc: 'الخط الافتراضي، وضوح فائق وتناسق عالي' },
+  { id: 'amiri', name: 'الخط الأميري (Amiri)', family: "'Amiri', serif", category: 'كلاسيكي رسمي', desc: 'خط نسخ تراثي فاخر مخصص للشهادات الرسمية' },
+  { id: 'tajawal', name: 'خط تجوال (Tajawal)', family: "'Tajawal', sans-serif", category: 'هندسي أنيق', desc: 'خط رشيق متوازن ومريح جداً للقراءة' },
+  { id: 'almarai', name: 'خط المراعي (Almarai)', family: "'Almarai', sans-serif", category: 'حديث وجذاب', desc: 'مستقيم وعالي المقروئية لأسماء الطلاب' },
+  { id: 'aref', name: 'خط الرقعة (Aref Ruqaa)', family: "'Aref Ruqaa', serif", category: 'تراثي فني', desc: 'خط رقعة أصيل يحاكي التخطيط بالريشة' },
+  { id: 'noto-kufi', name: 'خط كوفي حديث (Noto Kufi)', family: "'Noto Kufi Arabic', sans-serif", category: 'كوفي رسمي', desc: 'طابع كوفي هندسي متقن للشهادات واللوحات' },
+  { id: 'ibm-plex', name: 'خط آي بي إم (IBM Plex)', family: "'IBM Plex Sans Arabic', sans-serif", category: 'أكاديمي معتمد', desc: 'رسمي متزن وواضح للتقارير واللوحات' },
+  { id: 'changa', name: 'خط تشانجا (Changa)', family: "'Changa', sans-serif", category: 'عريض بارز', desc: 'عريض وقوي للعناوين البارزة والتكريم' },
+];
+
+export const THEME_PRESETS = [
+  { id: 'dark-gold', name: 'فخامة ملكية', bg: '#070b14', text: '#ffffff', accent: '#f59e0b', desc: 'كحلي وذهبي' },
+  { id: 'royal-blue', name: 'أزرق ملكي', bg: '#091326', text: '#ffffff', accent: '#38bdf8', desc: 'ياقوتي وسماوي' },
+  { id: 'classic-ivory', name: 'عاجي راقي', bg: '#fbf9f4', text: '#0f172a', accent: '#b45309', desc: 'ورق شهادات' },
+  { id: 'emerald-night', name: 'زمردي فاخر', bg: '#061a14', text: '#ffffff', accent: '#10b981', desc: 'أخضر داكن' },
+  { id: 'burgundy-royal', name: 'عنابي إمبراطوري', bg: '#1a080d', text: '#ffffff', accent: '#fbbf24', desc: 'أحمر داكن' },
+  { id: 'pure-white', name: 'أبيض ناصع', bg: '#ffffff', text: '#0f172a', accent: '#d97706', desc: 'موفر للحبر' },
+];
+
 export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   isOpen,
   onClose,
@@ -74,6 +107,44 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   const [limitCount, setLimitCount] = useState<number>(5);
   const [minPercentage, setMinPercentage] = useState<number>(85);
   const [boardTheme, setBoardTheme] = useState<'dark-gold' | 'classic-ivory' | 'royal-blue'>('dark-gold');
+
+  // Typography and Font Customization
+  const [fontFamily, setFontFamily] = useState<string>("'Cairo', sans-serif");
+  const [fontSizeScale, setFontSizeScale] = useState<number>(100);
+
+  // Background and Text Color Customization
+  const [bgColor, setBgColor] = useState<string>('#070b14');
+  const [textColor, setTextColor] = useState<string>('#ffffff');
+  const [accentColor, setAccentColor] = useState<string>('#f59e0b');
+
+  // Detect whether background is light or dark for optimal contrast
+  const isLightBg = useMemo(() => {
+    const hex = bgColor.replace('#', '');
+    if (hex.length !== 6) return false;
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 155;
+  }, [bgColor]);
+
+  // Apply theme preset
+  const handleApplyPreset = (preset: typeof THEME_PRESETS[0]) => {
+    setBoardTheme(preset.id as any);
+    setBgColor(preset.bg);
+    setTextColor(preset.text);
+    setAccentColor(preset.accent);
+  };
+
+  // Reset colors & typography
+  const handleResetAppearance = () => {
+    setFontFamily("'Cairo', sans-serif");
+    setFontSizeScale(100);
+    setBoardTheme('dark-gold');
+    setBgColor('#070b14');
+    setTextColor('#ffffff');
+    setAccentColor('#f59e0b');
+  };
 
   // Text & Signature Customization
   const [title, setTitle] = useState<string>('لوحة شرف أوائل الطلبة والمتفوقين');
@@ -296,7 +367,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         filter: (node: HTMLElement) => node.tagName !== 'LINK',
         pixelRatio: 2, // Ultra-sharp 2x resolution
         quality: 0.95,
-        backgroundColor: boardTheme === 'classic-ivory' ? '#fbf9f4' : boardTheme === 'royal-blue' ? '#091326' : '#070b14',
+        backgroundColor: bgColor,
       });
 
       const cleanTitle = title.replace(/\s+/g, '_');
@@ -327,7 +398,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         filter: (node: HTMLElement) => node.tagName !== 'LINK',
         pixelRatio: 2,
         quality: 0.95,
-        backgroundColor: boardTheme === 'classic-ivory' ? '#fbf9f4' : boardTheme === 'royal-blue' ? '#091326' : '#070b14',
+        backgroundColor: bgColor,
       });
 
       if (blob && navigator.clipboard && window.ClipboardItem) {
@@ -348,6 +419,79 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const handlePrintCertificate = () => {
+    if (!boardRef.current) return;
+    const printContent = boardRef.current.outerHTML;
+    const printWindow = window.open('', '_blank', 'width=920,height=850');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+
+    const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+      .map(el => el.outerHTML)
+      .join('\n');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+        <head>
+          <meta charset="utf-8" />
+          <title>${title} - ${displayGrade}</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@400;700;800&family=Amiri:ital,wght@0,400;0,700;1,400&family=Aref+Ruqaa:wght@400;700&family=Cairo:wght@400;500;600;700;800;900&family=Changa:wght@500;700;800&family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Noto+Kufi+Arabic:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet" crossorigin="anonymous">
+          ${styles}
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 6mm;
+            }
+            body {
+              background-color: ${bgColor} !important;
+              color: ${textColor} !important;
+              font-family: ${fontFamily} !important;
+              margin: 0;
+              padding: 10px;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .print-board-wrapper {
+              width: 100% !important;
+              max-width: 740px !important;
+              margin: 0 auto !important;
+              font-family: ${fontFamily} !important;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-board-wrapper">
+            ${printContent}
+          </div>
+          <script>
+            if (document.fonts && document.fonts.ready) {
+              document.fonts.ready.then(function() {
+                setTimeout(function() {
+                  window.focus();
+                  window.print();
+                }, 250);
+              });
+            } else {
+              setTimeout(function() {
+                window.focus();
+                window.print();
+              }, 450);
+            }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const handleShareWhatsApp = () => {
@@ -631,50 +775,292 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               </div>
             </div>
 
-            {/* Visual Style Theme */}
-            <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-2">
-              <label className="block text-xs font-bold text-amber-400">
-                نمط وألوان التصميم:
+            {/* Visual Style Theme & Color Customization */}
+            <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5" />
+                  <span>ألوان الخلفية والنصوص</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleResetAppearance}
+                  className="text-[10px] text-slate-400 hover:text-amber-400 flex items-center gap-1 transition cursor-pointer"
+                  title="استعادة الألوان والخط الافتراضي"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>إعادة ضبط</span>
+                </button>
+              </div>
+
+              {/* Theme Presets */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] text-slate-400 block">أنماط جاهزة سريعة:</span>
+                <div className="grid grid-cols-3 gap-2">
+                  {THEME_PRESETS.map((p) => {
+                    const isSelected = bgColor.toLowerCase() === p.bg.toLowerCase() && textColor.toLowerCase() === p.text.toLowerCase();
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleApplyPreset(p)}
+                        className={`p-2 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                          isSelected
+                            ? 'border-amber-400 bg-amber-500/10 text-amber-300 font-bold shadow-xs'
+                            : 'border-slate-700 bg-slate-900/90 text-slate-400 hover:border-slate-600'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span className="w-3 h-3 rounded-full border border-white/20 inline-block shadow-xs" style={{ backgroundColor: p.bg }} />
+                          <span className="w-2.5 h-2.5 rounded-full border border-white/20 inline-block" style={{ backgroundColor: p.accent }} />
+                        </div>
+                        <span className="text-[11px] leading-tight font-bold">{p.name}</span>
+                        <span className="text-[9px] text-slate-400">{p.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Custom Color Pickers */}
+              <div className="pt-2 border-t border-slate-700/50 space-y-2.5">
+                <span className="text-[11px] text-slate-400 block font-medium">تعديل الألوان يدوياً:</span>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Background Color */}
+                  <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-700/70 flex items-center justify-between">
+                    <div>
+                      <span className="block text-[11px] text-slate-300 font-bold">لون الخلفية</span>
+                      <span className="text-[10px] text-slate-400 font-mono">{bgColor}</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="color"
+                        value={bgColor}
+                        onChange={(e) => setBgColor(e.target.value)}
+                        className="w-8 h-8 rounded-lg border-2 border-slate-600 cursor-pointer p-0 bg-transparent"
+                        title="اختر لون الخلفية"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Text Color */}
+                  <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-700/70 flex items-center justify-between">
+                    <div>
+                      <span className="block text-[11px] text-slate-300 font-bold">لون الكلام</span>
+                      <span className="text-[10px] text-slate-400 font-mono">{textColor}</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="color"
+                        value={textColor}
+                        onChange={(e) => setTextColor(e.target.value)}
+                        className="w-8 h-8 rounded-lg border-2 border-slate-600 cursor-pointer p-0 bg-transparent"
+                        title="اختر لون الكلام الأساسي"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Accent / Details Color & Quick Text Color Swatches */}
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Accent Color */}
+                  <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-700/70 flex items-center justify-between">
+                    <div>
+                      <span className="block text-[11px] text-slate-300 font-bold">لون الزخارف</span>
+                      <span className="text-[10px] text-slate-400 font-mono">{accentColor}</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="color"
+                        value={accentColor}
+                        onChange={(e) => setAccentColor(e.target.value)}
+                        className="w-8 h-8 rounded-lg border-2 border-slate-600 cursor-pointer p-0 bg-transparent"
+                        title="اختر لون التفاصيل والنسب المئوية"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick Text Swatches */}
+                  <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-700/70 flex flex-col justify-center">
+                    <span className="text-[10px] text-slate-400 mb-1">ألوان كلام سريعة:</span>
+                    <div className="flex items-center gap-1.5">
+                      {[
+                        { color: '#ffffff', label: 'أبيض' },
+                        { color: '#0f172a', label: 'كحلي داكن' },
+                        { color: '#f59e0b', label: 'ذهبي' },
+                        { color: '#38bdf8', label: 'سماوي' },
+                        { color: '#10b981', label: 'زمردي' },
+                      ].map((sw) => (
+                        <button
+                          key={sw.color}
+                          type="button"
+                          onClick={() => setTextColor(sw.color)}
+                          className={`w-5 h-5 rounded-full border transition cursor-pointer ${
+                            textColor.toLowerCase() === sw.color.toLowerCase()
+                              ? 'ring-2 ring-amber-400 scale-110 border-white'
+                              : 'border-slate-600 hover:scale-105'
+                          }`}
+                          style={{ backgroundColor: sw.color }}
+                          title={sw.label}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Typography & Font Size Customization */}
+            <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-3">
+              <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                <Type className="w-3.5 h-3.5" />
+                <span>نوع وحجم الخط للشهادة</span>
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setBoardTheme('dark-gold')}
-                  className={`p-2 rounded-xl border text-center transition cursor-pointer ${
-                    boardTheme === 'dark-gold'
-                      ? 'border-amber-400 bg-amber-500/10 text-amber-300 font-bold'
-                      : 'border-slate-700 bg-slate-900 text-slate-400'
-                  }`}
-                >
-                  <span className="block text-xs">فخامة ملكية</span>
-                  <span className="text-[10px] text-amber-400/80">ذهبي كحلي</span>
-                </button>
 
-                <button
-                  type="button"
-                  onClick={() => setBoardTheme('royal-blue')}
-                  className={`p-2 rounded-xl border text-center transition cursor-pointer ${
-                    boardTheme === 'royal-blue'
-                      ? 'border-blue-400 bg-blue-500/10 text-blue-300 font-bold'
-                      : 'border-slate-700 bg-slate-900 text-slate-400'
-                  }`}
-                >
-                  <span className="block text-xs">أزرق ملكي</span>
-                  <span className="text-[10px] text-blue-400/80">ياقوتي وفضي</span>
-                </button>
+              {/* Font Family Selection Dropdown */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400 font-medium">نوع الخط العربي (قائمة منتقاة):</span>
+                  <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                    تطبيق فوري
+                  </span>
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => setBoardTheme('classic-ivory')}
-                  className={`p-2 rounded-xl border text-center transition cursor-pointer ${
-                    boardTheme === 'classic-ivory'
-                      ? 'border-amber-400 bg-amber-500/10 text-amber-300 font-bold'
-                      : 'border-slate-700 bg-slate-900 text-slate-400'
-                  }`}
-                >
-                  <span className="block text-xs">عاجي راقي</span>
-                  <span className="text-[10px] text-emerald-400/80">طباعة وشهادات</span>
-                </button>
+                {/* Dropdown Select Box */}
+                <div className="relative">
+                  <select
+                    id="certificate-font-family-select"
+                    value={fontFamily}
+                    onChange={(e) => setFontFamily(e.target.value)}
+                    className="w-full appearance-none px-3.5 py-2.5 bg-slate-900 border border-slate-700 hover:border-slate-600 focus:border-amber-400 focus:ring-1 focus:ring-amber-500/50 rounded-xl text-xs font-bold text-slate-100 cursor-pointer transition pr-4 pl-9"
+                    style={{ fontFamily: fontFamily }}
+                  >
+                    {FONT_OPTIONS.map((f) => (
+                      <option 
+                        key={f.id} 
+                        value={f.family}
+                        className="bg-slate-900 text-white py-1.5"
+                      >
+                        {f.name} — {f.category}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <ChevronDown className="w-4 h-4" />
+                  </div>
+                </div>
+
+                {/* Quick Selection Shortcuts for popular fonts */}
+                <div className="space-y-1">
+                  <span className="block text-[10px] text-slate-500">أشهر الخطوط للشهادات:</span>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { id: 'cairo', name: 'خط كايرو', family: "'Cairo', sans-serif" },
+                      { id: 'amiri', name: 'الخط الأميري', family: "'Amiri', serif" },
+                      { id: 'tajawal', name: 'خط تجوال', family: "'Tajawal', sans-serif" },
+                    ].map((item) => {
+                      const isSelected = fontFamily === item.family;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setFontFamily(item.family)}
+                          className={`py-1.5 px-2 rounded-xl text-[11px] font-bold transition border cursor-pointer text-center ${
+                            isSelected
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-xs'
+                              : 'bg-slate-900/80 text-slate-400 border-slate-700/80 hover:bg-slate-800 hover:text-slate-200'
+                          }`}
+                          style={{ fontFamily: item.family }}
+                        >
+                          {item.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Live Font Sample Card */}
+                {(() => {
+                  const currentFont = FONT_OPTIONS.find(f => f.family === fontFamily) || FONT_OPTIONS[0];
+                  return (
+                    <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700/70 space-y-1">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-bold text-amber-400">الخط المطبق: {currentFont.name}</span>
+                        <span className="text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded font-medium">{currentFont.category}</span>
+                      </div>
+                      <p 
+                        className="text-xs text-slate-200 truncate pt-0.5"
+                        style={{ fontFamily: fontFamily }}
+                      >
+                        لوحة الشرف والتفوق الأكاديمي • أوائل متميزون
+                      </p>
+                      <p className="text-[10px] text-slate-400">{currentFont.desc}</p>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Font Size Scaling */}
+              <div className="pt-2 border-t border-slate-700/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400">حجم الخط الإجمالي:</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFontSizeScale(prev => Math.max(80, prev - 5))}
+                      className="p-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                      title="تصغير الخط"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <span className="text-xs font-mono font-bold text-amber-400 min-w-[42px] text-center">
+                      {fontSizeScale}%
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFontSizeScale(prev => Math.min(135, prev + 5))}
+                      className="p-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                      title="تكبير الخط"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Range Slider */}
+                <input
+                  type="range"
+                  min={80}
+                  max={135}
+                  step={5}
+                  value={fontSizeScale}
+                  onChange={(e) => setFontSizeScale(Number(e.target.value))}
+                  className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-900 rounded-lg"
+                />
+
+                {/* Quick Size Presets */}
+                <div className="grid grid-cols-4 gap-1.5 pt-1">
+                  {[
+                    { label: 'مدمج', scale: 90 },
+                    { label: 'قياسي', scale: 100 },
+                    { label: 'كبير', scale: 115 },
+                    { label: 'بارز', scale: 130 },
+                  ].map((p) => (
+                    <button
+                      key={p.scale}
+                      type="button"
+                      onClick={() => setFontSizeScale(p.scale)}
+                      className={`py-1 px-1.5 rounded-lg text-[10px] font-medium transition cursor-pointer text-center ${
+                        fontSizeScale === p.scale
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold'
+                          : 'bg-slate-900 text-slate-400 border border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      {p.label} ({p.scale}%)
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -823,65 +1209,122 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               {/* THE EXPORTABLE BOARD CONTAINER */}
               <div
                 ref={boardRef}
-                style={{ width: '740px' }}
-                className={`p-7 rounded-3xl transition-all select-none text-right ${
-                  boardTheme === 'classic-ivory'
-                    ? 'bg-[#fbf9f4] text-slate-900 border-4 border-amber-600/40 shadow-xl'
-                    : boardTheme === 'royal-blue'
-                    ? 'bg-[#091326] text-white border-4 border-blue-500/40 shadow-2xl'
-                    : 'bg-[#070b14] text-white border-4 border-amber-500/40 shadow-2xl'
+                style={{ 
+                  width: '740px',
+                  backgroundColor: bgColor,
+                  color: textColor,
+                  fontFamily: fontFamily
+                }}
+                className={`p-7 rounded-3xl transition-all select-none text-right shadow-2xl ${
+                  isLightBg
+                    ? 'border-4 border-amber-600/30'
+                    : 'border-4 border-amber-500/40'
                 }`}
               >
                 {/* Decorative Inner Border */}
-                <div className={`p-6 rounded-2xl border-2 relative overflow-hidden ${
-                  boardTheme === 'classic-ivory'
-                    ? 'border-amber-700/20 bg-white/70'
-                    : boardTheme === 'royal-blue'
-                    ? 'border-blue-400/20 bg-blue-950/30'
-                    : 'border-amber-400/20 bg-slate-900/60'
-                }`}>
+                <div 
+                  style={{
+                    backgroundColor: isLightBg ? 'rgba(255, 255, 255, 0.75)' : 'rgba(15, 23, 42, 0.65)',
+                    borderColor: `${accentColor}35`,
+                  }}
+                  className="p-6 rounded-2xl border-2 relative overflow-hidden"
+                >
                   
                   {/* Subtle Background Radial Glow */}
-                  <div className="absolute top-0 right-1/2 translate-x-1/2 w-96 h-40 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+                  <div 
+                    style={{ backgroundColor: `${accentColor}15` }}
+                    className="absolute top-0 right-1/2 translate-x-1/2 w-96 h-40 rounded-full blur-3xl pointer-events-none" 
+                  />
 
                   {/* Corner Ornaments */}
-                  <div className="absolute top-2 right-2 text-amber-500/40 text-xs font-serif">✦</div>
-                  <div className="absolute top-2 left-2 text-amber-500/40 text-xs font-serif">✦</div>
-                  <div className="absolute bottom-2 right-2 text-amber-500/40 text-xs font-serif">✦</div>
-                  <div className="absolute bottom-2 left-2 text-amber-500/40 text-xs font-serif">✦</div>
+                  <div style={{ color: `${accentColor}60` }} className="absolute top-2 right-2 text-xs font-serif">✦</div>
+                  <div style={{ color: `${accentColor}60` }} className="absolute top-2 left-2 text-xs font-serif">✦</div>
+                  <div style={{ color: `${accentColor}60` }} className="absolute bottom-2 right-2 text-xs font-serif">✦</div>
+                  <div style={{ color: `${accentColor}60` }} className="absolute bottom-2 left-2 text-xs font-serif">✦</div>
 
                   {/* Top Header Section */}
-                  <div className="flex items-center justify-between pb-4 border-b border-amber-500/20">
+                  <div 
+                    style={{ borderColor: `${accentColor}30` }}
+                    className="flex items-center justify-between pb-4 border-b"
+                  >
                     <div>
                       {schoolName ? (
-                        <p className="text-xs font-bold text-amber-600 dark:text-amber-400">{schoolName}</p>
+                        <p 
+                          style={{ 
+                            color: accentColor,
+                            fontSize: `${Math.round(12 * (fontSizeScale / 100))}px`
+                          }} 
+                          className="font-bold"
+                        >
+                          {schoolName}
+                        </p>
                       ) : (
-                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">سجل التميز والإنجاز الأكاديمي</p>
+                        <p 
+                          style={{ 
+                            color: isLightBg ? '#64748b' : '#94a3b8',
+                            fontSize: `${Math.round(11 * (fontSizeScale / 100))}px`
+                          }} 
+                          className="font-bold"
+                        >
+                          سجل التميز والإنجاز الأكاديمي
+                        </p>
                       )}
-                      <p className="text-xs font-bold text-slate-600 dark:text-slate-300 mt-0.5">
+                      <p 
+                        style={{ 
+                          color: isLightBg ? '#475569' : '#cbd5e1',
+                          fontSize: `${Math.round(12 * (fontSizeScale / 100))}px`
+                        }} 
+                        className="font-bold mt-0.5"
+                      >
                         مادة {displaySubject}
                       </p>
                     </div>
 
                     {/* Laurels & Crest */}
                     <div className="flex flex-col items-center">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-300 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/20">
+                      <div 
+                        style={{
+                          background: `linear-gradient(135deg, ${accentColor}, #f59e0b)`,
+                          boxShadow: `0 8px 20px ${accentColor}35`
+                        }}
+                        className="w-12 h-12 rounded-2xl text-slate-950 flex items-center justify-center shadow-lg"
+                      >
                         <Crown className="w-7 h-7" />
                       </div>
                     </div>
 
                     <div className="text-left">
-                      <span className="px-2.5 py-1 text-[11px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30 rounded-lg inline-block">
+                      <span 
+                        style={{
+                          backgroundColor: `${accentColor}18`,
+                          color: isLightBg ? '#b45309' : accentColor,
+                          borderColor: `${accentColor}40`,
+                          fontSize: `${Math.round(11 * (fontSizeScale / 100))}px`
+                        }}
+                        className="px-2.5 py-1 font-bold border rounded-lg inline-block"
+                      >
                         {displayGrade} {displayTrack}
                       </span>
                       {periodLabel && (
-                        <div className="mt-1 flex items-center justify-end gap-1 text-[10px] font-mono text-amber-500 dark:text-amber-300 font-semibold">
+                        <div 
+                          style={{
+                            color: accentColor,
+                            fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
+                          }}
+                          className="mt-1 flex items-center justify-end gap-1 font-mono font-semibold"
+                        >
                           <Calendar className="w-3 h-3 inline shrink-0" />
                           <span>{periodLabel}</span>
                         </div>
                       )}
                       {showDate && (
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
+                        <p 
+                          style={{ 
+                            color: isLightBg ? '#64748b' : '#94a3b8',
+                            fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
+                          }} 
+                          className="mt-0.5 font-mono"
+                        >
                           {displayDate}
                         </p>
                       )}
@@ -890,32 +1333,54 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
                   {/* Main Title & Subtitle */}
                   <div className="text-center py-5">
-                    <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-300 border border-amber-500/20 mb-2">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <div 
+                      style={{
+                        backgroundColor: `${accentColor}15`,
+                        color: accentColor,
+                        borderColor: `${accentColor}30`,
+                        fontSize: `${Math.round(12 * (fontSizeScale / 100))}px`
+                      }}
+                      className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full font-bold border mb-2"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" style={{ color: accentColor }} />
                       <span>وسام التميز والتفوق المستمر</span>
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <Sparkles className="w-3.5 h-3.5" style={{ color: accentColor }} />
                     </div>
 
                     <h1 
-                      style={{ fontFamily: "'Cairo', sans-serif" }}
-                      className={`text-2xl sm:text-3xl font-black tracking-tight ${
-                        boardTheme === 'classic-ivory'
-                          ? 'text-slate-900'
-                          : 'text-white'
-                      }`}
+                      style={{ 
+                        fontFamily: fontFamily,
+                        color: textColor,
+                        fontSize: `${Math.round(27 * (fontSizeScale / 100))}px`
+                      }}
+                      className="font-black tracking-tight leading-tight"
                     >
                       {title}
                     </h1>
 
                     {/* Subtitle / Exam Title */}
-                    <p className="text-xs sm:text-sm font-semibold text-amber-600 dark:text-amber-400 mt-1">
+                    <p 
+                      style={{ 
+                        fontFamily: fontFamily,
+                        color: accentColor,
+                        fontSize: `${Math.round(13 * (fontSizeScale / 100))}px`
+                      }}
+                      className="font-semibold mt-1"
+                    >
                       {boardType === 'exam' && currentExam
                         ? `نتائج أوائل: ${currentExam.title} (الدرجة الكاملة: ${currentExam.totalScore})${periodLabel ? ` • ${periodLabel}` : ''}`
                         : customSubtitle || `لوحة الشرف العامة لأوائل الطلبة • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`}
                     </p>
 
                     {/* Encouraging Note for Parents & Students */}
-                    <p className="text-xs text-slate-600 dark:text-slate-300 max-w-lg mx-auto mt-2 leading-relaxed font-medium">
+                    <p 
+                      style={{ 
+                        fontFamily: fontFamily,
+                        color: isLightBg ? '#475569' : '#cbd5e1',
+                        fontSize: `${Math.round(12 * (fontSizeScale / 100))}px`
+                      }}
+                      className="max-w-lg mx-auto mt-2 leading-relaxed font-medium"
+                    >
                       "{congratsMessage}"
                     </p>
                   </div>
@@ -935,55 +1400,71 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         return (
                           <div
                             key={item.student.id}
+                            style={{
+                              backgroundColor: isFirst
+                                ? isLightBg ? 'rgba(245, 158, 11, 0.14)' : 'rgba(245, 158, 11, 0.12)'
+                                : isLightBg ? 'rgba(255, 255, 255, 0.9)' : 'rgba(30, 41, 59, 0.6)',
+                              borderColor: isFirst 
+                                ? `${accentColor}80` 
+                                : isLightBg ? '#e2e8f0' : 'rgba(71, 85, 105, 0.4)'
+                            }}
                             className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${
-                              isFirst
-                                ? boardTheme === 'classic-ivory'
-                                  ? 'bg-amber-500/15 border-amber-400/60 shadow-sm'
-                                  : 'bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent border-amber-400/50 shadow-md shadow-amber-500/10'
-                                : isSecond
-                                ? boardTheme === 'classic-ivory'
-                                  ? 'bg-slate-100 border-slate-300'
-                                  : 'bg-slate-800/60 border-slate-700/60'
-                                : isThird
-                                ? boardTheme === 'classic-ivory'
-                                  ? 'bg-orange-50 border-orange-200'
-                                  : 'bg-orange-950/20 border-orange-700/40'
-                                : boardTheme === 'classic-ivory'
-                                ? 'bg-white/80 border-slate-200'
-                                : 'bg-slate-900/50 border-slate-800'
+                              isFirst ? 'shadow-md' : 'shadow-xs'
                             }`}
                           >
                             {/* Right: Rank Badge & Student Details */}
                             <div className="flex items-center gap-3">
                               {/* Rank Badge */}
                               <div
-                                className={`w-9 h-9 rounded-2xl flex items-center justify-center font-black font-mono text-sm shrink-0 shadow-sm ${
-                                  isFirst
-                                    ? 'bg-gradient-to-tr from-amber-500 to-yellow-300 text-slate-950 ring-2 ring-amber-400'
+                                style={{
+                                  background: isFirst
+                                    ? `linear-gradient(135deg, ${accentColor}, #fef08a)`
                                     : isSecond
-                                    ? 'bg-gradient-to-tr from-slate-300 to-slate-100 text-slate-900'
+                                    ? 'linear-gradient(135deg, #cbd5e1, #f1f5f9)'
                                     : isThird
-                                    ? 'bg-gradient-to-tr from-amber-700 to-amber-500 text-white'
-                                    : 'bg-slate-800 text-slate-300 border border-slate-700'
-                                }`}
+                                    ? 'linear-gradient(135deg, #b45309, #d97706)'
+                                    : isLightBg ? '#f1f5f9' : '#1e293b',
+                                  color: isFirst || isSecond ? '#0f172a' : '#ffffff',
+                                  boxShadow: isFirst ? `0 0 12px ${accentColor}50` : undefined,
+                                }}
+                                className="w-9 h-9 rounded-2xl flex items-center justify-center font-black font-mono text-sm shrink-0 border border-black/10"
                               >
                                 {isFirst ? '🥇' : isSecond ? '🥈' : isThird ? '🥉' : item.rank}
                               </div>
 
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <h3 className={`font-extrabold text-sm sm:text-base ${
-                                    boardTheme === 'classic-ivory' ? 'text-slate-900' : 'text-white'
-                                  }`}>
+                                  <h3 
+                                    style={{ 
+                                      fontFamily: fontFamily,
+                                      color: textColor,
+                                      fontSize: `${Math.round(15 * (fontSizeScale / 100))}px`
+                                    }}
+                                    className="font-extrabold leading-snug"
+                                  >
                                     {item.student.name}
                                   </h3>
                                   {isFirst && (
-                                    <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-500 border border-amber-500/30 rounded-full">
+                                    <span 
+                                      style={{
+                                        backgroundColor: `${accentColor}25`,
+                                        color: isLightBg ? '#b45309' : accentColor,
+                                        borderColor: `${accentColor}40`,
+                                        fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
+                                      }}
+                                      className="px-2 py-0.5 font-bold border rounded-full"
+                                    >
                                       المركز الأول
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
+                                <p 
+                                  style={{ 
+                                    color: isLightBg ? '#64748b' : '#94a3b8',
+                                    fontSize: `${Math.round(11 * (fontSizeScale / 100))}px`
+                                  }}
+                                  className="flex items-center gap-1.5 mt-0.5"
+                                >
                                   <span>{item.student.grade}</span>
                                   {item.student.track && <span>• مسار {item.student.track}</span>}
                                   {item.student.studentId && <span>• كود: {item.student.studentId}</span>}
@@ -994,20 +1475,42 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                             {/* Left: Score & Recognition Pill */}
                             <div className="text-left flex items-center gap-3">
                               <div className="hidden sm:block text-right">
-                                <span className={`text-[11px] font-bold block ${
-                                  item.percentage >= 95 ? 'text-emerald-500' : 'text-amber-500'
-                                }`}>
+                                <span 
+                                  style={{
+                                    color: item.percentage >= 95 ? '#10b981' : accentColor,
+                                    fontSize: `${Math.round(11 * (fontSizeScale / 100))}px`
+                                  }}
+                                  className="font-bold block"
+                                >
                                   {item.gradeLabel}
                                 </span>
-                                <span className="text-[10px] text-slate-400">
+                                <span 
+                                  style={{
+                                    color: isLightBg ? '#64748b' : '#94a3b8',
+                                    fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
+                                  }}
+                                  className="block"
+                                >
                                   {boardType === 'overall' 
                                     ? `${item.totalExams} اختبارات مقيمة` 
                                     : `الدرجة: ${item.score}/${currentExam?.totalScore || 100}`}
                                 </span>
                               </div>
 
-                              <div className="bg-amber-500/15 border border-amber-500/30 px-3 py-1 rounded-xl text-center min-w-[65px]">
-                                <span className="text-base font-black font-mono text-amber-500 block leading-tight">
+                              <div 
+                                style={{
+                                  backgroundColor: `${accentColor}18`,
+                                  borderColor: `${accentColor}40`,
+                                }}
+                                className="border px-3 py-1 rounded-xl text-center min-w-[65px]"
+                              >
+                                <span 
+                                  style={{ 
+                                    color: accentColor,
+                                    fontSize: `${Math.round(16 * (fontSizeScale / 100))}px`
+                                  }}
+                                  className="font-black font-mono block leading-tight"
+                                >
                                   {item.percentage}%
                                 </span>
                               </div>
@@ -1019,18 +1522,33 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   </div>
 
                   {/* Footer & Teacher Signature / Stamp Block */}
-                  <div className="mt-6 pt-5 border-t border-amber-500/20 grid grid-cols-3 items-center">
+                  <div 
+                    style={{ borderColor: `${accentColor}30` }}
+                    className="mt-6 pt-5 border-t grid grid-cols-3 items-center"
+                  >
                     
                     {/* Right: Official Accreditation Statement */}
                     <div className="text-right">
-                      <p className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                      <p 
+                        style={{ 
+                          color: isLightBg ? '#334155' : '#cbd5e1',
+                          fontSize: `${Math.round(11 * (fontSizeScale / 100))}px`
+                        }}
+                        className="font-bold"
+                      >
                         الاعتماد الرسمي
                       </p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                      <p 
+                        style={{ 
+                          color: isLightBg ? '#64748b' : '#94a3b8',
+                          fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
+                        }}
+                        className="mt-0.5 leading-relaxed"
+                      >
                         صدرت هذه اللوحة إلكترونياً تقديراً للمثابرة والتفوق الدراسي المشرف.
                       </p>
                       <div className="flex items-center gap-1 mt-1 text-[10px] text-emerald-500 font-bold">
-                        <CheckCircle2 className="w-3 h-3" />
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
                         <span>بيانات موثقة ومعتمدة</span>
                       </div>
                     </div>
@@ -1038,16 +1556,34 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     {/* Center: Golden Excellence Seal / Stamp */}
                     <div className="flex justify-center">
                       {showStamp && (
-                        <div className="w-20 h-20 rounded-full border-2 border-dashed border-amber-500/60 p-1 flex items-center justify-center relative rotate-[-6deg]">
-                          <div className="w-full h-full rounded-full border border-amber-500/40 bg-amber-500/10 flex flex-col items-center justify-center text-center p-1">
-                            <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 mb-0.5" />
-                            <span className="text-[8px] font-black text-amber-500 uppercase tracking-tighter leading-none">
+                        <div 
+                          style={{ borderColor: `${accentColor}70` }}
+                          className="w-20 h-20 rounded-full border-2 border-dashed p-1 flex items-center justify-center relative rotate-[-6deg]"
+                        >
+                          <div 
+                            style={{ 
+                              borderColor: `${accentColor}40`,
+                              backgroundColor: `${accentColor}12`
+                            }}
+                            className="w-full h-full rounded-full border flex flex-col items-center justify-center text-center p-1"
+                          >
+                            <Star className="w-3.5 h-3.5 mb-0.5" style={{ color: accentColor, fill: accentColor }} />
+                            <span 
+                              style={{ color: accentColor }}
+                              className="text-[8px] font-black uppercase tracking-tighter leading-none"
+                            >
                               ختم التميز
                             </span>
-                            <span className="text-[7px] text-amber-600 dark:text-amber-400 mt-0.5 font-bold">
+                            <span 
+                              style={{ color: accentColor }}
+                              className="text-[7px] mt-0.5 font-bold opacity-90"
+                            >
                               EXCELLENCE
                             </span>
-                            <span className="text-[7px] text-slate-400 font-mono">
+                            <span 
+                              style={{ color: isLightBg ? '#64748b' : '#94a3b8' }}
+                              className="text-[7px] font-mono"
+                            >
                               2025/2026
                             </span>
                           </div>
@@ -1057,23 +1593,48 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
                     {/* Left: Teacher Signature */}
                     <div className="flex flex-col items-center justify-center text-center min-w-[150px]">
-                      <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                      <p 
+                        style={{ 
+                          color: isLightBg ? '#64748b' : '#94a3b8',
+                          fontSize: `${Math.round(11 * (fontSizeScale / 100))}px`
+                        }}
+                        className="font-bold"
+                      >
                         {teacherRole}
                       </p>
-                      <p className={`text-xs sm:text-sm font-extrabold mt-0.5 whitespace-nowrap ${
-                        boardTheme === 'classic-ivory' ? 'text-slate-900' : 'text-amber-400'
-                      }`}>
+                      <p 
+                        style={{ 
+                          color: isLightBg ? textColor : accentColor,
+                          fontSize: `${Math.round(13 * (fontSizeScale / 100))}px`
+                        }}
+                        className="font-extrabold mt-0.5 whitespace-nowrap"
+                      >
                         {teacherName}
                       </p>
 
                       {showSignature && (
                         <div className="mt-1.5 flex flex-col items-center justify-center w-full">
                           {signatureStyle === 'official_badge' ? (
-                            <div className="px-3 py-1 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center gap-1.5 mt-1 shadow-xs">
-                              <span className="text-xs font-black text-amber-500 whitespace-nowrap">
+                            <div 
+                              style={{
+                                backgroundColor: `${accentColor}15`,
+                                borderColor: `${accentColor}35`
+                              }}
+                              className="px-3 py-1 border rounded-lg flex items-center gap-1.5 mt-1 shadow-xs"
+                            >
+                              <span 
+                                style={{ color: accentColor }}
+                                className="text-xs font-black whitespace-nowrap"
+                              >
                                 {signatureText || teacherName}
                               </span>
-                              <span className="text-[8px] px-1.5 py-0.5 bg-amber-500/20 text-amber-400 rounded font-mono font-bold">
+                              <span 
+                                style={{
+                                  backgroundColor: `${accentColor}25`,
+                                  color: accentColor
+                                }}
+                                className="text-[8px] px-1.5 py-0.5 rounded font-mono font-bold"
+                              >
                                 معتمد ✓
                               </span>
                             </div>
@@ -1081,12 +1642,13 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                             <div className="flex flex-col items-center justify-center">
                               {/* Signature text - guaranteed single line */}
                               <div 
-                                className="whitespace-nowrap select-none font-bold text-amber-500 dark:text-amber-300 px-3 tracking-wide"
+                                className="whitespace-nowrap select-none font-bold px-3 tracking-wide"
                                 style={{ 
+                                  color: accentColor,
                                   fontFamily: signatureStyle === 'cursive_script' 
                                     ? "'Plus Jakarta Sans', cursive, sans-serif" 
                                     : "'Aref Ruqaa', 'Cairo', serif",
-                                  fontSize: '22px',
+                                  fontSize: `${Math.round(22 * (fontSizeScale / 100))}px`,
                                   lineHeight: '1.2',
                                   transform: 'rotate(-2.5deg)',
                                   display: 'inline-block',
@@ -1097,7 +1659,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
                               {/* Flowing pen stroke swoosh */}
                               <svg 
-                                className="w-28 h-3.5 mt-0.5 text-amber-500 dark:text-amber-400 overflow-visible" 
+                                className="w-28 h-3.5 mt-0.5 overflow-visible" 
+                                style={{ color: accentColor }}
                                 viewBox="0 0 110 14" 
                                 fill="none" 
                                 xmlns="http://www.w3.org/2000/svg"
@@ -1117,7 +1680,10 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                 />
                               </svg>
 
-                              <div className="flex items-center gap-1 mt-1 text-[9px] text-slate-400 font-mono whitespace-nowrap">
+                              <div 
+                                style={{ color: isLightBg ? '#64748b' : '#94a3b8' }}
+                                className="flex items-center gap-1 mt-1 text-[9px] font-mono whitespace-nowrap"
+                              >
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                                 <span>توقيع رسمي معتمد</span>
                               </div>
@@ -1157,12 +1723,24 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
           <div className="flex flex-wrap items-center gap-2.5">
             
+            {/* Print Certificate Button */}
+            <button
+              type="button"
+              disabled={isExporting}
+              onClick={handlePrintCertificate}
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold text-slate-200 bg-slate-800 hover:bg-slate-700 active:scale-95 rounded-xl border border-slate-700 transition cursor-pointer disabled:opacity-50"
+              title="طباعة الشهادة أو حفظها بصيغة PDF"
+            >
+              <Printer className="w-4 h-4 text-amber-400" />
+              <span>طباعة الشهادة (PDF)</span>
+            </button>
+
             {/* Copy image button */}
             <button
               type="button"
               disabled={isExporting}
               onClick={handleCopyImage}
-              className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-slate-200 bg-slate-800 hover:bg-slate-700 active:scale-95 rounded-xl border border-slate-700 transition cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold text-slate-200 bg-slate-800 hover:bg-slate-700 active:scale-95 rounded-xl border border-slate-700 transition cursor-pointer disabled:opacity-50"
             >
               {copiedSuccess ? (
                 <>
