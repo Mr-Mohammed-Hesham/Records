@@ -25,7 +25,10 @@ import {
   Palette,
   Minus,
   Plus,
-  ChevronDown
+  ChevronDown,
+  Flame,
+  Zap,
+  Target
 } from 'lucide-react';
 import { toPng, toBlob } from 'html-to-image';
 import { Student, Exam, ExamResult, TeacherSettings } from '../types';
@@ -98,7 +101,9 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   const boardRef = useRef<HTMLDivElement>(null);
 
   // Configuration States
-  const [boardType, setBoardType] = useState<'overall' | 'exam'>(initialExamId ? 'exam' : 'overall');
+  const [boardType, setBoardType] = useState<'overall' | 'most_active' | 'combined' | 'exam'>(initialExamId ? 'exam' : 'overall');
+  const [includeMostActiveSection, setIncludeMostActiveSection] = useState<boolean>(true);
+  const [mostActiveLimit, setMostActiveLimit] = useState<number>(3);
   const [selectedExamId, setSelectedExamId] = useState<string>(initialExamId || (exams[0]?.id || ''));
   const [selectedGrade, setSelectedGrade] = useState<string>(initialGrade || 'all');
   const [selectedTrack, setSelectedTrack] = useState<string>('all');
@@ -251,9 +256,30 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     return exams.find(e => e.id === selectedExamId) || exams[0] || null;
   }, [filteredExams, exams, selectedExamId]);
 
+  // Handle changing board type with dynamic titles and messages
+  const handleBoardTypeChange = (newType: 'overall' | 'most_active' | 'combined' | 'exam') => {
+    setBoardType(newType);
+    if (newType === 'most_active') {
+      setTitle('لوحة شرف فرسان الالتزام والمثابرة');
+      setCongratsMessage('نبارك لأبطال المثابرة وفرسان الالتزام على حرصهم الدؤوب ومشاركتهم الفعالة في حل وإنجاز كافة الاختبارات والتقييمات المدرسية باجتهاد وتميز.');
+    } else if (newType === 'combined') {
+      setTitle('لوحة الشرف والتميز الأكاديمي الشاملة');
+      setCongratsMessage('نحتفي بصفوة طلبتنا المتميزين: أوائل التفوق العلمي وفرسان الالتزام الأكثر حلاً ومشاركة في الامتحانات، فخورون بجهودكم وتفانيكم المستمر.');
+    } else if (newType === 'overall') {
+      setTitle('لوحة شرف أوائل الطلبة والمتفوقين');
+      setCongratsMessage('يسرنا تهنئة طلبتنا المتميزين وأولياء أمورهم الكرام على هذا الإنجاز المشرف والتفوق المستحق، متمنين لهم دوام التألق والريادة الأكاديمية.');
+    } else if (newType === 'exam') {
+      if (currentExam) {
+        setTitle(`لوحة شرف أوائل: ${currentExam.title}`);
+      } else {
+        setTitle('لوحة شرف أوائل الامتحان');
+      }
+    }
+  };
+
   // Compute Ranked Students
   const rankedStudents = useMemo<RankedStudent[]>(() => {
-    if (boardType === 'overall') {
+    if (boardType === 'overall' || boardType === 'combined') {
       // Overall GPA across date-filtered exams
       let list = students.filter(st => {
         if (selectedGrade !== 'all' && st.grade !== selectedGrade) return false;
@@ -291,6 +317,50 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         totalExams: item.totalExams,
         gradeLabel: item.percentage >= 95 ? 'امتياز مع مرتبة الشرف' : item.percentage >= 90 ? 'ممتاز مرتفع' : 'متفوق متميز',
       }));
+    } else if (boardType === 'most_active') {
+      // Most active students ranked by total exams solved
+      let list = students.filter(st => {
+        if (selectedGrade !== 'all' && st.grade !== selectedGrade) return false;
+        if (selectedTrack !== 'all' && st.track && st.track !== selectedTrack) return false;
+        return true;
+      });
+
+      const withStats = list.map(st => {
+        const studentResults = dateFilteredResults.filter(r => r.studentDocId === st.id);
+        const stats = calculateStudentStats(studentResults, settings.gradingScale);
+        return {
+          student: st,
+          percentage: stats.averagePercentage,
+          score: stats.averageScore,
+          totalExams: stats.totalExams,
+        };
+      });
+
+      const filtered = withStats.filter(item => item.totalExams > 0);
+
+      filtered.sort((a, b) => {
+        if (b.totalExams !== a.totalExams) return b.totalExams - a.totalExams;
+        return b.percentage - a.percentage;
+      });
+
+      const sliced = limitCount > 0 ? filtered.slice(0, limitCount) : filtered;
+
+      return sliced.map((item, idx) => {
+        let roleLabel = 'عضو متميز بالمثابرة';
+        if (idx === 0) roleLabel = 'بطل الالتزام الأول ⚡';
+        else if (idx === 1) roleLabel = 'فارس المثابرة الثاني 🎯';
+        else if (idx === 2) roleLabel = 'رائد المتابعة الثالث 🌟';
+        else roleLabel = `المركز ${idx + 1} في المثابرة`;
+
+        return {
+          rank: idx + 1,
+          student: item.student,
+          score: item.score,
+          percentage: item.percentage,
+          totalExams: item.totalExams,
+          gradeLabel: roleLabel,
+        };
+      });
     } else {
       // Specific Exam Top Students
       if (!currentExam) return [];
@@ -333,6 +403,64 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     limitCount,
     settings.gradingScale,
     currentExam,
+  ]);
+
+  // Compute Most Active Students (Solved the Most Exams in the filtered period)
+  const mostActiveStudents = useMemo<RankedStudent[]>(() => {
+    let list = students.filter(st => {
+      if (selectedGrade !== 'all' && st.grade !== selectedGrade) return false;
+      if (selectedTrack !== 'all' && st.track && st.track !== selectedTrack) return false;
+      return true;
+    });
+
+    const withStats = list.map(st => {
+      const studentResults = dateFilteredResults.filter(r => r.studentDocId === st.id);
+      const stats = calculateStudentStats(studentResults, settings.gradingScale);
+      return {
+        student: st,
+        percentage: stats.averagePercentage,
+        score: stats.averageScore,
+        totalExams: stats.totalExams,
+      };
+    });
+
+    // Filter students with at least 1 exam
+    const filtered = withStats.filter(item => item.totalExams > 0);
+
+    // Sort primarily by highest total exams solved, then by percentage
+    filtered.sort((a, b) => {
+      if (b.totalExams !== a.totalExams) return b.totalExams - a.totalExams;
+      return b.percentage - a.percentage;
+    });
+
+    const countToTake = boardType === 'most_active' ? limitCount : mostActiveLimit;
+    const sliced = countToTake > 0 ? filtered.slice(0, countToTake) : filtered;
+
+    return sliced.map((item, idx) => {
+      let roleLabel = 'عضو متميز بالمثابرة';
+      if (idx === 0) roleLabel = 'بطل الالتزام الأول ⚡';
+      else if (idx === 1) roleLabel = 'فارس المثابرة الثاني 🎯';
+      else if (idx === 2) roleLabel = 'رائد المتابعة الثالث 🌟';
+      else roleLabel = `المركز ${idx + 1} في الحل والمثابرة`;
+
+      return {
+        rank: idx + 1,
+        student: item.student,
+        score: item.score,
+        percentage: item.percentage,
+        totalExams: item.totalExams,
+        gradeLabel: roleLabel,
+      };
+    });
+  }, [
+    students,
+    dateFilteredResults,
+    selectedGrade,
+    selectedTrack,
+    limitCount,
+    mostActiveLimit,
+    boardType,
+    settings.gradingScale,
   ]);
 
   if (!isOpen) return null;
@@ -499,15 +627,34 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     const subjectText = displaySubject;
     const gradeText = selectedGrade === 'all' ? 'أبنائنا وبناتنا' : `طلبة ${selectedGrade}`;
     const periodMsg = periodLabel ? `\n📅 *${periodLabel}*` : '';
-    const topStudentsList = rankedStudents
-      .slice(0, 5)
-      .map(s => `🏅 المركز ${s.rank}: ${s.student.name} (${s.percentage}%)`)
-      .join('\n');
+
+    let studentsMsg = '';
+    if (boardType === 'most_active') {
+      studentsMsg = `⚡ *فرسان الالتزام والأكثر حلاً للامتحانات:*\n` +
+        rankedStudents
+          .slice(0, 5)
+          .map(s => `🏅 المركز ${s.rank}: ${s.student.name} (${s.totalExams} اختبارات منجزة • معدل ${s.percentage}%)`)
+          .join('\n');
+    } else {
+      studentsMsg = `🌟 *أوائل المتفوقين دراسياً:*\n` +
+        rankedStudents
+          .slice(0, 5)
+          .map(s => `🏅 المركز ${s.rank}: ${s.student.name} (${s.percentage}%)`)
+          .join('\n');
+
+      if ((boardType === 'combined' || includeMostActiveSection) && mostActiveStudents.length > 0) {
+        studentsMsg += `\n\n⚡ *فرسان الالتزام (الأكثر حلاً للامتحانات):*\n` +
+          mostActiveStudents
+            .slice(0, 3)
+            .map(s => `🎯 المركز ${s.rank}: ${s.student.name} (${s.totalExams} اختبارات منجزة)`)
+            .join('\n');
+      }
+    }
 
     const msg = `🏆 *${title}* 🏆\n\n` +
       `السلام عليكم ورحمة الله وبركاته،\n` +
-      `أولياء أمورنا الأفاضل، يسرنا أن نشارككم لوحة شرف المتفوقين في مادة *${subjectText}* لـ *${gradeText}*${periodMsg} تقديراً لاجتهادهم وتميزهم المشرف:\n\n` +
-      `${topStudentsList}\n\n` +
+      `أولياء أمورنا الأفاضل، يسرنا أن نشارككم لوحة الشرف في مادة *${subjectText}* لـ *${gradeText}*${periodMsg} تقديراً لاجتهادهم ومشاركتهم المشرفة:\n\n` +
+      `${studentsMsg}\n\n` +
       `نسأل الله لأبنائنا وبناتنا دوام التفوق والنجاح الباهر 🌟\n` +
       `مع تحيات: *${teacherName}* (${teacherRole})`;
 
@@ -564,32 +711,108 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
           {/* Controls Sidebar (4 cols on lg) */}
           <div className="lg:col-span-4 space-y-4 text-right">
             
-            {/* Source Tab: Overall GPA vs Exam */}
-            <div className="bg-slate-800/60 p-1 rounded-2xl border border-slate-700/60 flex">
-              <button
-                type="button"
-                onClick={() => setBoardType('overall')}
-                className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-                  boardType === 'overall'
-                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>المعدل التراكمي العام</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setBoardType('exam')}
-                className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-                  boardType === 'exam'
-                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
-                <span>امتحان محدد</span>
-              </button>
+            {/* Board Type Selection: Overall, Most Active, Combined, or Single Exam */}
+            <div className="bg-slate-800/40 p-2.5 rounded-2xl border border-slate-700/60 space-y-2.5">
+              <span className="block text-[11px] font-bold text-amber-400">
+                نوع لوحة الشرف والتكريم:
+              </span>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleBoardTypeChange('overall')}
+                  className={`py-2 px-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                    boardType === 'overall'
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 border-amber-400 shadow-sm'
+                      : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <Crown className="w-3.5 h-3.5" />
+                  <span>أوائل المتفوقين</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleBoardTypeChange('most_active')}
+                  className={`py-2 px-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                    boardType === 'most_active'
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 border-amber-400 shadow-sm'
+                      : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <Flame className="w-3.5 h-3.5" />
+                  <span>الأكثر حلاً (المثابرة)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleBoardTypeChange('combined')}
+                  className={`py-2 px-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                    boardType === 'combined'
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 border-amber-400 shadow-sm'
+                      : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>لوحة شاملة مزدوجة</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleBoardTypeChange('exam')}
+                  className={`py-2 px-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                    boardType === 'exam'
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 border-amber-400 shadow-sm'
+                      : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>امتحان محدد</span>
+                </button>
+              </div>
+
+              {/* Toggle to include "Most Active Students" in the same certificate if Overall or Combined */}
+              {(boardType === 'overall' || boardType === 'combined') && (
+                <div className="pt-2 border-t border-slate-700/50 space-y-2">
+                  <div className="flex items-center justify-between bg-slate-900/60 p-2.5 rounded-xl border border-slate-700/60">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={includeMostActiveSection}
+                        onChange={(e) => setIncludeMostActiveSection(e.target.checked)}
+                        className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-slate-200">
+                        تضمين مراكز أكثر الطلاب حلاً للامتحانات
+                      </span>
+                    </label>
+                    <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                      ⚡ نشاط
+                    </span>
+                  </div>
+
+                  {includeMostActiveSection && (
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-[11px] text-slate-400">عدد فرسان الالتزام باللوحة:</span>
+                      <div className="flex items-center gap-1.5">
+                        {[3, 4, 5].map((cnt) => (
+                          <button
+                            key={cnt}
+                            type="button"
+                            onClick={() => setMostActiveLimit(cnt)}
+                            className={`px-2 py-0.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                              mostActiveLimit === cnt
+                                ? 'bg-amber-500 text-slate-950 shadow-xs'
+                                : 'bg-slate-800 text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            أفضل {cnt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* If Exam chosen, select exam */}
@@ -1342,9 +1565,25 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       }}
                       className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full font-bold border mb-2"
                     >
-                      <Sparkles className="w-3.5 h-3.5" style={{ color: accentColor }} />
-                      <span>وسام التميز والتفوق المستمر</span>
-                      <Sparkles className="w-3.5 h-3.5" style={{ color: accentColor }} />
+                      {boardType === 'most_active' ? (
+                        <>
+                          <Flame className="w-3.5 h-3.5" style={{ color: accentColor }} />
+                          <span>وسام فرسان الالتزام والمثابرة</span>
+                          <Flame className="w-3.5 h-3.5" style={{ color: accentColor }} />
+                        </>
+                      ) : boardType === 'combined' ? (
+                        <>
+                          <Crown className="w-3.5 h-3.5" style={{ color: accentColor }} />
+                          <span>وسام الشرف والتميز الأكاديمي الشامل</span>
+                          <Flame className="w-3.5 h-3.5" style={{ color: accentColor }} />
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5" style={{ color: accentColor }} />
+                          <span>وسام التميز والتفوق المستمر</span>
+                          <Sparkles className="w-3.5 h-3.5" style={{ color: accentColor }} />
+                        </>
+                      )}
                     </div>
 
                     <h1 
@@ -1369,6 +1608,10 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     >
                       {boardType === 'exam' && currentExam
                         ? `نتائج أوائل: ${currentExam.title} (الدرجة الكاملة: ${currentExam.totalScore})${periodLabel ? ` • ${periodLabel}` : ''}`
+                        : boardType === 'most_active'
+                        ? customSubtitle || `تكريم الطلاب الأكثر حلاً للاختبارات والمشاركات • مادة ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
+                        : boardType === 'combined'
+                        ? customSubtitle || `لوحة الشرف الشاملة: أوائل المتفوقين وفرسان الالتزام • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
                         : customSubtitle || `لوحة الشرف العامة لأوائل الطلبة • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`}
                     </p>
 
@@ -1384,6 +1627,19 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       "{congratsMessage}"
                     </p>
                   </div>
+
+                  {/* Section Title if Combined Board */}
+                  {boardType === 'combined' && (
+                    <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-amber-500/20">
+                      <Crown className="w-4 h-4 text-amber-400" />
+                      <h2 
+                        style={{ fontFamily: fontFamily, color: textColor }}
+                        className="text-xs font-bold"
+                      >
+                        القسم الأول: أوائل التفوق والامتياز الدراسي
+                      </h2>
+                    </div>
+                  )}
 
                   {/* Top Students Roster / Podium */}
                   <div className="space-y-2.5 my-3">
@@ -1454,7 +1710,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                       }}
                                       className="px-2 py-0.5 font-bold border rounded-full"
                                     >
-                                      المركز الأول
+                                      {boardType === 'most_active' ? 'بطل الالتزام الأول' : 'المركز الأول'}
                                     </span>
                                   )}
                                 </div>
@@ -1489,9 +1745,11 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                     color: isLightBg ? '#64748b' : '#94a3b8',
                                     fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
                                   }}
-                                  className="block"
+                                  className="block font-medium"
                                 >
-                                  {boardType === 'overall' 
+                                  {boardType === 'most_active'
+                                    ? `متوسط الدرجات: ${item.percentage}%`
+                                    : boardType === 'overall' || boardType === 'combined'
                                     ? `${item.totalExams} اختبارات مقيمة` 
                                     : `الدرجة: ${item.score}/${currentExam?.totalScore || 100}`}
                                 </span>
@@ -1502,17 +1760,40 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                   backgroundColor: `${accentColor}18`,
                                   borderColor: `${accentColor}40`,
                                 }}
-                                className="border px-3 py-1 rounded-xl text-center min-w-[65px]"
+                                className="border px-3 py-1 rounded-xl text-center min-w-[70px]"
                               >
-                                <span 
-                                  style={{ 
-                                    color: accentColor,
-                                    fontSize: `${Math.round(16 * (fontSizeScale / 100))}px`
-                                  }}
-                                  className="font-black font-mono block leading-tight"
-                                >
-                                  {item.percentage}%
-                                </span>
+                                {boardType === 'most_active' ? (
+                                  <>
+                                    <span 
+                                      style={{ 
+                                        color: accentColor,
+                                        fontSize: `${Math.round(15 * (fontSizeScale / 100))}px`
+                                      }}
+                                      className="font-black font-mono block leading-tight"
+                                    >
+                                      {item.totalExams} اختبار
+                                    </span>
+                                    <span 
+                                      style={{ 
+                                        color: isLightBg ? '#64748b' : '#94a3b8',
+                                        fontSize: `${Math.round(9 * (fontSizeScale / 100))}px`
+                                      }}
+                                      className="block font-bold mt-0.5"
+                                    >
+                                      تم حلها
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span 
+                                    style={{ 
+                                      color: accentColor,
+                                      fontSize: `${Math.round(16 * (fontSizeScale / 100))}px`
+                                    }}
+                                    className="font-black font-mono block leading-tight"
+                                  >
+                                    {item.percentage}%
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1520,6 +1801,145 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       })
                     )}
                   </div>
+
+                  {/* Secondary Section: فرسان الالتزام والمثابرة (الأكثر حلاً للامتحانات) */}
+                  {(boardType === 'combined' || (boardType === 'overall' && includeMostActiveSection)) && mostActiveStudents.length > 0 && (
+                    <div 
+                      style={{
+                        borderColor: `${accentColor}40`,
+                        backgroundColor: isLightBg ? 'rgba(245, 158, 11, 0.05)' : 'rgba(245, 158, 11, 0.04)'
+                      }}
+                      className="mt-6 pt-5 pb-3 px-3 sm:px-4 rounded-2xl border border-dashed space-y-3"
+                    >
+                      {/* Section Header */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div 
+                            style={{ backgroundColor: `${accentColor}25`, color: accentColor }}
+                            className="w-7 h-7 rounded-xl flex items-center justify-center text-xs"
+                          >
+                            <Flame className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h2 
+                              style={{ 
+                                fontFamily: fontFamily,
+                                color: textColor,
+                                fontSize: `${Math.round(14 * (fontSizeScale / 100))}px`
+                              }}
+                              className="font-black leading-tight"
+                            >
+                              فرسان الالتزام والمثابرة • الأكثر حلاً للامتحانات
+                            </h2>
+                            <p 
+                              style={{ 
+                                color: isLightBg ? '#64748b' : '#94a3b8',
+                                fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
+                              }}
+                            >
+                              تقديراً للحرص الدؤوب والمشاركة الفعالة في إنجاز التقييمات والاختبارات
+                            </p>
+                          </div>
+                        </div>
+                        <span 
+                          style={{ 
+                            color: accentColor, 
+                            borderColor: `${accentColor}40`,
+                            backgroundColor: `${accentColor}15`,
+                            fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
+                          }}
+                          className="px-2.5 py-0.5 rounded-full font-bold border"
+                        >
+                          أعلى مشاركة ⚡
+                        </span>
+                      </div>
+
+                      {/* Active Students Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                        {mostActiveStudents.map((act) => {
+                          const isFirst = act.rank === 1;
+                          const isSecond = act.rank === 2;
+                          const isThird = act.rank === 3;
+                          return (
+                            <div
+                              key={act.student.id}
+                              style={{
+                                backgroundColor: isLightBg ? 'rgba(255, 255, 255, 0.85)' : 'rgba(30, 41, 59, 0.7)',
+                                borderColor: isFirst ? `${accentColor}70` : isLightBg ? '#e2e8f0' : 'rgba(71, 85, 105, 0.4)'
+                              }}
+                              className="p-2.5 rounded-xl border flex items-center justify-between gap-2 shadow-xs"
+                            >
+                              <div className="flex items-center gap-2">
+                                <div
+                                  style={{
+                                    background: isFirst
+                                      ? `linear-gradient(135deg, ${accentColor}, #fef08a)`
+                                      : isSecond
+                                      ? 'linear-gradient(135deg, #cbd5e1, #f1f5f9)'
+                                      : isThird
+                                      ? 'linear-gradient(135deg, #b45309, #d97706)'
+                                      : isLightBg ? '#f1f5f9' : '#1e293b',
+                                    color: isFirst || isSecond ? '#0f172a' : '#ffffff',
+                                  }}
+                                  className="w-7 h-7 rounded-xl flex items-center justify-center font-black text-xs shrink-0"
+                                >
+                                  {isFirst ? '🥇' : isSecond ? '🥈' : isThird ? '🥉' : act.rank}
+                                </div>
+                                <div>
+                                  <h4 
+                                    style={{ 
+                                      fontFamily: fontFamily,
+                                      color: textColor,
+                                      fontSize: `${Math.round(13 * (fontSizeScale / 100))}px`
+                                    }}
+                                    className="font-bold leading-tight truncate max-w-[130px] sm:max-w-[150px]"
+                                  >
+                                    {act.student.name}
+                                  </h4>
+                                  <span 
+                                    style={{ 
+                                      color: isLightBg ? '#64748b' : '#94a3b8',
+                                      fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
+                                    }}
+                                    className="block font-medium"
+                                  >
+                                    {act.gradeLabel}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div 
+                                style={{
+                                  backgroundColor: `${accentColor}18`,
+                                  borderColor: `${accentColor}40`,
+                                }}
+                                className="border px-2 py-1 rounded-lg text-center shrink-0 min-w-[55px]"
+                              >
+                                <span 
+                                  style={{ 
+                                    color: accentColor,
+                                    fontSize: `${Math.round(12 * (fontSizeScale / 100))}px`
+                                  }}
+                                  className="font-black font-mono block leading-none"
+                                >
+                                  {act.totalExams} اختبار
+                                </span>
+                                <span 
+                                  style={{ 
+                                    color: isLightBg ? '#64748b' : '#94a3b8',
+                                    fontSize: `${Math.round(9 * (fontSizeScale / 100))}px`
+                                  }}
+                                  className="block font-mono mt-0.5"
+                                >
+                                  {act.percentage}%
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Footer & Teacher Signature / Stamp Block */}
                   <div 
