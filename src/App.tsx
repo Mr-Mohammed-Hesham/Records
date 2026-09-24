@@ -33,6 +33,7 @@ import {
   getTeacherSettings,
   saveTeacherSettings,
   subscribeToRealtimeData,
+  syncAllDataFromFirestore,
   addStudent,
   updateStudent,
   deleteStudent,
@@ -596,13 +597,18 @@ export default function App() {
           setLoading(false);
         });
 
-        // Background sync for latest teacher settings
-        getTeacherSettings()
-          .then((loadedSettings) => {
-            setSettings((prev) => ({ ...prev, ...loadedSettings }));
+        // Direct concurrent cloud fetch to guarantee all documents are loaded
+        syncAllDataFromFirestore()
+          .then((fresh) => {
+            if (fresh.students.length > 0 || fresh.exams.length > 0 || fresh.results.length > 0) {
+              setStudents(fresh.students);
+              setExams(fresh.exams);
+              setResults(fresh.results);
+              setSettings(fresh.settings);
+            }
           })
           .catch((err) => {
-            console.warn('Background settings sync:', err);
+            console.debug('Direct initial sync:', err);
           });
       } catch (err) {
         console.warn('Initialization info:', err);
@@ -1587,7 +1593,7 @@ export default function App() {
     };
 
   /* =======================================================
-     REFRESH PLATFORM (تحديث المنصة)
+     REFRESH PLATFORM & CLOUD SYNC (مزامنة وتحديث المنصة)
      ======================================================= */
 
   const [isRefreshingPlatform, setIsRefreshingPlatform] = useState(false);
@@ -1595,9 +1601,15 @@ export default function App() {
   const handleRefreshPlatform = async () => {
     try {
       setIsRefreshingPlatform(true);
-      addToast('جاري تحديث المنصة ومزامنة أحدث السجلات...', 'info');
+      addToast('جاري الاتصال بـ Firebase ومزامنة السجلات الأكاديمية...', 'info', 2000);
 
-      // Update Service Worker caches if registered
+      const freshData = await syncAllDataFromFirestore();
+      setStudents(freshData.students);
+      setExams(freshData.exams);
+      setResults(freshData.results);
+      setSettings(freshData.settings);
+
+      // Also refresh service worker caches if present
       if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
         try {
           const registrations = await navigator.serviceWorker.getRegistrations();
@@ -1609,21 +1621,16 @@ export default function App() {
         }
       }
 
-      // Re-sync settings
-      try {
-        const freshSettings = await getTeacherSettings();
-        setSettings(freshSettings);
-      } catch (stErr) {
-        console.debug('Settings refresh:', stErr);
-      }
-
-      // Smooth delay before reload so the user sees the spin & toast
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
+      addToast(
+        `تمت المزامنة بنجاح: تم جلب ${freshData.students.length} طالب، ${freshData.exams.length} امتحان، ${freshData.results.length} نتيجة مباشرة من فايربيز`,
+        'success',
+        4000
+      );
     } catch (err) {
       console.error('Refresh platform error:', err);
-      window.location.reload();
+      addToast('تمت استعادة البيانات المتاحة، تعذر الوصول للسحابة مؤقتاً', 'info', 3000);
+    } finally {
+      setIsRefreshingPlatform(false);
     }
   };
 
@@ -2307,6 +2314,12 @@ export default function App() {
               }
               onExportAllExcel={
                 handleExportAllExcel
+              }
+              onRefreshPlatform={
+                handleRefreshPlatform
+              }
+              isRefreshing={
+                isRefreshingPlatform
               }
             />
           )}

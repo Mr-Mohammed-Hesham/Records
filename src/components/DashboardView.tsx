@@ -19,7 +19,8 @@ import {
   Zap,
   Flame,
   Activity,
-  CheckCircle2
+  CheckCircle2,
+  RefreshCw
 } from 'lucide-react';
 import { Student, Exam, ExamResult, TeacherSettings } from '../types';
 import { calculateStudentStats } from '../utils/grading';
@@ -37,6 +38,8 @@ interface DashboardViewProps {
   onAddExam: () => void;
   onOpenQuickSearch: () => void;
   onExportAllExcel: () => void;
+  onRefreshPlatform?: () => void;
+  isRefreshing?: boolean;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -50,6 +53,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onAddExam,
   onOpenQuickSearch,
   onExportAllExcel,
+  onRefreshPlatform,
+  isRefreshing = false,
 }) => {
   const [isHonorBoardOpen, setIsHonorBoardOpen] = useState(false);
   const safeStudents = students || [];
@@ -195,6 +200,19 @@ className="w-full h-full object-cover rounded-[14px]"
               <span>رصد النتائج</span>
             </button>
 
+            {onRefreshPlatform && (
+              <button
+                id="dash-sync-btn"
+                onClick={onRefreshPlatform}
+                disabled={isRefreshing}
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer"
+                title="مزامنة وجلب كافة السجلات من فايربيز مباشرة"
+              >
+                <RefreshCw className={`w-4 h-4 text-amber-500 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'جاري المزامنة...' : 'مزامنة فايربيز'}</span>
+              </button>
+            )}
+
             <button
               id="dash-search-btn"
               onClick={onOpenQuickSearch}
@@ -215,6 +233,31 @@ className="w-full h-full object-cover rounded-[14px]"
           </div>
         </div>
       </div>
+
+      {/* Empty State / Initial Cloud Fetch Assistant */}
+      {safeStudents.length === 0 && safeExams.length === 0 && (
+        <div className="p-4 sm:p-5 rounded-3xl bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/30 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm shadow-xs">
+          <div className="flex items-center gap-3 text-slate-800 dark:text-amber-100">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 flex items-center justify-center shrink-0 text-amber-600 dark:text-amber-400">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-bold text-slate-900 dark:text-white">هل توجد بيانات سابقة على حسابك في Firebase؟</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">يمكنك جلب ومزامنة كافة السجلات السحابية فوراً دون الحاجة لإعادة تحميل الصفحة.</p>
+            </div>
+          </div>
+          {onRefreshPlatform && (
+            <button
+              onClick={onRefreshPlatform}
+              disabled={isRefreshing}
+              className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black rounded-xl text-xs sm:text-sm inline-flex items-center justify-center gap-2 shrink-0 cursor-pointer shadow-md shadow-amber-500/20 transition active:scale-95"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? 'جاري الاتصال والتحميل...' : 'مزامنة السجلات من السحابة الآن'}</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Vibrant 4-Metric Grid with Lively Gradients & Accents */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">

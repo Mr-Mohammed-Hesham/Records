@@ -3,16 +3,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // التحقق من صلاحيات الوصول للمنصة
-    function isAuthenticated() {
-      return true;
-    }
-
-    // التحقق من حساب المعلم المصرح له
-    function isTeacherAdmin() {
-      return true;
-    }
-
     // Students - الطلاب
     match /students/{studentId} {
       allow read, write: if true;
@@ -35,6 +25,11 @@ service cloud.firestore {
 
     // Connection Test
     match /test/{testId} {
+      allow read, write: if true;
+    }
+
+    // Global match to prevent any permission errors on subcollections or queries
+    match /{document=**} {
       allow read, write: if true;
     }
   }

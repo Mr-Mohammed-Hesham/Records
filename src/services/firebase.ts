@@ -500,7 +500,7 @@ export async function getStudents(): Promise<Student[]> {
   try {
     const fetchPromise = getDocs(collection(db, 'students'));
     const timeoutPromise = new Promise<null>((resolve) =>
-      setTimeout(() => resolve(null), 3000)
+      setTimeout(() => resolve(null), 12000)
     );
     const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
 
@@ -510,9 +510,7 @@ export async function getStudents(): Promise<Student[]> {
         ...item.data(),
       })) as Student[];
 
-      if (items.length > 0) {
-        setCachedData(CACHE_KEYS.STUDENTS, items);
-      }
+      setCachedData(CACHE_KEYS.STUDENTS, items);
       return items;
     }
   } catch (err) {
@@ -685,7 +683,7 @@ export async function getExams(): Promise<Exam[]> {
   try {
     const fetchPromise = getDocs(collection(db, 'exams'));
     const timeoutPromise = new Promise<null>((resolve) =>
-      setTimeout(() => resolve(null), 3000)
+      setTimeout(() => resolve(null), 12000)
     );
     const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
 
@@ -695,9 +693,7 @@ export async function getExams(): Promise<Exam[]> {
         ...item.data(),
       })) as Exam[];
 
-      if (items.length > 0) {
-        setCachedData(CACHE_KEYS.EXAMS, items);
-      }
+      setCachedData(CACHE_KEYS.EXAMS, items);
       return items;
     }
   } catch (err) {
@@ -842,7 +838,7 @@ export async function getResults(): Promise<ExamResult[]> {
   try {
     const fetchPromise = getDocs(collection(db, 'results'));
     const timeoutPromise = new Promise<null>((resolve) =>
-      setTimeout(() => resolve(null), 3000)
+      setTimeout(() => resolve(null), 12000)
     );
     const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
 
@@ -852,9 +848,7 @@ export async function getResults(): Promise<ExamResult[]> {
         ...item.data(),
       })) as ExamResult[];
 
-      if (items.length > 0) {
-        setCachedData(CACHE_KEYS.RESULTS, items);
-      }
+      setCachedData(CACHE_KEYS.RESULTS, items);
       return items;
     }
   } catch (err) {
@@ -1122,7 +1116,7 @@ export async function getTeacherSettings(): Promise<TeacherSettings> {
   try {
     const fetchPromise = getDoc(doc(db, 'settings', SETTINGS_ID));
     const timeoutPromise = new Promise<null>((resolve) =>
-      setTimeout(() => resolve(null), 2500)
+      setTimeout(() => resolve(null), 10000)
     );
     const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
 
@@ -1206,19 +1200,92 @@ export interface RealtimeData {
   settings: TeacherSettings;
 }
 
+/**
+ * مزامنة مباشرة وشاملة مع قاعدة بيانات Firestore
+ * تجلب أحدث السجلات (طلاب، امتحانات، نتائج، إعدادات) وتحدث الكاش والمشتركين
+ */
+export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
+  try {
+    const [studentsSnap, examsSnap, resultsSnap, settingsSnap] = await Promise.allSettled([
+      getDocs(collection(db, 'students')),
+      getDocs(collection(db, 'exams')),
+      getDocs(collection(db, 'results')),
+      getDoc(doc(db, 'settings', SETTINGS_ID)),
+    ]);
+
+    let students = getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
+    if (studentsSnap.status === 'fulfilled') {
+      const items = studentsSnap.value.docs.map((item) => ({
+        id: item.id,
+        ...item.data(),
+      })) as Student[];
+      // دمج أو تحديث مع الحفاظ على البيانات
+      if (items.length > 0 || students.length === 0) {
+        students = items;
+        setCachedData(CACHE_KEYS.STUDENTS, students);
+      }
+    }
+
+    let exams = getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []);
+    if (examsSnap.status === 'fulfilled') {
+      const items = examsSnap.value.docs.map((item) => ({
+        id: item.id,
+        ...item.data(),
+      })) as Exam[];
+      if (items.length > 0 || exams.length === 0) {
+        exams = items;
+        setCachedData(CACHE_KEYS.EXAMS, exams);
+      }
+    }
+
+    let results = getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
+    if (resultsSnap.status === 'fulfilled') {
+      const items = resultsSnap.value.docs.map((item) => ({
+        id: item.id,
+        ...item.data(),
+      })) as ExamResult[];
+      if (items.length > 0 || results.length === 0) {
+        results = items;
+        setCachedData(CACHE_KEYS.RESULTS, results);
+      }
+    }
+
+    let settings = getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS);
+    if (settingsSnap.status === 'fulfilled' && settingsSnap.value.exists()) {
+      settings = {
+        ...DEFAULT_SETTINGS,
+        ...settingsSnap.value.data(),
+      } as TeacherSettings;
+      setCachedData(CACHE_KEYS.SETTINGS, settings);
+    }
+
+    notifySubscribers();
+
+    return {
+      students,
+      exams,
+      results,
+      settings,
+    };
+  } catch (err) {
+    console.warn('syncAllDataFromFirestore fallback to cache:', err);
+    return {
+      students: getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []),
+      exams: getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []),
+      results: getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []),
+      settings: getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS),
+    };
+  }
+}
+
 export function subscribeToRealtimeData(
   callback: (data: RealtimeData) => void
 ): () => void {
-  // إضافة إلى المشتركين المباشرين للتحديث الفوري بدون انتظار
+  // 1. إضافة إلى المشتركين المباشرين للتحديث الفوري
   realtimeSubscribers.add(callback);
 
-  // 1. تحميل فوري للبيانات المحفوظة محلياً لبدء التطبيق فوراً بدون أي تأخير أو فقدان
-  let students: Student[] = getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
-  let exams: Exam[] = getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []);
-  let results: ExamResult[] = getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
-  let settings: TeacherSettings = getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS);
-
-  const emit = () => {
+  // 2. بث فوري للبيانات المحفوظة محلياً لبدء الواجهة فوراً
+  const emitCurrent = () => {
     callback({
       students: getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []),
       exams: getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []),
@@ -1226,118 +1293,148 @@ export function subscribeToRealtimeData(
       settings: getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS),
     });
   };
+  emitCurrent();
 
-  // بث البيانات المخبأة محلياً فوراً
-  emit();
+  // 3. مزامنة فورية مباشرة في الخلفية لضمان وصول كافة السجلات من السحابة حتى لو تعثر الـ Realtime
+  syncAllDataFromFirestore().catch((err) => {
+    console.debug('Initial sync from Firestore:', err);
+  });
 
-  const unsubscribeStudents = onSnapshot(
-    collection(db, 'students'),
-    (snapshot) => {
-      const firestoreStudents = snapshot.docs.map(
-        (item) => ({
-          id: item.id,
-          ...item.data(),
-        })
-      ) as Student[];
+  let isSubscribed = true;
+  let activeUnsubscribers: Array<() => void> = [];
+  let retryTimers: ReturnType<typeof setTimeout>[] = [];
 
-      const localStudents = getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
-      const studentMap = new Map<string, Student>();
-      firestoreStudents.forEach(s => studentMap.set(s.id, s));
-      localStudents.forEach(s => {
-        if (!studentMap.has(s.id)) {
-          studentMap.set(s.id, s);
+  const setupRealtimeListeners = () => {
+    if (!isSubscribed) return;
+
+    // تنظيف أي مستمعين سابقين قبل إعادة الربط
+    activeUnsubscribers.forEach((unsub) => {
+      try {
+        unsub();
+      } catch {}
+    });
+    activeUnsubscribers = [];
+
+    // مستمع الطلاب Students Listener
+    try {
+      const unsubStudents = onSnapshot(
+        collection(db, 'students'),
+        (snapshot) => {
+          const firestoreStudents = snapshot.docs.map((item) => ({
+            id: item.id,
+            ...item.data(),
+          })) as Student[];
+          setCachedData(CACHE_KEYS.STUDENTS, firestoreStudents);
+          notifySubscribers();
+        },
+        (err) => {
+          console.warn('Realtime students listener warning:', err.message);
+          // في حال حدوث خطأ أو انقطاع، جلب مباشر ثم محاولة إعادة ربط تلقائية
+          if (isSubscribed) {
+            syncAllDataFromFirestore().catch(() => {});
+            const timer = setTimeout(() => {
+              if (isSubscribed) setupRealtimeListeners();
+            }, 5000);
+            retryTimers.push(timer);
+          }
         }
-      });
-      students = Array.from(studentMap.values());
-      setCachedData(CACHE_KEYS.STUDENTS, students);
-      notifySubscribers();
-    },
-    (err) => {
-      console.warn('Realtime students listener:', err.message);
-      emit();
+      );
+      activeUnsubscribers.push(unsubStudents);
+    } catch (e) {
+      console.warn('Error setting up students listener:', e);
     }
-  );
 
-  const unsubscribeExams = onSnapshot(
-    collection(db, 'exams'),
-    (snapshot) => {
-      const firestoreExams = snapshot.docs.map(
-        (item) => ({
-          id: item.id,
-          ...item.data(),
-        })
-      ) as Exam[];
-
-      const localExams = getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []);
-      const examMap = new Map<string, Exam>();
-      firestoreExams.forEach(e => examMap.set(e.id, e));
-      localExams.forEach(e => {
-        if (!examMap.has(e.id)) {
-          examMap.set(e.id, e);
+    // مستمع الامتحانات Exams Listener
+    try {
+      const unsubExams = onSnapshot(
+        collection(db, 'exams'),
+        (snapshot) => {
+          const firestoreExams = snapshot.docs.map((item) => ({
+            id: item.id,
+            ...item.data(),
+          })) as Exam[];
+          setCachedData(CACHE_KEYS.EXAMS, firestoreExams);
+          notifySubscribers();
+        },
+        (err) => {
+          console.warn('Realtime exams listener warning:', err.message);
+          if (isSubscribed) {
+            syncAllDataFromFirestore().catch(() => {});
+            const timer = setTimeout(() => {
+              if (isSubscribed) setupRealtimeListeners();
+            }, 5000);
+            retryTimers.push(timer);
+          }
         }
-      });
-      exams = Array.from(examMap.values());
-      setCachedData(CACHE_KEYS.EXAMS, exams);
-      notifySubscribers();
-    },
-    (err) => {
-      console.warn('Realtime exams listener:', err.message);
-      emit();
+      );
+      activeUnsubscribers.push(unsubExams);
+    } catch (e) {
+      console.warn('Error setting up exams listener:', e);
     }
-  );
 
-  const unsubscribeResults = onSnapshot(
-    collection(db, 'results'),
-    (snapshot) => {
-      const firestoreResults = snapshot.docs.map(
-        (item) => ({
-          id: item.id,
-          ...item.data(),
-        })
-      ) as ExamResult[];
-
-      const localResults = getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
-      const resultMap = new Map<string, ExamResult>();
-      firestoreResults.forEach(r => resultMap.set(r.id, r));
-      localResults.forEach(r => {
-        if (!resultMap.has(r.id)) {
-          resultMap.set(r.id, r);
+    // مستمع النتائج Results Listener
+    try {
+      const unsubResults = onSnapshot(
+        collection(db, 'results'),
+        (snapshot) => {
+          const firestoreResults = snapshot.docs.map((item) => ({
+            id: item.id,
+            ...item.data(),
+          })) as ExamResult[];
+          setCachedData(CACHE_KEYS.RESULTS, firestoreResults);
+          notifySubscribers();
+        },
+        (err) => {
+          console.warn('Realtime results listener warning:', err.message);
+          if (isSubscribed) {
+            syncAllDataFromFirestore().catch(() => {});
+            const timer = setTimeout(() => {
+              if (isSubscribed) setupRealtimeListeners();
+            }, 5000);
+            retryTimers.push(timer);
+          }
         }
-      });
-      results = Array.from(resultMap.values());
-      setCachedData(CACHE_KEYS.RESULTS, results);
-      notifySubscribers();
-    },
-    (err) => {
-      console.warn('Realtime results listener:', err.message);
-      emit();
+      );
+      activeUnsubscribers.push(unsubResults);
+    } catch (e) {
+      console.warn('Error setting up results listener:', e);
     }
-  );
 
-  const unsubscribeSettings = onSnapshot(
-    doc(db, 'settings', SETTINGS_ID),
-    (snapshot) => {
-      if (snapshot.exists()) {
-        settings = {
-          ...DEFAULT_SETTINGS,
-          ...snapshot.data(),
-        } as TeacherSettings;
-        setCachedData(CACHE_KEYS.SETTINGS, settings);
-        notifySubscribers();
-      }
-    },
-    (err) => {
-      console.warn('Realtime settings listener:', err.message);
-      emit();
+    // مستمع الإعدادات Settings Listener
+    try {
+      const unsubSettings = onSnapshot(
+        doc(db, 'settings', SETTINGS_ID),
+        (snapshot) => {
+          if (snapshot.exists()) {
+            const freshSettings = {
+              ...DEFAULT_SETTINGS,
+              ...snapshot.data(),
+            } as TeacherSettings;
+            setCachedData(CACHE_KEYS.SETTINGS, freshSettings);
+            notifySubscribers();
+          }
+        },
+        (err) => {
+          console.warn('Realtime settings listener warning:', err.message);
+        }
+      );
+      activeUnsubscribers.push(unsubSettings);
+    } catch (e) {
+      console.warn('Error setting up settings listener:', e);
     }
-  );
+  };
+
+  setupRealtimeListeners();
 
   return () => {
+    isSubscribed = false;
     realtimeSubscribers.delete(callback);
-    unsubscribeStudents();
-    unsubscribeExams();
-    unsubscribeResults();
-    unsubscribeSettings();
+    retryTimers.forEach((t) => clearTimeout(t));
+    activeUnsubscribers.forEach((unsub) => {
+      try {
+        unsub();
+      } catch {}
+    });
   };
 }
 
