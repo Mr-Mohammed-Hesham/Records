@@ -1,15 +1,14 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAnalytics, isSupported } from 'firebase/analytics';
 
 import {
   getFirestore,
-  initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
   type Firestore,
   collection,
   doc,
   getDocs,
   getDoc,
+  getDocFromServer,
   setDoc,
   addDoc,
   updateDoc,
@@ -41,46 +40,20 @@ import {
 import { DEFAULT_GRADING_SCALE } from '../utils/grading';
 
 /* =========================================================
-   FIREBASE CONFIG
-   Project: records-2eedd (Existing Firebase Project)
-   Firestore: (default) Database
-   Using ONLY real VITE_FIREBASE_* environment variables
+   FIREBASE CONFIG (Project: records-2eedd)
    ========================================================= */
-
-/* =========================================================
-
-   FIREBASE CONFIG
-
-   Project: records-2eedd
-
-   Firestore: (default)
-
-   ========================================================= */
-
-
 
 export const TARGET_FIREBASE_PROJECT_ID = 'records-2eedd';
-
 export const FIRESTORE_DATABASE_ID = '(default)';
 
-
-
-const firebaseConfig = {
-
-  apiKey: 'AIzaSyC2LHHPG7hn27LewZXmpU_PZAbysuL1TUc'.trim(),
-
-  authDomain: 'records-2eedd.firebaseapp.com',
-
-  projectId: 'records-2eedd',
-
-  storageBucket: 'records-2eedd.firebasestorage.app',
-
-  messagingSenderId: '909170236632',
-
-  appId: '1:909170236632:web:194a138a4e137d20978bad',
-
-  measurementId: 'G-3W94L8Y977',
-
+export const firebaseConfig = {
+  apiKey: "AIzaSyC2LHHPG7hn27LewZXmpU_PZAbysuL1TUc",
+  authDomain: "records-2eedd.firebaseapp.com",
+  projectId: "records-2eedd",
+  storageBucket: "records-2eedd.firebasestorage.app",
+  messagingSenderId: "909170236632",
+  appId: "1:909170236632:web:194a138a4e137d20978bad",
+  measurementId: "G-3W94L8Y977"
 };
 
 /* =========================================================
@@ -102,13 +75,25 @@ export function isAllowedEmail(email?: string | null): boolean {
 }
 
 /* =========================================================
-   FIREBASE APP
+   FIREBASE APP & ANALYTICS
    ========================================================= */
 
 export const app =
   getApps().length > 0
     ? getApp()
     : initializeApp(firebaseConfig);
+
+let analyticsInstance: any = null;
+if (typeof window !== 'undefined') {
+  isSupported()
+    .then((supported) => {
+      if (supported) {
+        analyticsInstance = getAnalytics(app);
+      }
+    })
+    .catch(() => {});
+}
+export const analytics = analyticsInstance;
 
 /* =========================================================
    FIREBASE AUTH
@@ -120,35 +105,16 @@ export const auth = getAuth(app);
    FIRESTORE
    ========================================================= */
 
-function initFirestore(): Firestore {
-  try {
-    return initializeFirestore(
-      app,
-      {
-        localCache: persistentLocalCache({
-          tabManager: persistentMultipleTabManager(),
-        }),
-        experimentalAutoDetectLongPolling: true,
-        ignoreUndefinedProperties: true,
-      },
-      FIRESTORE_DATABASE_ID
-    );
-  } catch {
-    try {
-      return initializeFirestore(
-        app,
-        {
-          ignoreUndefinedProperties: true,
-        },
-        FIRESTORE_DATABASE_ID
-      );
-    } catch {
-      return getFirestore(app, FIRESTORE_DATABASE_ID);
-    }
-  }
-}
+export const db = getFirestore(app, FIRESTORE_DATABASE_ID);
 
-export const db = initFirestore();
+// Test Firestore connection on boot
+if (typeof window !== 'undefined') {
+  getDocFromServer(doc(db, 'test', 'connection')).catch((error) => {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.warn('Firebase connection check: client offline or syncing.');
+    }
+  });
+}
 
 /* =========================================================
    GOOGLE AUTH PROVIDER
