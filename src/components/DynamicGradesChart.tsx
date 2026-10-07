@@ -29,7 +29,7 @@ import {
   AlignLeft,
   Compass,
 } from 'lucide-react';
-import { ChartDisplayType } from '../types';
+import { ChartDisplayType, ExamResult } from '../types';
 
 export interface ChartDataPoint {
   id?: string;
@@ -43,8 +43,10 @@ export interface ChartDataPoint {
 }
 
 interface DynamicGradesChartProps {
-  data: ChartDataPoint[];
-  mode?: 'percentage' | 'count'; // 'percentage' (0-100%) or 'count' (number of students)
+  data?: ChartDataPoint[];
+  results?: ExamResult[];
+  distributionData?: Array<{ label: string; value: number; color?: string }>;
+  mode?: 'percentage' | 'count' | 'student_timeline' | 'distribution'; // supports all modes
   storageKey?: string;
   defaultType?: ChartDisplayType;
   title?: string;
@@ -78,14 +80,22 @@ function getPointColor(val: number, mode: 'percentage' | 'count', explicitColor?
 
 export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
   data,
+  results,
+  distributionData,
   mode = 'percentage',
   storageKey = 'mh_default_chart_type_v1',
   defaultType = 'bar',
   title,
   subtitle,
   height = 270,
-  valueLabel = mode === 'percentage' ? 'النسبة المئوية' : 'العدد',
+  valueLabel,
 }) => {
+  const effectiveMode: 'percentage' | 'count' =
+    mode === 'count' || mode === 'distribution' ? 'count' : 'percentage';
+
+  const resolvedValueLabel =
+    valueLabel || (effectiveMode === 'percentage' ? 'النسبة المئوية' : 'القيمة / العدد');
+
   const [chartType, setChartType] = useState<ChartDisplayType>(() => {
     try {
       const saved = localStorage.getItem(storageKey) as ChartDisplayType | null;
@@ -108,17 +118,49 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
     }
   }, [chartType, storageKey]);
 
-  const enrichedData = useMemo(() => {
-    return data.map((d) => ({
-      ...d,
-      shortLabel: d.shortName || (d.name.length > 16 ? d.name.slice(0, 15) + '…' : d.name),
-      fillColor: getPointColor(d.value, mode, d.color),
-    }));
-  }, [data, mode]);
+  const normalizedData = useMemo<ChartDataPoint[]>(() => {
+    if (Array.isArray(data) && data.length > 0) {
+      return data;
+    }
+    if (Array.isArray(results) && results.length > 0) {
+      const sorted = [...results].sort(
+        (a, b) => new Date(a.examDate || 0).getTime() - new Date(b.examDate || 0).getTime()
+      );
+      return sorted.map((r) => ({
+        id: r.id,
+        name: r.examTitle || 'امتحان',
+        value: Number(r.percentage) || 0,
+        secondaryValue: `${r.score}/${r.totalScore}`,
+        date: r.examDate,
+        rating: r.gradeRating,
+      }));
+    }
+    if (Array.isArray(distributionData) && distributionData.length > 0) {
+      return distributionData.map((item, idx) => ({
+        id: String(idx),
+        name: item.label || '',
+        value: Number(item.value) || 0,
+        color: item.color,
+      }));
+    }
+    return [];
+  }, [data, results, distributionData]);
 
-  // When mode === 'percentage' and user selects 'pie', we can show either Rating Distribution (ممتاز / جيد جداً / ...) or Individual Exam Slices
+  const enrichedData = useMemo(() => {
+    return (normalizedData || []).map((d) => {
+      const safeName = String(d?.name || '');
+      return {
+        ...d,
+        name: safeName,
+        shortLabel: d?.shortName || (safeName.length > 16 ? safeName.slice(0, 15) + '…' : safeName),
+        fillColor: getPointColor(Number(d?.value) || 0, effectiveMode, d?.color),
+      };
+    });
+  }, [normalizedData, effectiveMode]);
+
+  // When effectiveMode === 'percentage' and user selects 'pie', we can show either Rating Distribution or Individual Exam Slices
   const pieData = useMemo(() => {
-    if (mode === 'count' || pieSubMode === 'items') {
+    if (effectiveMode === 'count' || pieSubMode === 'items') {
       return enrichedData
         .filter((d) => d.value > 0)
         .map((d) => ({
@@ -147,7 +189,7 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
     });
 
     return bands.filter((b) => b.value > 0);
-  }, [enrichedData, mode, pieSubMode]);
+  }, [enrichedData, effectiveMode, pieSubMode]);
 
   return (
     <div className="bg-slate-50/90 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-4">
@@ -194,7 +236,7 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
       </div>
 
       {/* Sub-toggle when Pie chart is active in percentage mode */}
-      {chartType === 'pie' && mode === 'percentage' && (
+      {chartType === 'pie' && effectiveMode === 'percentage' && (
         <div className="flex items-center justify-end gap-1.5 text-[11px] print:hidden">
           <span className="text-slate-400">عرض الدائرة حسب:</span>
           <button
@@ -238,7 +280,7 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
                 interval={0}
               />
               <YAxis
-                domain={mode === 'percentage' ? [0, 100] : ['auto', 'auto']}
+                domain={effectiveMode === 'percentage' ? [0, 100] : ['auto', 'auto']}
                 allowDecimals={false}
                 tick={{ fontSize: 11, fill: '#64748b' }}
                 tickLine={false}
@@ -256,8 +298,8 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
                 }}
                 formatter={(value: any, _name: any, item: any) => {
                   const extra = item?.payload?.secondaryValue ? ` (${item.payload.secondaryValue})` : '';
-                  const unit = mode === 'percentage' ? '%' : '';
-                  return [`${value}${unit}${extra}`, valueLabel];
+                  const unit = effectiveMode === 'percentage' ? '%' : '';
+                  return [`${value}${unit}${extra}`, resolvedValueLabel];
                 }}
                 labelFormatter={(_label, payload) => payload?.[0]?.payload?.name || _label}
               />
@@ -276,7 +318,7 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#cbd5e1" opacity={0.45} />
               <XAxis
                 type="number"
-                domain={mode === 'percentage' ? [0, 100] : ['auto', 'auto']}
+                domain={effectiveMode === 'percentage' ? [0, 100] : ['auto', 'auto']}
                 tick={{ fontSize: 11, fill: '#64748b' }}
               />
               <YAxis
@@ -297,8 +339,8 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
                 }}
                 formatter={(value: any, _name: any, item: any) => {
                   const extra = item?.payload?.secondaryValue ? ` (${item.payload.secondaryValue})` : '';
-                  const unit = mode === 'percentage' ? '%' : '';
-                  return [`${value}${unit}${extra}`, valueLabel];
+                  const unit = effectiveMode === 'percentage' ? '%' : '';
+                  return [`${value}${unit}${extra}`, resolvedValueLabel];
                 }}
                 labelFormatter={(_label, payload) => payload?.[0]?.payload?.name || _label}
               />
@@ -338,7 +380,7 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
                   textAlign: 'right',
                 }}
                 formatter={(value: any, name: any) => {
-                  if (mode === 'percentage' && pieSubMode === 'items') {
+                  if (effectiveMode === 'percentage' && pieSubMode === 'items') {
                     return [`${value}%`, name];
                   }
                   return [`${value} امتحان/طالب`, name];
@@ -368,7 +410,7 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" opacity={0.45} />
               <XAxis dataKey="shortLabel" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} />
               <YAxis
-                domain={mode === 'percentage' ? [0, 100] : ['auto', 'auto']}
+                domain={effectiveMode === 'percentage' ? [0, 100] : ['auto', 'auto']}
                 allowDecimals={false}
                 tick={{ fontSize: 11, fill: '#64748b' }}
                 tickLine={false}
@@ -386,8 +428,8 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
                 }}
                 formatter={(value: any, _name: any, item: any) => {
                   const extra = item?.payload?.secondaryValue ? ` (${item.payload.secondaryValue})` : '';
-                  const unit = mode === 'percentage' ? '%' : '';
-                  return [`${value}${unit}${extra}`, valueLabel];
+                  const unit = effectiveMode === 'percentage' ? '%' : '';
+                  return [`${value}${unit}${extra}`, resolvedValueLabel];
                 }}
                 labelFormatter={(_label, payload) => payload?.[0]?.payload?.name || _label}
               />
@@ -409,7 +451,7 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" opacity={0.45} />
               <XAxis dataKey="shortLabel" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} />
               <YAxis
-                domain={mode === 'percentage' ? [0, 100] : ['auto', 'auto']}
+                domain={effectiveMode === 'percentage' ? [0, 100] : ['auto', 'auto']}
                 allowDecimals={false}
                 tick={{ fontSize: 11, fill: '#64748b' }}
                 tickLine={false}
@@ -427,8 +469,8 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
                 }}
                 formatter={(value: any, _name: any, item: any) => {
                   const extra = item?.payload?.secondaryValue ? ` (${item.payload.secondaryValue})` : '';
-                  const unit = mode === 'percentage' ? '%' : '';
-                  return [`${value}${unit}${extra}`, valueLabel];
+                  const unit = effectiveMode === 'percentage' ? '%' : '';
+                  return [`${value}${unit}${extra}`, resolvedValueLabel];
                 }}
                 labelFormatter={(_label, payload) => payload?.[0]?.payload?.name || _label}
               />
@@ -447,11 +489,11 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
               <PolarAngleAxis dataKey="shortLabel" tick={{ fontSize: 11, fill: '#64748b' }} />
               <PolarRadiusAxis
                 angle={30}
-                domain={mode === 'percentage' ? [0, 100] : ['auto', 'auto']}
+                domain={effectiveMode === 'percentage' ? [0, 100] : ['auto', 'auto']}
                 tick={{ fontSize: 10, fill: '#64748b' }}
               />
               <Radar
-                name={valueLabel}
+                name={resolvedValueLabel}
                 dataKey="value"
                 stroke="#f59e0b"
                 strokeWidth={2.5}
@@ -468,7 +510,7 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
                   direction: 'rtl',
                   textAlign: 'right',
                 }}
-                formatter={(value: any) => [`${value}${mode === 'percentage' ? '%' : ''}`, valueLabel]}
+                formatter={(value: any) => [`${value}${effectiveMode === 'percentage' ? '%' : ''}`, resolvedValueLabel]}
               />
             </RadarChart>
           )}
@@ -476,7 +518,7 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
       </div>
 
       {/* Legend for Percentage Mode */}
-      {mode === 'percentage' && (
+      {effectiveMode === 'percentage' && (
         <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 pt-3 border-t border-slate-200/80 dark:border-slate-700/70 text-[11px] text-slate-500 dark:text-slate-400">
           <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> ممتاز (90%+)

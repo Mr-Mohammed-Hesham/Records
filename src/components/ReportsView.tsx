@@ -285,7 +285,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   // Exam comparison data
   const comparedExamsData = useMemo(() => {
-    return compareExamIds.map(id => {
+    return (compareExamIds || []).map(id => {
       const ex = exams.find(e => e.id === id);
       const res = dateFilteredResults.filter(r => r.examId === id);
       const attended = res.length;
@@ -549,7 +549,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 onChange={(e) => setSelectedGrade(e.target.value)}
                 className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
               >
-                {settings.grades.map(g => (
+                {(settings?.grades || []).map(g => (
                   <option key={g} value={g}>{g}</option>
                 ))}
               </select>
@@ -564,7 +564,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 onChange={(e) => setSelectedGroup(e.target.value)}
                 className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
               >
-                {settings.groups.map(grp => (
+                {(settings?.groups || []).map(grp => (
                   <option key={grp} value={grp}>{grp}</option>
                 ))}
               </select>
