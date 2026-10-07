@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   Award, 
   Sparkles, 
@@ -34,6 +34,7 @@ import { toPng, toBlob } from 'html-to-image';
 import { Student, Exam, ExamResult, TeacherSettings } from '../types';
 import { calculateStudentStats } from '../utils/grading';
 import { DEFAULT_SETTINGS } from '../services/firebase';
+import { loadViewState, saveViewState, clearViewState } from '../utils/activityTracker';
 
 interface HonorBoardModalProps {
   isOpen: boolean;
@@ -100,27 +101,72 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 }) => {
   const boardRef = useRef<HTMLDivElement>(null);
 
-  // Configuration States
-  const [boardType, setBoardType] = useState<'overall' | 'most_active' | 'combined' | 'exam'>(initialExamId ? 'exam' : 'overall');
-  const [includeMostActiveSection, setIncludeMostActiveSection] = useState<boolean>(true);
-  const [mostActiveLimit, setMostActiveLimit] = useState<number>(3);
+  const defaultSignatureName = useMemo(() => {
+    if (settings.teacherName?.includes('Mohamed') || settings.teacherName?.includes('محمد')) {
+      return 'محمد هشام';
+    }
+    return settings.teacherName || 'محمد هشام';
+  }, [settings.teacherName]);
+
+  const savedConfig = useMemo(
+    () =>
+      loadViewState('HONOR_BOARD_CONFIG', {
+        boardType: (initialExamId ? 'exam' : 'overall') as 'overall' | 'most_active' | 'combined' | 'exam',
+        includeMostActiveSection: true,
+        mostActiveLimit: 3,
+        selectedGrade: initialGrade || 'all',
+        selectedTrack: 'all',
+        limitCount: 5,
+        minPercentage: 85,
+        boardTheme: 'dark-gold' as 'dark-gold' | 'classic-ivory' | 'royal-blue',
+        fontFamily: "'Cairo', sans-serif",
+        fontSizeScale: 100,
+        bgColor: '#070b14',
+        textColor: '#ffffff',
+        accentColor: '#f59e0b',
+        title: 'لوحة شرف أوائل الطلبة والمتفوقين',
+        customSubtitle: '',
+        teacherName: settings.teacherName || 'Mr. Mohamed Hesham',
+        signatureText: defaultSignatureName,
+        signatureStyle: 'arabic_calligraphy' as 'arabic_calligraphy' | 'cursive_script' | 'official_badge',
+        teacherRole: 'معلم المادة',
+        schoolName: '',
+        congratsMessage:
+          'يسرنا تهنئة طلبتنا المتميزين وأولياء أمورهم الكرام على هذا الإنجاز المشرف والتفوق المستحق، متمنين لهم دوام التألق والريادة الأكاديمية.',
+        showSignature: true,
+        showStamp: true,
+        showDate: true,
+      }),
+    []
+  );
+
+  // Configuration States (Initialized from last saved settings so user continues where they left off)
+  const [boardType, setBoardType] = useState<'overall' | 'most_active' | 'combined' | 'exam'>(
+    initialExamId ? 'exam' : savedConfig.boardType
+  );
+  const [includeMostActiveSection, setIncludeMostActiveSection] = useState<boolean>(
+    savedConfig.includeMostActiveSection
+  );
+  const [mostActiveLimit, setMostActiveLimit] = useState<number>(savedConfig.mostActiveLimit);
   const [selectedExamId, setSelectedExamId] = useState<string>(initialExamId || (exams[0]?.id || ''));
-  const [selectedGrade, setSelectedGrade] = useState<string>(initialGrade || 'all');
-  const [selectedTrack, setSelectedTrack] = useState<string>('all');
+  const [selectedGrade, setSelectedGrade] = useState<string>(initialGrade || savedConfig.selectedGrade || 'all');
+  const [selectedTrack, setSelectedTrack] = useState<string>(savedConfig.selectedTrack || 'all');
   const [startDate, setStartDate] = useState<string>(initialStartDate || '');
   const [endDate, setEndDate] = useState<string>(initialEndDate || '');
-  const [limitCount, setLimitCount] = useState<number>(5);
-  const [minPercentage, setMinPercentage] = useState<number>(85);
-  const [boardTheme, setBoardTheme] = useState<'dark-gold' | 'classic-ivory' | 'royal-blue'>('dark-gold');
+  const [limitCount, setLimitCount] = useState<number>(savedConfig.limitCount);
+  const [minPercentage, setMinPercentage] = useState<number>(savedConfig.minPercentage);
+  const [boardTheme, setBoardTheme] = useState<'dark-gold' | 'classic-ivory' | 'royal-blue'>(
+    savedConfig.boardTheme
+  );
 
   // Typography and Font Customization
-  const [fontFamily, setFontFamily] = useState<string>("'Cairo', sans-serif");
-  const [fontSizeScale, setFontSizeScale] = useState<number>(100);
+  const [fontFamily, setFontFamily] = useState<string>(savedConfig.fontFamily);
+  const [fontSizeScale, setFontSizeScale] = useState<number>(savedConfig.fontSizeScale);
 
   // Background and Text Color Customization
-  const [bgColor, setBgColor] = useState<string>('#070b14');
-  const [textColor, setTextColor] = useState<string>('#ffffff');
-  const [accentColor, setAccentColor] = useState<string>('#f59e0b');
+  const [bgColor, setBgColor] = useState<string>(savedConfig.bgColor);
+  const [textColor, setTextColor] = useState<string>(savedConfig.textColor);
+  const [accentColor, setAccentColor] = useState<string>(savedConfig.accentColor);
 
   // Detect whether background is light or dark for optimal contrast
   const isLightBg = useMemo(() => {
@@ -152,24 +198,108 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   };
 
   // Text & Signature Customization
-  const [title, setTitle] = useState<string>('لوحة شرف أوائل الطلبة والمتفوقين');
-  const [customSubtitle, setCustomSubtitle] = useState<string>('');
-  const [teacherName, setTeacherName] = useState<string>(settings.teacherName || 'Mr. Mohamed Hesham');
-  const [signatureText, setSignatureText] = useState<string>(() => {
-    if (settings.teacherName?.includes('Mohamed') || settings.teacherName?.includes('محمد')) {
-      return 'محمد هشام';
-    }
-    return settings.teacherName || 'محمد هشام';
-  });
-  const [signatureStyle, setSignatureStyle] = useState<'arabic_calligraphy' | 'cursive_script' | 'official_badge'>('arabic_calligraphy');
-  const [teacherRole, setTeacherRole] = useState<string>('معلم المادة');
-  const [schoolName, setSchoolName] = useState<string>('');
-  const [congratsMessage, setCongratsMessage] = useState<string>(
-    'يسرنا تهنئة طلبتنا المتميزين وأولياء أمورهم الكرام على هذا الإنجاز المشرف والتفوق المستحق، متمنين لهم دوام التألق والريادة الأكاديمية.'
+  const [title, setTitle] = useState<string>(savedConfig.title);
+  const [customSubtitle, setCustomSubtitle] = useState<string>(savedConfig.customSubtitle);
+  const [teacherName, setTeacherName] = useState<string>(savedConfig.teacherName);
+  const [signatureText, setSignatureText] = useState<string>(savedConfig.signatureText);
+  const [signatureStyle, setSignatureStyle] = useState<'arabic_calligraphy' | 'cursive_script' | 'official_badge'>(
+    savedConfig.signatureStyle
   );
-  const [showSignature, setShowSignature] = useState<boolean>(true);
-  const [showStamp, setShowStamp] = useState<boolean>(true);
-  const [showDate, setShowDate] = useState<boolean>(true);
+  const [teacherRole, setTeacherRole] = useState<string>(savedConfig.teacherRole);
+  const [schoolName, setSchoolName] = useState<string>(savedConfig.schoolName);
+  const [congratsMessage, setCongratsMessage] = useState<string>(savedConfig.congratsMessage);
+  const [showSignature, setShowSignature] = useState<boolean>(savedConfig.showSignature);
+  const [showStamp, setShowStamp] = useState<boolean>(savedConfig.showStamp);
+  const [showDate, setShowDate] = useState<boolean>(savedConfig.showDate);
+
+  // Auto-save all Honor Board / Knights Board settings whenever changed
+  useEffect(() => {
+    saveViewState('HONOR_BOARD_CONFIG', {
+      boardType,
+      includeMostActiveSection,
+      mostActiveLimit,
+      selectedGrade,
+      selectedTrack,
+      limitCount,
+      minPercentage,
+      boardTheme,
+      fontFamily,
+      fontSizeScale,
+      bgColor,
+      textColor,
+      accentColor,
+      title,
+      customSubtitle,
+      teacherName,
+      signatureText,
+      signatureStyle,
+      teacherRole,
+      schoolName,
+      congratsMessage,
+      showSignature,
+      showStamp,
+      showDate,
+    });
+  }, [
+    boardType,
+    includeMostActiveSection,
+    mostActiveLimit,
+    selectedGrade,
+    selectedTrack,
+    limitCount,
+    minPercentage,
+    boardTheme,
+    fontFamily,
+    fontSizeScale,
+    bgColor,
+    textColor,
+    accentColor,
+    title,
+    customSubtitle,
+    teacherName,
+    signatureText,
+    signatureStyle,
+    teacherRole,
+    schoolName,
+    congratsMessage,
+    showSignature,
+    showStamp,
+    showDate,
+  ]);
+
+  // Complete reset to start a brand new board design from scratch
+  const handleStartFreshNewDesign = () => {
+    clearViewState('HONOR_BOARD_CONFIG');
+    setBoardType('overall');
+    setIncludeMostActiveSection(true);
+    setMostActiveLimit(3);
+    setSelectedGrade('all');
+    setSelectedTrack('all');
+    setStartDate('');
+    setEndDate('');
+    setLimitCount(5);
+    setMinPercentage(85);
+    setBoardTheme('dark-gold');
+    setFontFamily("'Cairo', sans-serif");
+    setFontSizeScale(100);
+    setBgColor('#070b14');
+    setTextColor('#ffffff');
+    setAccentColor('#f59e0b');
+    setTitle('لوحة شرف أوائل الطلبة والمتفوقين');
+    setCustomSubtitle('');
+    setTeacherName(settings.teacherName || 'Mr. Mohamed Hesham');
+    setSignatureText(defaultSignatureName);
+    setSignatureStyle('arabic_calligraphy');
+    setTeacherRole('معلم المادة');
+    setSchoolName('');
+    setCongratsMessage(
+      'يسرنا تهنئة طلبتنا المتميزين وأولياء أمورهم الكرام على هذا الإنجاز المشرف والتفوق المستحق، متمنين لهم دوام التألق والريادة الأكاديمية.'
+    );
+    setShowSignature(true);
+    setShowStamp(true);
+    setShowDate(true);
+    showToast('تمت إعادة الضبط للوضع الافتراضي للبدء بتصميم جديد!');
+  };
 
   // Export State
   const [isExporting, setIsExporting] = useState<boolean>(false);
@@ -710,6 +840,29 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
           
           {/* Controls Sidebar (4 cols on lg) */}
           <div className="lg:col-span-4 space-y-4 text-right">
+            {/* Saved Settings Status & Start Fresh Controls */}
+            <div className="bg-emerald-950/40 p-3 rounded-2xl border border-emerald-500/30 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div className="min-w-0">
+                  <span className="block text-[11px] font-extrabold text-emerald-300 truncate">
+                    إعدادات الخط والخلفية محفوظة تلقائياً
+                  </span>
+                  <span className="block text-[10px] text-slate-400">
+                    تبدأ من حيث انتهيت أو يمكنك بدء تعديل جديد
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleStartFreshNewDesign}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-400 border border-amber-500/30 text-[10px] font-bold transition cursor-pointer shrink-0"
+                title="إعادة ضبط الخط والخلفية والنصوص لبدء تعديل جديد من الصفر"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>تعديل جديد</span>
+              </button>
+            </div>
             
             {/* Board Type Selection: Overall, Most Active, Combined, or Single Exam */}
             <div className="bg-slate-800/40 p-2.5 rounded-2xl border border-slate-700/60 space-y-2.5">

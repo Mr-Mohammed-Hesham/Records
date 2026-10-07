@@ -14,8 +14,10 @@ import {
   Calendar,
   Layers,
   Compass,
+  GraduationCap,
+  RotateCcw,
 } from 'lucide-react';
-import { Student, TeacherSettings } from '../types';
+import { Student, TeacherSettings, StudentEnrollmentStatus } from '../types';
 import { 
   DEFAULT_SETTINGS, 
   UAE_GRADES,
@@ -23,6 +25,13 @@ import {
   ACADEMIC_TERMS,
   ACADEMIC_TRACKS,
 } from '../services/firebase';
+import {
+  ENROLLMENT_STATUS_LIST,
+  getEffectiveEnrollmentStatus,
+  getEffectiveEnrollmentNote,
+  saveLocalStudentStatus,
+} from '../utils/studentStatus';
+import { loadViewState, saveViewState, clearViewState } from '../utils/activityTracker';
 import { ConfirmModal } from './ConfirmModal';
 
 interface StudentFormModalProps {
@@ -66,6 +75,9 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
   const [parentPhone, setParentPhone] = useState('');
   const [email, setEmail] = useState('');
   const [notes, setNotes] = useState('');
+  const [enrollmentStatus, setEnrollmentStatus] = useState<StudentEnrollmentStatus>('active');
+  const [enrollmentStatusNote, setEnrollmentStatusNote] = useState('');
+  const [restoredFromDraft, setRestoredFromDraft] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -173,10 +185,15 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
       const loadedYear = activeStudent.academicYear || ACADEMIC_YEARS[0] || '2025 - 2026';
       const loadedTerm = activeStudent.term || ACADEMIC_TERMS[0] || 'الفصل الأول';
       const loadedTrack = activeStudent.track || ACADEMIC_TRACKS[0] || 'عام';
+      const loadedStatus = getEffectiveEnrollmentStatus(activeStudent);
+      const loadedStatusNote = getEffectiveEnrollmentNote(activeStudent);
 
       setAcademicYear(loadedYear);
       setTerm(loadedTerm);
       setTrack(loadedTrack);
+      setEnrollmentStatus(loadedStatus);
+      setEnrollmentStatusNote(loadedStatusNote);
+      setRestoredFromDraft(false);
 
       setInitialSnapshot({
         name: activeStudent.name || '',
@@ -206,20 +223,45 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
       const defaultTerm = ACADEMIC_TERMS[0] || 'الفصل الأول';
       const defaultTrack = ACADEMIC_TRACKS[0] || 'عام';
 
-      setName('');
-      setStudentId(generatedId);
-      setGrade(initialGrade);
-      setAcademicYear(defaultYear);
-      setTerm(defaultTerm);
-      setTrack(defaultTrack);
-      setSubjects(initialSubs);
-      setIsCustomSubject(false);
-      setCustomSubjectText('');
-      setSchool('');
-      setPhone('');
-      setParentPhone('');
-      setEmail('');
-      setNotes('');
+      // Check for saved draft
+      const savedDraft = loadViewState<any>('STUDENT_FORM_DRAFT', null);
+      if (savedDraft && savedDraft.name) {
+        setName(savedDraft.name || '');
+        setStudentId(savedDraft.studentId || generatedId);
+        setGrade(savedDraft.grade || initialGrade);
+        setAcademicYear(savedDraft.academicYear || defaultYear);
+        setTerm(savedDraft.term || defaultTerm);
+        setTrack(savedDraft.track || defaultTrack);
+        setSubjects(Array.isArray(savedDraft.subjects) && savedDraft.subjects.length > 0 ? savedDraft.subjects : initialSubs);
+        setIsCustomSubject(Boolean(savedDraft.isCustomSubject));
+        setCustomSubjectText(savedDraft.customSubjectText || '');
+        setSchool(savedDraft.school || '');
+        setPhone(savedDraft.phone || '');
+        setParentPhone(savedDraft.parentPhone || '');
+        setEmail(savedDraft.email || '');
+        setNotes(savedDraft.notes || '');
+        setEnrollmentStatus(savedDraft.enrollmentStatus || 'active');
+        setEnrollmentStatusNote(savedDraft.enrollmentStatusNote || '');
+        setRestoredFromDraft(true);
+      } else {
+        setName('');
+        setStudentId(generatedId);
+        setGrade(initialGrade);
+        setAcademicYear(defaultYear);
+        setTerm(defaultTerm);
+        setTrack(defaultTrack);
+        setSubjects(initialSubs);
+        setIsCustomSubject(false);
+        setCustomSubjectText('');
+        setSchool('');
+        setPhone('');
+        setParentPhone('');
+        setEmail('');
+        setNotes('');
+        setEnrollmentStatus('active');
+        setEnrollmentStatusNote('');
+        setRestoredFromDraft(false);
+      }
 
       setInitialSnapshot({
         name: '',
@@ -317,6 +359,72 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
     onClose();
   };
 
+  // Auto-save draft when adding a new student
+  useEffect(() => {
+    if (!isOpen || activeStudent) return;
+    if (name.trim() || phone.trim() || parentPhone.trim() || school.trim() || notes.trim()) {
+      saveViewState('STUDENT_FORM_DRAFT', {
+        name,
+        studentId,
+        grade,
+        academicYear,
+        term,
+        track,
+        subjects,
+        isCustomSubject,
+        customSubjectText,
+        school,
+        phone,
+        parentPhone,
+        email,
+        notes,
+        enrollmentStatus,
+        enrollmentStatusNote,
+      });
+    }
+  }, [
+    isOpen,
+    activeStudent,
+    name,
+    studentId,
+    grade,
+    academicYear,
+    term,
+    track,
+    subjects,
+    isCustomSubject,
+    customSubjectText,
+    school,
+    phone,
+    parentPhone,
+    email,
+    notes,
+    enrollmentStatus,
+    enrollmentStatusNote,
+  ]);
+
+  const handleStartFresh = () => {
+    clearViewState('STUDENT_FORM_DRAFT');
+    setName('');
+    setStudentId(generateNextId());
+    setGrade(gradeList[0] || 'الصف العاشر (Grade 10)');
+    setAcademicYear(ACADEMIC_YEARS[0] || '2025 - 2026');
+    setTerm(ACADEMIC_TERMS[0] || 'الفصل الأول');
+    setTrack(ACADEMIC_TRACKS[0] || 'عام');
+    const defaultSubject = settings?.defaultSubject || availableSubjects?.[0] || 'الفيزياء';
+    setSubjects(defaultSubject ? [defaultSubject] : []);
+    setIsCustomSubject(false);
+    setCustomSubjectText('');
+    setSchool('');
+    setPhone('');
+    setParentPhone('');
+    setEmail('');
+    setNotes('');
+    setEnrollmentStatus('active');
+    setEnrollmentStatusNote('');
+    setRestoredFromDraft(false);
+  };
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -385,13 +493,12 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
       setLoading(true);
       setError('');
 
-      /*
-       * subject:
-       * Keeps the old field for compatibility.
-       *
-       * subjects:
-       * Contains all subjects assigned to the student.
-       */
+      if (activeStudent) {
+        saveLocalStudentStatus(activeStudent.id, enrollmentStatus, enrollmentStatusNote.trim());
+      } else {
+        clearViewState('STUDENT_FORM_DRAFT');
+      }
+
       await onSave(
         {
           name: name.trim(),
@@ -401,6 +508,9 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
           term: term.trim(),
           track: track.trim(),
           group: '',
+          enrollmentStatus,
+          enrollmentStatusNote: enrollmentStatusNote.trim(),
+          enrollmentStatusUpdatedAt: new Date().toISOString(),
 
           // Backward-compatible primary subject
           subject: finalSubjects[0],
@@ -491,8 +601,60 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
           </div>
         )}
 
+        {/* Restored Draft Notice */}
+        {restoredFromDraft && !activeStudent && (
+          <div className="mx-4 sm:mx-6 mt-3 p-3 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl flex items-center justify-between gap-2 text-xs">
+            <span className="font-bold text-indigo-800 dark:text-indigo-200">
+              تم استرجاع آخر بيانات كنت تدخلها تلقائياً — يمكنك المتابعة أو البدء من جديد
+            </span>
+            <button
+              type="button"
+              onClick={handleStartFresh}
+              className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700 rounded-lg font-bold hover:bg-indigo-100 cursor-pointer shrink-0"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>البدء من جديد</span>
+            </button>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+            {/* Enrollment Status Selector in Form */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2.5">
+              <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <GraduationCap className="w-4 h-4 text-amber-500" />
+                <span>حالة ملف الطالب في الكورس:</span>
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {ENROLLMENT_STATUS_LIST.map((stOpt) => {
+                  const isSel = enrollmentStatus === stOpt.id;
+                  return (
+                    <button
+                      key={stOpt.id}
+                      type="button"
+                      onClick={() => setEnrollmentStatus(stOpt.id)}
+                      className={`p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-between ${
+                        isSel
+                          ? stOpt.activeBtnClass
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <span>{stOpt.shortLabel}</span>
+                      <span className={`w-2 h-2 rounded-full ${isSel ? 'bg-white' : stOpt.dotColor}`} />
+                    </button>
+                  );
+                })}
+              </div>
+              <input
+                type="text"
+                value={enrollmentStatusNote}
+                onChange={(e) => setEnrollmentStatusNote(e.target.value)}
+                placeholder="ملاحظة عن حالة الكورس (اختياري: مثال تاريخ انتهاء الكورس أو سبب الانقطاع)"
+                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200"
+              />
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
             {/* Full Name */}

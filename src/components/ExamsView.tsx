@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   FileSpreadsheet, 
   Plus, 
@@ -13,10 +13,12 @@ import {
   BarChart2, 
   ChevronRight,
   BookOpen,
-  Paperclip
+  Paperclip,
+  RotateCcw,
 } from 'lucide-react';
 import { Exam, ExamResult, Student, TeacherSettings, ResultAttachment } from '../types';
-import { exportExamResultsExcel } from '../utils/excel';
+import { exportExamResultsExcel, loadExcelPreferences } from '../utils/excel';
+import { loadViewState, saveViewState, clearViewState, recordLastActivity } from '../utils/activityTracker';
 import { AttachmentModal } from './AttachmentModal';
 import { AttachmentThumbnail } from './AttachmentThumbnail';
 
@@ -43,10 +45,39 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
   onOpenScoring,
   onUpdateExamAttachment,
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [gradeFilter, setGradeFilter] = useState('الكل');
-  const [typeFilter, setTypeFilter] = useState('الكل');
+  const savedExamsState = useMemo(
+    () =>
+      loadViewState('EXAMS_VIEW', {
+        searchTerm: '',
+        gradeFilter: 'الكل',
+        typeFilter: 'الكل',
+      }),
+    []
+  );
+
+  const [searchTerm, setSearchTerm] = useState(savedExamsState.searchTerm);
+  const [gradeFilter, setGradeFilter] = useState(savedExamsState.gradeFilter);
+  const [typeFilter, setTypeFilter] = useState(savedExamsState.typeFilter);
   const [attachmentExam, setAttachmentExam] = useState<Exam | null>(null);
+
+  useEffect(() => {
+    saveViewState('EXAMS_VIEW', {
+      searchTerm,
+      gradeFilter,
+      typeFilter,
+    });
+    recordLastActivity({
+      tab: 'exams',
+      actionLabel: 'استعراض ورصد سجلات الامتحانات',
+    });
+  }, [searchTerm, gradeFilter, typeFilter]);
+
+  const handleResetFilters = () => {
+    clearViewState('EXAMS_VIEW');
+    setSearchTerm('');
+    setGradeFilter('الكل');
+    setTypeFilter('الكل');
+  };
 
   // Pre-calculate stats per exam
   const examStatsList = useMemo(() => {
@@ -161,6 +192,19 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
             </select>
           </div>
         </div>
+        {(searchTerm || gradeFilter !== 'الكل' || typeFilter !== 'الكل') && (
+          <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+            <span className="text-slate-500">تم حفظ خيارات التصفية تلقائياً ({filteredExams.length} امتحان مطابق)</span>
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 font-bold hover:underline cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>البدء من جديد / مسح التصفية</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Exams Grid / Cards */}

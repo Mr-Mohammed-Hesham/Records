@@ -1,20 +1,20 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { 
   X, 
   FileSpreadsheet, 
   Printer, 
   Award, 
-  BookOpen, 
-  Calendar, 
-  CheckCircle2, 
   TrendingUp, 
-  Sparkles,
   GraduationCap,
-  Paperclip
+  Smartphone,
+  Monitor,
+  BarChart3,
 } from 'lucide-react';
 import { Student, ExamResult, TeacherSettings } from '../types';
 import { calculateStudentStats } from '../utils/grading';
-import { exportSingleStudentAcademicReport } from '../utils/excel';
+import { exportSingleStudentAcademicReport, getSavedExcelPreferences, saveExcelPreferences } from '../utils/excel';
+import { getEffectiveEnrollmentStatus, ENROLLMENT_STATUS_META } from '../utils/studentStatus';
+import { DynamicGradesChart } from './DynamicGradesChart';
 import { AttachmentModal } from './AttachmentModal';
 import { AttachmentThumbnail } from './AttachmentThumbnail';
 
@@ -32,16 +32,38 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
   onClose,
 }) => {
   const printRef = useRef<HTMLDivElement>(null);
-  const [inspectAttachmentResult, setInspectAttachmentResult] = React.useState<ExamResult | null>(null);
+  const [inspectAttachmentResult, setInspectAttachmentResult] = useState<ExamResult | null>(null);
+  const savedExcelPrefs = getSavedExcelPreferences();
+  const [excelLayoutMode, setExcelLayoutMode] = useState<'mobile' | 'desktop'>(savedExcelPrefs.layoutMode);
+  const [excelIncludeChart, setExcelIncludeChart] = useState<boolean>(savedExcelPrefs.includeChart);
+
   const stats = calculateStudentStats(results, settings.gradingScale);
+  const enrollmentStatus = getEffectiveEnrollmentStatus(student);
+  const statusMeta = ENROLLMENT_STATUS_META[enrollmentStatus];
 
   // Sorted exam results by date
   const sortedResults = [...results].sort(
     (a, b) => new Date(a.examDate).getTime() - new Date(b.examDate).getTime()
   );
 
+  const chartData = sortedResults.map((r) => ({
+    id: r.id,
+    name: r.examTitle,
+    value: r.percentage,
+    secondaryValue: `${r.score}/${r.totalScore}`,
+    date: r.examDate,
+    rating: r.gradeRating,
+  }));
+
   const handleExportExcel = () => {
-    exportSingleStudentAcademicReport(student, sortedResults, stats);
+    saveExcelPreferences({
+      layoutMode: excelLayoutMode,
+      includeChart: excelIncludeChart,
+    });
+    exportSingleStudentAcademicReport(student, sortedResults, stats, {
+      layoutMode: excelLayoutMode,
+      includeChart: excelIncludeChart,
+    });
   };
 
   const handlePrint = () => {
@@ -98,6 +120,9 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
                 <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-300 print:text-slate-700">
                   <span className="bg-slate-800/80 print:bg-slate-100 px-3 py-1 rounded-lg border border-slate-700 print:border-slate-300 font-bold">
                     الصف الدراسي: {student.grade}
+                  </span>
+                  <span className="bg-amber-500/20 text-amber-300 print:bg-slate-100 print:text-black px-3 py-1 rounded-lg border border-amber-500/40 font-bold">
+                    حالة الملف: {statusMeta.label}
                   </span>
                   {student.subject && (
                     <span className="bg-slate-800/80 print:bg-slate-100 px-3 py-1 rounded-lg border border-slate-700 print:border-slate-300 font-bold">
@@ -179,6 +204,18 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
               </p>
             )}
           </div>
+
+          {/* Interactive Chart Switcher in Modal */}
+          {chartData.length > 0 && (
+            <DynamicGradesChart
+              data={chartData}
+              mode="percentage"
+              storageKey="mh_academic_modal_chart_type_v1"
+              title="الرسم البياني لتطور درجات الطالب وتوزيع التقديرات"
+              subtitle="يمكنك التبديل بين الأعمدة أو الدائرة أو المنحنى أو الشكل الشبكي"
+              height={240}
+            />
+          )}
 
           {/* Individual Exam Results Table */}
           <div>
@@ -264,21 +301,65 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
         </div>
 
         {/* Modal Footer Actions */}
-        <div className="shrink-0 p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-sm flex flex-wrap items-center justify-between gap-3 pb-safe print:hidden">
-          <div className="flex items-center gap-2">
+        <div className="shrink-0 p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-safe print:hidden">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleExportExcel}
               className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-all cursor-pointer shadow-xs"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              تصدير التقرير لـ Excel
+              تصدير التقرير لـ Excel (مع الرسم البياني)
             </button>
+
+            {/* Quick Excel Mobile / Desktop & Chart Toggles */}
+            <div className="inline-flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setExcelLayoutMode('mobile')}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg font-bold cursor-pointer transition-colors ${
+                  excelLayoutMode === 'mobile'
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+                title="مقاس متناسق مع شاشة الهاتف"
+              >
+                <Smartphone className="w-3 h-3" />
+                <span>وضع الهاتف</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setExcelLayoutMode('desktop')}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg font-bold cursor-pointer transition-colors ${
+                  excelLayoutMode === 'desktop'
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+                title="مقاس واسع للكمبيوتر"
+              >
+                <Monitor className="w-3 h-3" />
+                <span>كمبيوتر</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setExcelIncludeChart(!excelIncludeChart)}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg font-bold cursor-pointer transition-colors ${
+                  excelIncludeChart
+                    ? 'bg-amber-500 text-slate-950'
+                    : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+                title="تضمين الرسم البياني للدرجات في شيت الإكسيل"
+              >
+                <BarChart3 className="w-3 h-3" />
+                <span>{excelIncludeChart ? 'بالمخطط ✔' : 'بدون مخطط'}</span>
+              </button>
+            </div>
+
             <button
               onClick={handlePrint}
               className="inline-flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition-all cursor-pointer"
             >
               <Printer className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-              طباعة / حفظ PDF
+              طباعة / PDF
             </button>
           </div>
 

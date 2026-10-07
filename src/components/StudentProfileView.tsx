@@ -25,11 +25,23 @@ import {
   Paperclip,
   ShieldCheck,
   Search,
-  X
+  X,
+  Smartphone,
+  Monitor,
+  BarChart3,
+  Check,
 } from 'lucide-react';
-import { Student, Exam, ExamResult, TeacherSettings, ResultAttachment } from '../types';
+import { Student, Exam, ExamResult, TeacherSettings, ResultAttachment, StudentEnrollmentStatus } from '../types';
 import { calculateStudentStats, getGradeRating } from '../utils/grading';
-import { exportSingleStudentAcademicReport } from '../utils/excel';
+import { exportSingleStudentAcademicReport, getSavedExcelPreferences, saveExcelPreferences } from '../utils/excel';
+import {
+  ENROLLMENT_STATUS_LIST,
+  ENROLLMENT_STATUS_META,
+  getEffectiveEnrollmentStatus,
+  getEffectiveEnrollmentNote,
+  saveLocalStudentStatus,
+} from '../utils/studentStatus';
+import { DynamicGradesChart } from './DynamicGradesChart';
 import { StudentAcademicReportModal } from './StudentAcademicReportModal';
 import { AttachmentModal } from './AttachmentModal';
 import { AttachmentThumbnail } from './AttachmentThumbnail';
@@ -41,6 +53,7 @@ interface StudentProfileViewProps {
   settings: TeacherSettings;
   onBack: () => void;
   onEditStudent: (student: Student) => void;
+  onUpdateStudentStatus?: (student: Student, status: StudentEnrollmentStatus, note?: string) => void;
   onDeleteResult: (resultId: string) => Promise<void>;
   onUpdateResult: (resultId: string, updatedScore: number, notes: string) => Promise<void>;
   onUpdateResultAttachment?: (resultId: string, attachment: ResultAttachment | null) => Promise<void>;
@@ -54,6 +67,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   settings,
   onBack,
   onEditStudent,
+  onUpdateStudentStatus,
   onDeleteResult,
   onUpdateResult,
   onUpdateResultAttachment,
@@ -64,6 +78,45 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   const [editNotesVal, setEditNotesVal] = useState<string>('');
   const [showAcademicReportModal, setShowAcademicReportModal] = useState(false);
   const [activeAttachmentResult, setActiveAttachmentResult] = useState<ExamResult | null>(null);
+
+  // Enrollment Status Tool State
+  const [currentEnrollmentStatus, setCurrentEnrollmentStatus] = useState<StudentEnrollmentStatus>(
+    () => getEffectiveEnrollmentStatus(student)
+  );
+  const [enrollmentNote, setEnrollmentNote] = useState<string>(
+    () => getEffectiveEnrollmentNote(student)
+  );
+  const [statusSavedToast, setStatusSavedToast] = useState<string | null>(null);
+
+  // Excel Export Quick Preferences
+  const initialExcelPrefs = getSavedExcelPreferences();
+  const [excelLayoutMode, setExcelLayoutMode] = useState<'mobile' | 'desktop'>(initialExcelPrefs.layoutMode);
+  const [excelIncludeChart, setExcelIncludeChart] = useState<boolean>(initialExcelPrefs.includeChart);
+
+  useEffect(() => {
+    setCurrentEnrollmentStatus(getEffectiveEnrollmentStatus(student));
+    setEnrollmentNote(getEffectiveEnrollmentNote(student));
+  }, [student]);
+
+  const handleSelectEnrollmentStatus = (newStatus: StudentEnrollmentStatus, customNote?: string) => {
+    const noteToSave = customNote !== undefined ? customNote : enrollmentNote;
+    setCurrentEnrollmentStatus(newStatus);
+    saveLocalStudentStatus(student.id, newStatus, noteToSave);
+    if (onUpdateStudentStatus) {
+      onUpdateStudentStatus(student, newStatus, noteToSave);
+    }
+    setStatusSavedToast(`تم تحديث حالة الملف إلى: ${ENROLLMENT_STATUS_META[newStatus].label}`);
+    setTimeout(() => setStatusSavedToast(null), 3000);
+  };
+
+  const handleSaveEnrollmentNote = () => {
+    saveLocalStudentStatus(student.id, currentEnrollmentStatus, enrollmentNote);
+    if (onUpdateStudentStatus) {
+      onUpdateStudentStatus(student, currentEnrollmentStatus, enrollmentNote);
+    }
+    setStatusSavedToast('تم حفظ ملاحظة حالة الملف بنجاح');
+    setTimeout(() => setStatusSavedToast(null), 2500);
+  };
 
   // Dropdown state for "رصد نتيجة امتحان جديد لهذا الطالب"
   const [isExamDropdownOpen, setIsExamDropdownOpen] = useState(false);
@@ -133,8 +186,25 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   };
 
   const handleExportExcel = () => {
-    exportSingleStudentAcademicReport(student, results, stats);
+    saveExcelPreferences({
+      layoutMode: excelLayoutMode,
+      includeChart: excelIncludeChart,
+    });
+    exportSingleStudentAcademicReport(student, results, stats, {
+      layoutMode: excelLayoutMode,
+      includeChart: excelIncludeChart,
+    });
   };
+
+  const activeStatusMeta = ENROLLMENT_STATUS_META[currentEnrollmentStatus];
+  const timelineChartData = timelineResults.map((r) => ({
+    id: r.id,
+    name: r.examTitle,
+    value: r.percentage,
+    secondaryValue: `${r.score}/${r.totalScore}`,
+    date: r.examDate,
+    rating: r.gradeRating,
+  }));
 
   return (
     <div id="student-profile-view" className="space-y-6 text-right animate-in fade-in duration-200">
@@ -161,14 +231,50 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             التقرير الأكاديمي الشامل
           </button>
 
-          <button
-            id="export-student-excel-btn"
-            onClick={handleExportExcel}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-all cursor-pointer shadow-xs"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            تصدير التقرير لـ Excel
-          </button>
+          {/* Excel Export + Quick Mobile/Chart Toggles */}
+          <div className="flex flex-wrap items-center gap-1.5 bg-emerald-50/70 dark:bg-emerald-950/30 p-1 rounded-xl border border-emerald-200 dark:border-emerald-800/70">
+            <button
+              id="export-student-excel-btn"
+              onClick={handleExportExcel}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-900 dark:text-emerald-200 bg-emerald-500/20 hover:bg-emerald-500/30 rounded-lg transition-all cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>تصدير التقرير لـ Excel</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setExcelLayoutMode(excelLayoutMode === 'mobile' ? 'desktop' : 'mobile')}
+              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 rounded-lg border border-emerald-200 dark:border-emerald-800 cursor-pointer"
+              title="تبديل مقاس الشيت بين وضع الهاتف المحمول والكمبيوتر"
+            >
+              {excelLayoutMode === 'mobile' ? (
+                <>
+                  <Smartphone className="w-3 h-3 text-emerald-600" />
+                  <span>وضع الهاتف</span>
+                </>
+              ) : (
+                <>
+                  <Monitor className="w-3 h-3 text-indigo-600" />
+                  <span>وضع الكمبيوتر</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setExcelIncludeChart(!excelIncludeChart)}
+              className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold rounded-lg border cursor-pointer transition-colors ${
+                excelIncludeChart
+                  ? 'bg-amber-500 text-slate-950 border-amber-500'
+                  : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-700'
+              }`}
+              title="تضمين الرسم البياني للدرجات في ملف الإكسيل"
+            >
+              <BarChart3 className="w-3 h-3" />
+              <span>{excelIncludeChart ? 'مع الرسم البياني ✔' : 'بدون رسم'}</span>
+            </button>
+          </div>
 
           <button
             onClick={() => onEditStudent(student)}
@@ -212,6 +318,12 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                     : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
                 }`}>
                   مستوى الطالب: {stats.status}
+                </span>
+                <span
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-bold border ${activeStatusMeta.badgeBg} ${activeStatusMeta.badgeText} ${activeStatusMeta.badgeBorder}`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${activeStatusMeta.dotColor}`} />
+                  {activeStatusMeta.label}
                 </span>
               </div>
 
@@ -287,6 +399,89 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             <p>{student.notes}</p>
           </div>
         )}
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            أداة تحديد حالة ملف الطالب في الكورس (فعال / انتهى الكورس / متوقف / منقطع)
+            ═══════════════════════════════════════════════════════════════════ */}
+        <div className="mt-5 pt-4 border-t border-slate-200/80 dark:border-slate-800">
+          <div className="bg-slate-50/90 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-700/80 space-y-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                  <GraduationCap className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
+                    أداة تحديد حالة ملف الطالب في الكورس
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    حدد ما إذا كان ملف الطالب فعالاً ومستمراً، أو انتهى الكورس له، أو متوقفاً/منقطعاً
+                  </p>
+                </div>
+              </div>
+
+              {statusSavedToast && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-bold animate-in fade-in duration-150">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>{statusSavedToast}</span>
+                </span>
+              )}
+            </div>
+
+            {/* 4 Status Selection Buttons */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {ENROLLMENT_STATUS_LIST.map((stOpt) => {
+                const isSelected = currentEnrollmentStatus === stOpt.id;
+                return (
+                  <button
+                    key={stOpt.id}
+                    type="button"
+                    onClick={() => handleSelectEnrollmentStatus(stOpt.id)}
+                    className={`p-3 rounded-xl border text-right transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                      isSelected
+                        ? stOpt.activeBtnClass
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-amber-400'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-extrabold text-xs">{stOpt.shortLabel}</span>
+                      {isSelected ? (
+                        <Check className="w-4 h-4 shrink-0" />
+                      ) : (
+                        <span className={`w-2.5 h-2.5 rounded-full ${stOpt.dotColor}`} />
+                      )}
+                    </div>
+                    <span
+                      className={`text-[10px] leading-tight ${
+                        isSelected ? 'opacity-90' : 'text-slate-400 dark:text-slate-500'
+                      }`}
+                    >
+                      {stOpt.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Optional Note for Status (e.g., Course Completion Date or Withdrawal Reason) */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+              <input
+                type="text"
+                value={enrollmentNote}
+                onChange={(e) => setEnrollmentNote(e.target.value)}
+                placeholder="ملاحظة عن حالة الكورس (مثال: أتم كورس الفصل الأول بنجاح / تاريخ انتهاء الكورس / سبب التوقف...)"
+                className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-hidden focus:border-amber-500"
+              />
+              <button
+                type="button"
+                onClick={handleSaveEnrollmentNote}
+                className="px-4 py-2 bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer shrink-0"
+              >
+                حفظ ملاحظة الحالة
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Student Statistics Cards (إحصائيات الطالب) */}
@@ -410,85 +605,21 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           </div>
         </div>
 
-        {/* Interactive Responsive Score Progression Visual Chart */}
+        {/* Interactive Responsive Score Progression Visual Chart with Shape Switcher */}
         <div className="mt-6">
-          <h4 className="text-xs font-bold text-slate-600 mb-3">رسم بياني لتطور نتائج الامتحانات عبر الزمن:</h4>
           {timelineResults.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-xs">
+            <div className="py-12 text-center text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 text-xs">
               لم يتم رصد نتائج امتحانات لهذا الطالب حتى الآن لعرض الرسم البياني.
             </div>
           ) : (
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 overflow-hidden">
-              {/* Bars visualization */}
-              <div className="relative w-full">
-                {/* Reference Grid lines */}
-                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-12 pr-7 pl-1">
-                  {[100, 75, 50, 25, 0].map((val) => (
-                    <div key={val} className="w-full flex items-center gap-2">
-                      <span className="text-[8px] font-mono text-slate-300 w-5 text-left shrink-0">
-                        {val}%
-                      </span>
-                      <div className="flex-1 border-b border-dashed border-slate-200" />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="relative z-10 h-44 flex items-end gap-2 sm:gap-3 pt-6 pb-2 pr-8 pl-1 overflow-x-auto overflow-y-hidden">
-                  {timelineResults.map((r) => {
-                    const heightPercent = Math.max(10, Math.min(100, r.percentage));
-                    return (
-                      <div key={r.id} className="flex-1 min-w-[46px] max-w-[70px] flex flex-col items-center h-full justify-end group relative shrink">
-                        {/* Tooltip */}
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-12 z-20 bg-slate-900 text-white text-[10px] py-1 px-2.5 rounded-lg whitespace-nowrap pointer-events-none shadow-md">
-                          <span className="font-bold">{r.examTitle}</span>: {r.score}/{r.totalScore} ({r.percentage}%)
-                        </div>
-
-                        <span className="text-[10px] font-mono font-bold text-slate-700 mb-1 leading-none shrink-0">
-                          {r.percentage}%
-                        </span>
-
-                        {/* Bar */}
-                        <div className="w-full flex-1 flex items-end justify-center min-h-0">
-                          <div 
-                            style={{ height: `${heightPercent}%` }}
-                            className={`w-6 sm:w-7 max-w-[28px] sm:max-w-[34px] rounded-t-lg transition-all duration-300 ${
-                              r.percentage >= 90
-                                ? 'bg-emerald-500 hover:bg-emerald-600'
-                                : r.percentage >= 80
-                                ? 'bg-blue-500 hover:bg-blue-600'
-                                : r.percentage >= 70
-                                ? 'bg-amber-500 hover:bg-amber-600'
-                                : r.percentage >= 60
-                                ? 'bg-orange-500 hover:bg-orange-600'
-                                : 'bg-rose-500 hover:bg-rose-600'
-                            }`}
-                          />
-                        </div>
-
-                        {/* Exam Title & Date Label */}
-                        <div className="w-full text-center mt-1.5 pt-1 border-t border-slate-200 shrink-0">
-                          <span className="text-[9px] text-slate-600 font-medium truncate block w-full text-center leading-tight" title={r.examTitle}>
-                            {r.examTitle}
-                          </span>
-                          <span className="text-[8px] text-slate-400 font-mono block mt-0.5">
-                            {r.examDate ? r.examDate.slice(5) : ''}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Chart Legend */}
-              <div className="flex flex-wrap items-center justify-center gap-4 mt-4 pt-3 border-t border-slate-200 text-[11px] text-slate-500">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> ممتاز (90%+)</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span> جيد جداً (80-89%)</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> جيد (70-79%)</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span> مقبول (60-69%)</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> يحتاج تحسين (&lt;60%)</span>
-              </div>
-            </div>
+            <DynamicGradesChart
+              data={timelineChartData}
+              mode="percentage"
+              storageKey="mh_profile_chart_type_v1"
+              title="رسم بياني لتطور نتائج الامتحانات عبر الزمن"
+              subtitle="اختر الشكل البياني المفضل (أعمدة، دائري، منحنى مساحي، خطي، أفقي، أو شبكي)"
+              height={270}
+            />
           )}
         </div>
       </div>

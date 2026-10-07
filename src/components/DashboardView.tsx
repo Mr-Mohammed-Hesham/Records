@@ -20,11 +20,15 @@ import {
   Flame,
   Activity,
   CheckCircle2,
-  RefreshCw
+  RefreshCw,
+  GraduationCap,
 } from 'lucide-react';
 import { Student, Exam, ExamResult, TeacherSettings } from '../types';
 import { calculateStudentStats } from '../utils/grading';
 import { DEFAULT_SETTINGS } from '../services/firebase';
+import { getEffectiveEnrollmentStatus, ENROLLMENT_STATUS_META } from '../utils/studentStatus';
+import { saveViewState } from '../utils/activityTracker';
+import { DynamicGradesChart } from './DynamicGradesChart';
 import { HonorBoardModal } from './HonorBoardModal';
 
 interface DashboardViewProps {
@@ -102,6 +106,42 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       .sort((a, b) => b.stats.averagePercentage - a.stats.averagePercentage)
       .slice(0, 5);
   }, [studentsWithStats]);
+
+  // Most active students (solved most exams)
+  const mostActivePerformers = useMemo(() => {
+    return [...studentsWithStats]
+      .filter(s => s.stats.totalExams > 0)
+      .sort((a, b) => {
+        if (b.stats.totalExams !== a.stats.totalExams) return b.stats.totalExams - a.stats.totalExams;
+        return b.stats.averagePercentage - a.stats.averagePercentage;
+      })
+      .slice(0, 3);
+  }, [studentsWithStats]);
+
+  // Enrollment status counts
+  const enrollmentCounts = useMemo(() => {
+    const counts = { active: 0, completed: 0, paused: 0, withdrawn: 0 };
+    safeStudents.forEach(s => {
+      const st = getEffectiveEnrollmentStatus(s);
+      counts[st] = (counts[st] || 0) + 1;
+    });
+    return counts;
+  }, [safeStudents]);
+
+  const handleOpenStudentsWithTab = (tab: 'active' | 'completed' | 'inactive' | 'all') => {
+    saveViewState('STUDENTS_VIEW', {
+      enrollmentTab: tab,
+      searchTerm: '',
+      gradeFilter: 'الكل',
+      yearFilter: 'الكل',
+      termFilter: 'الكل',
+      trackFilter: 'الكل',
+      subjectFilter: 'الكل',
+      statusFilter: 'الكل',
+      sortBy: 'name',
+    });
+    onNavigate('students');
+  };
 
   // Students needing follow up (< 60% or declining trend)
   const needsFollowUp = useMemo(() => {
@@ -353,99 +393,77 @@ className="w-full h-full object-cover rounded-[14px]"
         </div>
       </section>
 
+      {/* Course Enrollment Status Summary Strip (Active / Completed Course / Paused / Withdrawn) */}
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
+            <GraduationCap className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
+              حالة ملفات الطلاب في الكورس
+            </h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              تصنيف الملفات الفعالة وقائمة الطلبة الذين انتهى الكورس لهم
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => handleOpenStudentsWithTab('active')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 transition cursor-pointer"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span>ملف فعال ({enrollmentCounts.active})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleOpenStudentsWithTab('completed')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/60 hover:bg-sky-100 transition cursor-pointer"
+          >
+            <GraduationCap className="w-3.5 h-3.5 text-sky-500" />
+            <span>قائمة منتهي الكورس ({enrollmentCounts.completed})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleOpenStudentsWithTab('inactive')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100 transition cursor-pointer"
+          >
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <span>متوقف / منقطع ({enrollmentCounts.paused + enrollmentCounts.withdrawn})</span>
+          </button>
+        </div>
+      </div>
+
       {/* Charts & Performance Matrix Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Exam Average Trend Chart */}
+        {/* Exam Average Trend Chart with Interactive Shape Switcher */}
         <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200 dark:border-slate-800 transition-colors overflow-hidden flex flex-col justify-between">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div>
-              <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
-                <BarChartVisualIcon />
-                <span>مخطط متوسط درجات الامتحانات الأخيرة</span>
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">مقارنة نسب النجاح عبر الامتحانات المنعقدة</p>
-            </div>
-            <span className="text-xs font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-3 py-1 rounded-full border border-amber-200/80 dark:border-amber-800/40">
-              آخر {recentExamsChart.length} اختبارات
-            </span>
-          </div>
-
           {recentExamsChart.length === 0 ? (
             <div className="py-20 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
               <BookOpen className="w-8 h-8 text-slate-300 dark:text-slate-700" />
               <p>سجل امتحانات ونتائج لعرض المخطط البياني هنا.</p>
             </div>
           ) : (
-            <div className="mt-5 relative w-full overflow-hidden">
-              {/* Reference Grid lines */}
-              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-12 pr-8 pl-1">
-                {[100, 75, 50, 25, 0].map((val) => (
-                  <div key={val} className="w-full flex items-center gap-2">
-                    <span className="text-[9px] font-mono text-slate-300 dark:text-slate-600 w-6 text-left shrink-0">
-                      {val}%
-                    </span>
-                    <div className="flex-1 border-b border-dashed border-slate-100 dark:border-slate-800/80" />
-                  </div>
-                ))}
-              </div>
-
-              {/* Bars Track */}
-              <div className="relative z-10 h-48 sm:h-52 flex items-end justify-around gap-2 sm:gap-3 pr-9 pl-1 pb-1 overflow-x-auto overflow-y-hidden">
-                {recentExamsChart.map((e, idx) => {
-                  const height = Math.max(8, Math.min(100, e.avg));
-                  const colors = [
-                    'from-amber-500 to-orange-500',
-                    'from-indigo-500 to-violet-600',
-                    'from-emerald-500 to-teal-600',
-                    'from-rose-500 to-pink-600',
-                    'from-cyan-500 to-blue-600',
-                    'from-amber-400 to-amber-600',
-                  ];
-                  const barGradient = colors[idx % colors.length];
-
-                  return (
-                    <div
-                      key={e.id}
-                      className="flex-1 min-w-[48px] max-w-[74px] sm:max-w-[90px] flex flex-col items-center h-full justify-end group relative shrink"
-                    >
-                      {/* Tooltip on hover */}
-                      <div className="opacity-0 group-hover:opacity-100 transition-all duration-150 absolute -top-12 z-30 bg-slate-950 text-white text-[11px] py-1.5 px-3 rounded-xl whitespace-nowrap shadow-xl border border-slate-800 pointer-events-none transform -translate-y-1 group-hover:translate-y-0">
-                        <div className="font-bold truncate max-w-[170px]">{e.title}</div>
-                        <div className="text-[10px] text-amber-400 font-mono mt-0.5">
-                          متوسط: {e.avg}% • ({e.attended} طالب)
-                        </div>
-                      </div>
-
-                      {/* Percentage label above the bar */}
-                      <span className="text-[10px] sm:text-xs font-mono font-bold text-slate-700 dark:text-slate-300 mb-1 leading-none shrink-0">
-                        {e.avg}%
-                      </span>
-
-                      {/* Sized Bar with constrained proportions */}
-                      <div className="w-full flex-1 flex items-end justify-center min-h-0">
-                        <div 
-                          style={{ height: `${height}%` }}
-                          className={`w-6 sm:w-8 max-w-[32px] sm:max-w-[40px] bg-gradient-to-t ${barGradient} rounded-t-lg sm:rounded-t-xl transition-all duration-300 shadow-sm group-hover:brightness-110 group-hover:scale-y-[1.02] origin-bottom cursor-pointer`}
-                        />
-                      </div>
-
-                      {/* Title and Date below the bar */}
-                      <div className="w-full text-center mt-1.5 pt-1 border-t border-slate-100 dark:border-slate-800/80 shrink-0">
-                        <span
-                          className="text-[10px] sm:text-[11px] text-slate-700 dark:text-slate-300 font-semibold truncate block w-full text-center leading-tight px-0.5"
-                          title={e.title}
-                        >
-                          {e.title}
-                        </span>
-                        <span className="text-[9px] text-slate-400 font-mono block mt-0.5">
-                          {e.date ? e.date.slice(5) : ''}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <DynamicGradesChart
+              mode="distribution"
+              distributionData={recentExamsChart.map((e, idx) => {
+                const palette = ['#f59e0b', '#6366f1', '#10b981', '#ec4899', '#06b6d4', '#8b5cf6'];
+                return {
+                  label: e.title,
+                  value: e.avg,
+                  color: palette[idx % palette.length],
+                };
+              })}
+              title="مخطط متوسط درجات الامتحانات الأخيرة (%)"
+              subtitle="يمكنك التبديل بين شكل الأعمدة، الدائرة، الأفقي، المساحة، المنحنى، أو الرادار"
+              storageKey="DASHBOARD_RECENT_EXAMS_CHART"
+              height={240}
+            />
           )}
         </div>
 
@@ -587,6 +605,39 @@ className="w-full h-full object-cover rounded-[14px]"
               ))
             )}
           </div>
+
+          {/* Most Active Students (Solved Most Exams) Section in Dashboard Honor Card */}
+          {mostActivePerformers.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-extrabold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                  <Flame className="w-4 h-4 text-amber-500" />
+                  <span>مراكز أكثر الطلبة حلاً للامتحانات (فرسان المثابرة)</span>
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {mostActivePerformers.map(({ student, stats }, idx) => (
+                  <div
+                    key={student.id}
+                    onClick={() => onOpenStudentProfile(student)}
+                    className="p-2.5 rounded-xl bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/50 flex items-center justify-between cursor-pointer hover:bg-amber-100/50 transition"
+                  >
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 block">
+                        المركز {idx + 1} ⚡
+                      </span>
+                      <span className="text-xs font-extrabold text-slate-900 dark:text-white truncate block">
+                        {student.name}
+                      </span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-lg bg-amber-500 text-slate-950 font-mono font-black text-[11px] shrink-0">
+                      {stats.totalExams} اختبار
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Honor Board Quick Export Banner */}
           {topPerformers.length > 0 && (

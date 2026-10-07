@@ -7,12 +7,31 @@ export type ExamType =
   | 'Assignment'
   | 'Practice Exam';
 
+export type StudentEnrollmentStatus =
+  | 'active'      // ملف فعال (مستمر بالكورس)
+  | 'completed'   // انتهى الكورس (أتم الكورس)
+  | 'paused'      // متوقف مؤقتاً / مؤجل
+  | 'withdrawn';  // منقطع عن الكورس
+
+export type ChartDisplayType =
+  | 'bar'         // أعمدة رأسية
+  | 'horizontal'  // أشرطة أفقية
+  | 'pie'         // دائري / حلقي
+  | 'area'        // منحنى مساحي
+  | 'line'        // خطي
+  | 'radar';      // شبكي / راداري
+
 export interface Student {
   id: string; // Firestore doc ID
   studentId: string; // e.g. STU-101
   name: string;
   grade: string; // e.g. الأول الثانوي
   group: string; // e.g. مجموعة A
+
+  // حالة ملف الطالب في الكورس (فعال / انتهى الكورس / متوقف / منقطع)
+  enrollmentStatus?: StudentEnrollmentStatus;
+  enrollmentStatusNote?: string;
+  enrollmentStatusUpdatedAt?: string;
 
   // الحقول الأكاديمية الجديدة
   academicYear?: string; // e.g. 2025 - 2026
