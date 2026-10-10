@@ -111,7 +111,7 @@ function applyWorksheetFormatting(
 function buildStudentChartRows(
   results: ExamResult[],
   isMobile: boolean,
-  chartType: 'bars_and_columns' | 'bars_only' | 'distribution' = 'bars_and_columns'
+  chartType: 'bars_and_columns' | 'bars_only' | 'distribution' | 'both' | 'bars' | 'columns' = 'bars_and_columns'
 ): any[][] {
   if (results.length === 0) {
     return [

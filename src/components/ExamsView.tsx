@@ -15,6 +15,7 @@ import {
   BookOpen,
   Paperclip,
   RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 import { Exam, ExamResult, Student, TeacherSettings, ResultAttachment } from '../types';
 import { exportExamResultsExcel, loadExcelPreferences } from '../utils/excel';
@@ -32,6 +33,7 @@ interface ExamsViewProps {
   onDeleteExam: (exam: Exam) => void;
   onOpenScoring: (exam: Exam) => void;
   onUpdateExamAttachment?: (examId: string, attachment: ResultAttachment | null) => Promise<void>;
+  onOpenExamGenerator?: () => void;
 }
 
 export const ExamsView: React.FC<ExamsViewProps> = ({
@@ -44,6 +46,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
   onDeleteExam,
   onOpenScoring,
   onUpdateExamAttachment,
+  onOpenExamGenerator,
 }) => {
   const savedExamsState = useMemo(
     () =>
@@ -142,14 +145,26 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
           </p>
         </div>
 
-        <button
-          id="add-exam-main-btn"
-          onClick={onAddExam}
-          className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-98 rounded-xl shadow-md shadow-amber-500/20 transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          + تسجيل درجات امتحان جديد
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {onOpenExamGenerator && (
+            <button
+              id="open-exam-generator-from-exams-btn"
+              onClick={onOpenExamGenerator}
+              className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-black text-amber-400 bg-slate-900 hover:bg-slate-800 border border-amber-500/40 active:scale-98 rounded-xl shadow-sm transition-all cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              صناعة وتوليد امتحان جديد (AI)
+            </button>
+          )}
+          <button
+            id="add-exam-main-btn"
+            onClick={onAddExam}
+            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-98 rounded-xl shadow-md shadow-amber-500/20 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            + تسجيل درجات امتحان جديد
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search */}

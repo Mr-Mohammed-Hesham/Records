@@ -44,6 +44,7 @@ interface DashboardViewProps {
   onExportAllExcel: () => void;
   onRefreshPlatform?: () => void;
   isRefreshing?: boolean;
+  onOpenExamGenerator?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -59,6 +60,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onExportAllExcel,
   onRefreshPlatform,
   isRefreshing = false,
+  onOpenExamGenerator,
 }) => {
   const [isHonorBoardOpen, setIsHonorBoardOpen] = useState(false);
   const safeStudents = students || [];
@@ -230,6 +232,18 @@ className="w-full h-full object-cover rounded-[14px]"
               <Plus className="w-4 h-4 text-amber-500" />
               <span>تسجيل امتحان</span>
             </button>
+
+            {onOpenExamGenerator && (
+              <button
+                id="dash-open-exam-generator-btn"
+                onClick={onOpenExamGenerator}
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-slate-900 to-slate-800 dark:from-amber-500/20 dark:to-orange-500/20 hover:from-slate-800 hover:to-slate-700 text-amber-400 dark:text-amber-300 border border-amber-500/40 rounded-xl text-xs sm:text-sm font-black shadow-sm transition cursor-pointer"
+                title="فتح منصة صناعة وتوليد الامتحانات الذكية (Hesham-Exam)"
+              >
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span>توليد امتحان ذكي</span>
+              </button>
+            )}
 
             <button
               id="dash-quick-grade-btn"

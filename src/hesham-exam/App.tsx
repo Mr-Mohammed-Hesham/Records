@@ -1,0 +1,928 @@
+import React, { useState, useEffect } from "react";
+import { Navbar } from "./components/Navbar";
+import { ImageUploader } from "./components/ImageUploader";
+import { GenerationOptions } from "./components/GenerationOptions";
+import { ResultViewer } from "./components/ResultViewer";
+import { CameraCaptureModal } from "./components/CameraCaptureModal";
+import { HistoryModal } from "./components/HistoryModal";
+import { HelpModal } from "./components/HelpModal";
+import { AppLoader } from "./components/AppLoader";
+import { Footer } from "./components/Footer";
+import { AuthModal } from "./components/AuthModal";
+import {
+  ExamImage,
+  ExamGenerationResult,
+  GenerationHistoryItem,
+  GenerationMode,
+} from "./types";
+import {
+  AlertTriangle,
+  Sparkles,
+  CheckCircle2,
+  Lock,
+  LogIn,
+  Download,
+  Loader2,
+} from "lucide-react";
+import { API_ROUTES, isRunningOnGitHubPages, getCustomBackendUrl, getGeminiApiKey, isExternalOrigin } from "./config/api";
+import { generateClientExam } from "./services/clientExamGenerator";
+import { generateExamWithClientGemini } from "./services/clientGeminiService";
+import { ApiConfigModal } from "./components/ApiConfigModal";
+import { CODE_TEMPLATES } from "./data/templates";
+import { auth, googleProvider } from "./config/firebase";
+import { onAuthStateChanged, signOut, signInWithPopup, User } from "firebase/auth";
+import { isEmailWhitelisted } from "./config/authWhitelist";
+import {
+  saveExamToFirestore,
+  subscribeToExams,
+  deleteExamFromFirestore,
+  getLocalSavedExams,
+} from "./services/examStorage";
+
+interface HeshamExamAppProps {
+  onBackToRecords?: () => void;
+  externalUser?: User | null;
+}
+
+const EXAM_DRAFT_STORAGE_KEY = "hesham_exam_active_draft_v1";
+
+export default function App({ onBackToRecords, externalUser }: HeshamExamAppProps = {}) {
+  // ============================================================
+  // INITIAL APP LOADING
+  // ============================================================
+  const [appInitializing, setAppInitializing] = useState<boolean>(!externalUser);
+
+  // ============================================================
+  // AUTHENTICATION
+  // ============================================================
+  const [currentUser, setCurrentUser] = useState<User | null>(externalUser || null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+
+  // ============================================================
+  // EXAM WORKFLOW STATE (WITH AUTOMATIC PROGRESS PERSISTENCE)
+  // ============================================================
+  const savedDraft = React.useMemo(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(EXAM_DRAFT_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const [images, setImages] = useState<ExamImage[]>([]);
+  const [examText, setExamText] = useState<string>(savedDraft?.examText || "");
+
+  const [examTitle, setExamTitle] = useState<string>(savedDraft?.examTitle || "");
+  const [solveQuestions, setSolveQuestions] = useState<boolean>(
+    savedDraft?.solveQuestions ?? true
+  );
+  const [instructions, setInstructions] = useState<string>(savedDraft?.instructions || "");
+  const [generationMode, setGenerationMode] =
+    useState<GenerationMode>(savedDraft?.generationMode || "generate_new_similar");
+  const [questionCount, setQuestionCount] = useState<number>(savedDraft?.questionCount || 7);
+  const [durationMinutes, setDurationMinutes] = useState<number>(savedDraft?.durationMinutes || 30);
+  const [difficulty, setDifficulty] = useState<string>(savedDraft?.difficulty || "same");
+
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [generationStep, setGenerationStep] = useState<string>("");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successNotice, setSuccessNotice] = useState<string | null>(null);
+
+  const [currentResult, setCurrentResult] =
+    useState<ExamGenerationResult | null>(savedDraft?.currentResult || null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(
+        EXAM_DRAFT_STORAGE_KEY,
+        JSON.stringify({
+          examText,
+          examTitle,
+          solveQuestions,
+          instructions,
+          generationMode,
+          questionCount,
+          durationMinutes,
+          difficulty,
+          currentResult,
+        })
+      );
+    } catch {
+      // ignore quota errors
+    }
+  }, [
+    examText,
+    examTitle,
+    solveQuestions,
+    instructions,
+    generationMode,
+    questionCount,
+    durationMinutes,
+    difficulty,
+    currentResult,
+  ]);
+
+  // ============================================================
+  // MODALS
+  // ============================================================
+  const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
+  const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
+  const [isApiConfigOpen, setIsApiConfigOpen] = useState<boolean>(false);
+
+  // ============================================================
+  // HISTORY
+  // ============================================================
+  const [history, setHistory] = useState<GenerationHistoryItem[]>(() => {
+    return getLocalSavedExams();
+  });
+
+  // ============================================================
+  // PWA DIRECT INSTALLATION (NO EXTRA POPUPS)
+  // ============================================================
+  const [deferredInstallPrompt, setDeferredInstallPrompt] =
+    useState<any>(() => {
+      return typeof window !== "undefined"
+        ? (window as any).__pwaInstallPrompt || null
+        : null;
+    });
+  const [isAppInstalled, setIsAppInstalled] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Detect if already installed / standalone
+    const isStandalone =
+      typeof window !== "undefined" &&
+      (window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as unknown as { standalone?: boolean }).standalone ===
+          true);
+
+    if (isStandalone) {
+      setIsAppInstalled(true);
+    }
+
+    if (typeof window !== "undefined" && (window as any).__pwaInstallPrompt) {
+      setDeferredInstallPrompt((window as any).__pwaInstallPrompt);
+    }
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      (window as any).__pwaInstallPrompt = e;
+      setDeferredInstallPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setIsAppInstalled(true);
+      setDeferredInstallPrompt(null);
+      if (typeof window !== "undefined" && (window as any).__pwaInstallPrompt) {
+        (window as any).__pwaInstallPrompt = null;
+      }
+      setSuccessNotice("تم تثبيت التطبيق بنجاح على جهازك!");
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt
+      );
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
+  const handleTriggerInstall = async () => {
+    if (isAppInstalled) {
+      setSuccessNotice("التطبيق مثبت بالفعل على جهازك وهو يعمل بأفضل كفاءة");
+      return;
+    }
+
+    const promptEvent =
+      deferredInstallPrompt ||
+      (typeof window !== "undefined"
+        ? (window as any).__pwaInstallPrompt
+        : null);
+
+    if (promptEvent) {
+      try {
+        await promptEvent.prompt();
+        const choiceResult = await promptEvent.userChoice;
+        if (choiceResult && choiceResult.outcome === "accepted") {
+          setIsAppInstalled(true);
+          setDeferredInstallPrompt(null);
+          if (typeof window !== "undefined") {
+            (window as any).__pwaInstallPrompt = null;
+          }
+        }
+      } catch (err) {
+        console.warn("Direct installation trigger error:", err);
+      }
+      return;
+    }
+
+    // Direct feedback without any browser address bar guidance
+    setSuccessNotice("جاري تحضير التثبيت المباشر...");
+  };
+
+  // ============================================================
+  // AUTH STATE + WHITELIST ENFORCEMENT
+  // ============================================================
+  useEffect(() => {
+    if (externalUser && isEmailWhitelisted(externalUser.email)) {
+      setCurrentUser(externalUser);
+      setAppInitializing(false);
+    }
+  }, [externalUser]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        if (!isEmailWhitelisted(user.email)) {
+          const unauthorizedEmail = user.email || "غير معروف";
+
+          await signOut(auth);
+
+          setCurrentUser(externalUser || null);
+
+          setErrorMsg(
+            `عذراً، هذا الحساب (${unauthorizedEmail}) غير مصرح له بالدخول. يُسمح فقط بالحسابات المعتمدة في قائمة التصاريح.`
+          );
+        } else {
+          setCurrentUser(user);
+          setErrorMsg(null);
+        }
+      } else {
+        setCurrentUser(externalUser || null);
+      }
+
+      setAppInitializing(false);
+    });
+
+    return () => unsubscribe();
+  }, [externalUser]);
+
+  // ============================================================
+  // FIRESTORE HISTORY
+  // ============================================================
+  useEffect(() => {
+    // If not signed in yet, display any cached exams from local storage
+    if (!currentUser) {
+      setHistory(getLocalSavedExams());
+      return;
+    }
+
+    const unsubscribe = subscribeToExams(
+      currentUser,
+      (items) => {
+        setHistory(items);
+      },
+      (err) => {
+        console.info("Firestore status notice (offline/local cache active):", err?.message || err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [currentUser]);
+
+  // ============================================================
+  // CAMERA CAPTURE
+  // ============================================================
+  const handleCameraCapture = (imageDataUrl: string) => {
+    const newImg: ExamImage = {
+      id: `cam_${Date.now()}`,
+      name: `صورة كاميرا_${images.length + 1}.jpg`,
+      mimeType: "image/jpeg",
+      data: imageDataUrl,
+      previewUrl: imageDataUrl,
+    };
+
+    setImages((prev) => [...prev, newImg]);
+  };
+
+  // ============================================================
+  // GENERATE EXAM
+  // ============================================================
+  const handleGenerate = async () => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      setErrorMsg(
+        "يرجى تسجيل الدخول بحساب Google المصرح له أولاً للبدء في توليد الامتحانات وحفظها سحابياً."
+      );
+      return;
+    }
+
+    const hasImages = images.length > 0;
+    const hasText = examText.trim().length > 0;
+
+    if (!hasImages && !hasText) {
+      setErrorMsg("يرجى رفع صورة أو ملف الامتحان أو كتابة نص الامتحان للبدء في التوليد.");
+      return;
+    }
+
+    setIsGenerating(true);
+    setErrorMsg(null);
+    setSuccessNotice(null);
+
+    setGenerationStep(
+      hasText && !hasImages
+        ? "جاري قراءة وتحليل نص الامتحان وصياغة الأسئلة والخيارات والحلول النموذجية..."
+        : "جاري قراءة واستخراج الأسئلة والمسائل من الملفات والصور والنصوص المرفوعة..."
+    );
+
+    const timer1 = setTimeout(() => {
+      setGenerationStep(
+        "جاري صياغة الامتحان الإلكتروني وبنك الأسئلة وإعداد الخيارات والحلول النموذجية..."
+      );
+    }, 2200);
+
+    const timer2 = setTimeout(() => {
+      setGenerationStep(
+        "جاري بناء وتجميع واجهة الامتحان التفاعلية مع المؤقت ونظام التصحيح الآلي وحفظها سحابياً..."
+      );
+    }, 4500);
+
+    try {
+      const payloadImages = images.map((img) => ({
+        mimeType: img.mimeType,
+        data: img.data,
+      }));
+
+      const payload = {
+        images: payloadImages,
+        examText: examText.trim(),
+        instructions,
+        solveQuestions,
+        examTitle,
+        generationMode,
+        questionCount,
+        durationMinutes,
+        difficulty,
+      };
+
+      let res: ExamGenerationResult | null = null;
+      let usedClientEngine = false;
+
+      const apiKey = getGeminiApiKey();
+
+      // 1. Direct Client Gemini Engine (when custom Gemini API key is configured)
+      if (apiKey && API_ROUTES.shouldUseClientEngineDirectly()) {
+        setGenerationStep("جاري تحليل محتوى الصور والملفات والنصوص وتوليد امتحان محاكٍ بالذكاء الاصطناعي...");
+        res = await generateExamWithClientGemini({
+          images: payloadImages,
+          examText: examText.trim(),
+          instructions,
+          solveQuestions,
+          examTitle,
+          generationMode,
+          questionCount,
+          durationMinutes,
+          difficulty,
+        });
+      } else if (API_ROUTES.shouldUseClientEngineDirectly()) {
+        // 2. External static origin (GitHub Pages) without Gemini API Key
+        if (hasText && !hasImages) {
+          res = generateClientExam({
+            images: payloadImages,
+            examText: examText.trim(),
+            examTitle,
+            instructions,
+            questionCount,
+            durationMinutes,
+            difficulty,
+            solveQuestions,
+            generationMode,
+          });
+          usedClientEngine = true;
+        } else {
+          throw new Error(
+            "لتوليد امتحان محاكٍ من الصور والملفات على الموقع الخارجي بدقة تامة ودون أي نماذج جاهزة، يرجى إدخال مفتاح Gemini API المجاني عبر زر 'الربط و Gemini' بالشريط العلوي."
+          );
+        }
+      } else {
+        // 3. Primary Full-Stack AI Engine (/api/generate-exam-code) with optional client Gemini fallback
+        try {
+          const endpoint = API_ROUTES.generateExamCode();
+          const response = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              ...payload,
+              apiKey: apiKey || undefined,
+            }),
+          });
+
+          const contentType = response.headers.get("content-type") || "";
+          let data: any = null;
+
+          if (contentType.includes("application/json")) {
+            data = await response.json();
+          } else {
+            const textResp = await response.text();
+            try {
+              data = JSON.parse(textResp);
+            } catch {
+              throw new Error(`استجاب الخادم برد غير متوقع (${response.status})`);
+            }
+          }
+
+          if (!response.ok || !data.success) {
+            throw new Error(data?.error || "فشل استخراج ومحاكاة الأسئلة من المواد المرفوعة عبر محرك الذكاء الاصطناعي.");
+          }
+
+          res = {
+            ...data.data,
+            generatedAt: new Date().toISOString(),
+            generationMode,
+          };
+        } catch (fetchError: any) {
+          if (apiKey) {
+            res = await generateExamWithClientGemini({
+              images: payloadImages,
+              examText: examText.trim(),
+              instructions,
+              solveQuestions,
+              examTitle,
+              generationMode,
+              questionCount,
+              durationMinutes,
+              difficulty,
+            });
+          } else {
+            throw fetchError;
+          }
+        }
+      }
+
+      if (!res) {
+        throw new Error("تعذر توليد بيانات الامتحان. يرجى إعادة المحاولة.");
+      }
+
+      setCurrentResult(res);
+
+      // ========================================================
+      // SAVE TO FIRESTORE
+      // ========================================================
+      try {
+        await saveExamToFirestore(res, currentUser);
+
+        const countNotice = res.extractedQuestions?.length ? ` (${res.extractedQuestions.length} أسئلة)` : "";
+        setSuccessNotice(
+          usedClientEngine
+            ? `تم بنجاح توليد الامتحان المحاكي${countNotice} وحفظه بأمان.`
+            : `تم بنجاح توليد الامتحان${countNotice} وحفظه في السجل وقاعدة البيانات.`
+        );
+      } catch (firestoreErr) {
+        console.warn("Storage sync notice (exam preserved locally):", firestoreErr);
+        const countNotice = res.extractedQuestions?.length ? ` (${res.extractedQuestions.length} أسئلة)` : "";
+        setSuccessNotice(`تم بنجاح توليد الامتحان${countNotice} وحفظه في السجل المحلي.`);
+      }
+
+      // ========================================================
+      // SCROLL TO RESULTS
+      // ========================================================
+      setTimeout(() => {
+        document
+          .getElementById("results-section")
+          ?.scrollIntoView({ behavior: "smooth" });
+      }, 300);
+    } catch (err: any) {
+      console.error("Generation error:", err);
+
+      setErrorMsg(
+        err?.message || "حدث خطأ غير متوقع أثناء توليد الامتحان."
+      );
+    } finally {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+
+      setIsGenerating(false);
+      setGenerationStep("");
+    }
+  };
+
+  // ============================================================
+  // RESET SESSION
+  // ============================================================
+  const handleReset = () => {
+    setImages([]);
+    setExamText("");
+    setExamTitle("");
+    setInstructions("");
+    setCurrentResult(null);
+    setErrorMsg(null);
+    setSuccessNotice("تم بدء جلسة جديدة وتصفير النموذج بنجاح.");
+    try {
+      localStorage.removeItem(EXAM_DRAFT_STORAGE_KEY);
+    } catch {}
+  };
+
+  // ============================================================
+  // HISTORY
+  // ============================================================
+  const handleSelectHistoryItem = (
+    item: GenerationHistoryItem
+  ) => {
+    setCurrentResult(item.result);
+
+    setTimeout(() => {
+      document
+        .getElementById("results-section")
+        ?.scrollIntoView({ behavior: "smooth" });
+    }, 200);
+  };
+
+  const handleClearHistory = () => {
+    alert(
+      "لحماية البيانات، يمكنك حذف الامتحانات واحداً تلو الآخر عبر زر الحذف بجانب كل امتحان."
+    );
+  };
+
+  const handleDeleteHistoryItem = async (id: string) => {
+    try {
+      await deleteExamFromFirestore(id);
+    } catch (e: any) {
+      console.error("Error deleting from Firestore:", e);
+
+      setErrorMsg(
+        "تعذر حذف الامتحان من Firestore. تحقق من الاتصال والصلاحيات."
+      );
+    }
+  };
+
+  // ============================================================
+  // SIGN OUT
+  // ============================================================
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.warn("Sign out exception:", err);
+    } finally {
+      setCurrentUser(null);
+      setCurrentResult(null);
+      setImages([]);
+      setHistory([]);
+      setErrorMsg(null);
+      setIsAuthModalOpen(false);
+    }
+  };
+
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  const handleDirectGoogleSignIn = async () => {
+    setLoginLoading(true);
+    setLoginError(null);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+      if (!isEmailWhitelisted(user.email)) {
+        await signOut(auth);
+        setLoginError(`عذراً، البريد الإلكتروني (${user.email}) غير مصرح له بالدخول للمنصة.`);
+        return;
+      }
+      setCurrentUser(user);
+    } catch (error: any) {
+      console.error("Direct Google sign-in error:", error);
+      if (error.code === "auth/popup-closed-by-user" || error.code === "auth/cancelled-popup-request") {
+        // user closed popup
+      } else if (error.code === "auth/unauthorized-domain") {
+        setLoginError("النطاق الحالي غير مضاف في قائمة النطاقات المصرح بها في Firebase Console.");
+      } else {
+        setLoginError(error.message || "تعذر إتمام تسجيل الدخول باستخدام Google.");
+      }
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const canGenerate = images.length > 0 || examText.trim().length > 0;
+
+  // ============================================================
+  // INITIALIZING
+  // ============================================================
+  if (appInitializing) {
+    return (
+      <AppLoader message="جاري الاتصال بالنظام والتحقق من حساب المستخدم..." />
+    );
+  }
+
+  // ============================================================
+  // LOGIN PAGE
+  // ============================================================
+  // صفحة تسجيل الدخول بحساب جوجل فقط
+  // ============================================================
+  if (!currentUser) {
+    return (
+      <div
+        dir="rtl"
+        className="min-h-screen bg-[#090d16] text-[#f1f5f9] flex items-center justify-center px-4 font-['Cairo',sans-serif]"
+      >
+        <div className="w-full max-w-md">
+          <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/90 shadow-2xl backdrop-blur-xl">
+            
+            {/* Background Glow */}
+            <div className="absolute inset-x-0 top-0 h-40 bg-[radial-gradient(ellipse_at_top,rgba(245,158,11,0.18),transparent_70%)] pointer-events-none" />
+
+            <div className="relative p-6 sm:p-10 text-center">
+              
+              {/* Teacher Logo */}
+              <div className="mx-auto mb-5 w-20 h-20 sm:w-24 sm:h-24 rounded-3xl p-1 bg-gradient-to-br from-amber-400 via-orange-500 to-amber-600 shadow-xl shadow-amber-500/25 flex items-center justify-center overflow-hidden">
+                <img
+                  src={`${import.meta.env.BASE_URL}teacher-logo.jpg`}
+                  alt="Hesham Exam"
+                  title="Hesham Exam"
+                  className="w-full h-full object-cover rounded-[20px]"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    if (!target.src.endsWith("/teacher-logo.jpg")) {
+                      target.src = "/teacher-logo.jpg";
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Title in English */}
+              <h1 className="text-2xl sm:text-3xl font-black text-white mb-1.5 font-sans tracking-wide">
+                Hesham Exam
+              </h1>
+
+              <div className="inline-block px-3 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold text-xs border border-amber-500/30 mb-3 tracking-wider uppercase font-sans">
+                Platform
+              </div>
+
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-6 max-w-xs mx-auto">
+                يرجى تسجيل الدخول بحساب Google المعتمد للوصول إلى المنصة.
+              </p>
+
+              {/* Single Direct Google Login Button */}
+              <button
+                id="btn-google-login-direct"
+                type="button"
+                disabled={loginLoading}
+                onClick={handleDirectGoogleSignIn}
+                className="w-full flex items-center justify-center gap-3 px-6 py-3.5 sm:py-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-98 disabled:opacity-60 text-slate-950 font-black text-sm sm:text-base transition-all shadow-lg shadow-amber-500/20 cursor-pointer min-h-[48px]"
+              >
+                {loginLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>جاري الاتصال بـ Google...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-5 h-5" />
+                    <span>تسجيل الدخول بحساب Google</span>
+                  </>
+                )}
+              </button>
+
+              {/* Login Error Notification */}
+              {loginError && (
+                <div className="mt-4 p-3 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs text-right leading-relaxed flex items-start gap-2 animate-fadeIn">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <span className="flex-1">{loginError}</span>
+                </div>
+              )}
+
+              {/* Security Notice */}
+              <div className="mt-5 flex items-center justify-center gap-2 text-xs text-slate-500">
+                <Lock className="w-3.5 h-3.5" />
+                <span>الوصول مقتصر على حسابات المعلم المعتمدة</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer Text */}
+          <p className="text-center text-xs text-slate-500 mt-5 font-sans">
+            Hesham Exam © {new Date().getFullYear()}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================================
+  // MAIN PLATFORM
+  // ============================================================
+  return (
+    <div className="min-h-screen bg-[#090d16] text-[#f1f5f9] flex flex-col font-['Cairo',sans-serif] selection:bg-amber-500 selection:text-slate-950">
+      
+      {/* Full Screen Loader */}
+      {isGenerating && (
+        <AppLoader
+          message={
+            generationStep ||
+            "جاري استخراج الأسئلة وتوليد الامتحان التفاعلي..."
+          }
+          submessage="منظومة السجلات والامتحانات الأكاديمية والذكاء الاصطناعي"
+        />
+      )}
+
+      {/* Navbar */}
+      <Navbar
+        onOpenHistory={() => {
+          if (!currentUser) {
+            setIsAuthModalOpen(true);
+            return;
+          }
+
+          setIsHistoryOpen(true);
+        }}
+        onOpenHelp={() => setIsHelpOpen(true)}
+        onOpenApiConfig={() => setIsApiConfigOpen(true)}
+        onBackToRecords={onBackToRecords}
+        onReset={handleReset}
+        historyCount={history.length}
+        user={currentUser}
+        onSignIn={() => setIsAuthModalOpen(true)}
+        onSignOut={handleSignOut}
+        onInstall={handleTriggerInstall}
+        isAppInstalled={isAppInstalled}
+      />
+
+      {/* Hero */}
+      <section className="relative overflow-hidden pt-8 pb-6 border-b border-slate-800/80 bg-gradient-to-b from-slate-950 via-slate-900/40 to-slate-950">
+        
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.12),rgba(255,255,255,0))] pointer-events-none" />
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+          
+          <div className="text-center max-w-3xl mx-auto space-y-3">
+            
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-bold shadow-xs">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+
+              <span>
+                توليد فوري ومباشر من ملفات أو صور الامتحان فقط مع حفظ سحابي
+              </span>
+            </div>
+
+            {isRunningOnGitHubPages() && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-500/15 border border-teal-500/40 text-teal-300 text-xs font-bold shadow-xs">
+                <span>🌐</span>
+                <span>الموقع الخارجي متصل وجاهز للعمل (GitHub Pages Engine)</span>
+              </div>
+            )}
+
+            <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight">
+              توليد امتحان تفاعلي كامل على نفس نوع أسئلة{" "}
+              <span className="bg-gradient-to-r from-amber-400 via-orange-300 to-amber-200 bg-clip-text text-transparent">
+                الصورة أو الملف مباشرة
+              </span>
+            </h2>
+
+            <p className="text-sm text-slate-300 leading-relaxed max-w-3xl mx-auto">
+              ارفع صورة ورقة امتحان، مذكرة، أو ملف (PDF / Word / صور)، وسيقوم
+              النظام الذكي باستخراج الأسئلة أو ابتكار أسئلة جديدة مماثلة
+              وتوليد امتحان إلكتروني تفاعلي متكامل جاهز للحل والتصحيح الفوري
+              مع الحفظ التلقائي في قاعدة بيانات Firestore.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Main Workbench */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        
+        {/* Error */}
+        {errorMsg && (
+          <div className="p-4 rounded-xl bg-rose-950/50 border border-rose-800 text-rose-200 text-xs flex items-center justify-between shadow-lg">
+            
+            <div className="flex items-center gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+
+            <button
+              onClick={() => setErrorMsg(null)}
+              className="px-2 py-1 text-[11px] bg-rose-900/60 hover:bg-rose-900 rounded text-rose-300 cursor-pointer"
+            >
+              إغلاق
+            </button>
+          </div>
+        )}
+
+        {/* Success */}
+        {successNotice && (
+          <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-800/80 text-emerald-200 text-xs flex items-center justify-between shadow-lg">
+            
+            <div className="flex items-center gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+
+              <span>{successNotice}</span>
+            </div>
+
+            <button
+              onClick={() => setSuccessNotice(null)}
+              className="px-2 py-1 text-[11px] bg-emerald-900/60 hover:bg-emerald-900 rounded text-emerald-300 cursor-pointer"
+            >
+              إغلاق
+            </button>
+          </div>
+        )}
+
+        {/* File & Image Hub */}
+        <div className="w-full">
+          <ImageUploader
+            images={images}
+            onImagesChange={setImages}
+            onOpenCamera={() => setIsCameraOpen(true)}
+            examText={examText}
+            onExamTextChange={setExamText}
+            onOpenApiConfig={() => setIsApiConfigOpen(true)}
+          />
+        </div>
+
+        {/* Generation Options */}
+        <GenerationOptions
+          examTitle={examTitle}
+          onExamTitleChange={setExamTitle}
+          solveQuestions={solveQuestions}
+          onSolveQuestionsChange={setSolveQuestions}
+          instructions={instructions}
+          onInstructionsChange={setInstructions}
+          generationMode={generationMode}
+          onGenerationModeChange={setGenerationMode}
+          questionCount={questionCount}
+          onQuestionCountChange={setQuestionCount}
+          durationMinutes={durationMinutes}
+          onDurationMinutesChange={setDurationMinutes}
+          difficulty={difficulty}
+          onDifficultyChange={setDifficulty}
+          onGenerate={handleGenerate}
+          isGenerating={isGenerating}
+          canGenerate={canGenerate}
+          generationStep={generationStep}
+        />
+
+        {/* Result */}
+        {currentResult && (
+          <div className="pt-4">
+            <ResultViewer 
+              result={currentResult} 
+              onUpdateResult={(updated) => setCurrentResult(updated)}
+            />
+          </div>
+        )}
+      </main>
+
+      {/* Footer */}
+      <Footer />
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        requireAuth={false}
+      />
+
+      {/* Camera */}
+      <CameraCaptureModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={handleCameraCapture}
+      />
+
+      {/* History */}
+      <HistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        history={history}
+        onSelect={handleSelectHistoryItem}
+        onClear={handleClearHistory}
+        onDeleteOne={handleDeleteHistoryItem}
+      />
+
+      {/* Help */}
+      <HelpModal
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+      />
+
+      {/* API & Gemini Configuration Modal */}
+      <ApiConfigModal
+        isOpen={isApiConfigOpen}
+        onClose={() => setIsApiConfigOpen(false)}
+      />
+
+      {/* Floating Quick Install Button */}
+      {!isAppInstalled && (
+        <button
+          id="btn-floating-install-pwa"
+          onClick={handleTriggerInstall}
+          aria-label="تثبيت التطبيق مباشرة"
+          title="تثبيت التطبيق مباشرة على الهاتف أو سطح المكتب"
+          className="fixed bottom-6 left-6 z-40 w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 shadow-xl shadow-amber-500/30 flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 group cursor-pointer border border-white/20"
+        >
+          <Download className="w-5 h-5 transition-transform group-hover:translate-y-0.5 text-slate-950 font-black" />
+        </button>
+      )}
+    </div>
+  );
+}

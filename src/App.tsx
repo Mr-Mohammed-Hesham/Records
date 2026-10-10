@@ -18,6 +18,7 @@ import {
   RefreshCw,
   RotateCcw,
   History,
+  Sparkles,
 } from 'lucide-react';
 
 import {
@@ -86,6 +87,7 @@ import { StudentProfileView } from './components/StudentProfileView';
 import { ExamsView } from './components/ExamsView';
 import { ReportsView } from './components/ReportsView';
 import { SettingsView } from './components/SettingsView';
+import HeshamExamApp from './hesham-exam/App';
 
 /* =========================================================
    MODALS / UTILITIES / AUTH
@@ -119,6 +121,7 @@ type ViewMode =
   | 'students'
   | 'profile'
   | 'exams'
+  | 'exam-generator'
   | 'scoring'
   | 'reports'
   | 'settings';
@@ -1742,6 +1745,7 @@ export default function App() {
       dashboard: 'لوحة التحكم الرئيسية',
       students: 'إدارة ملفات الطلاب وقائمة الكورس',
       exams: 'سجلات الامتحانات',
+      'exam-generator': 'منصة صناعة وتوليد الامتحانات الذكية (Hesham-Exam)',
       reports: 'التقارير الأكاديمية والرسوم البيانية',
       settings: 'إعدادات المنصة',
     };
@@ -1783,6 +1787,12 @@ export default function App() {
       label: 'إدارة الامتحانات',
       icon: FileSpreadsheet,
       badge: exams.length,
+    },
+    {
+      id: 'exam-generator',
+      label: 'توليد الامتحانات (AI)',
+      icon: Sparkles,
+      badge: null,
     },
     {
       id: 'scoring',
@@ -1861,6 +1871,59 @@ export default function App() {
         toasts={toasts}
         onClose={removeToast}
       />
+
+      {/* =================================================
+          UNIFIED PLATFORM SWITCHER BAR
+          ================================================= */}
+      <div className="bg-slate-900 dark:bg-slate-950 text-white border-b border-amber-500/30 px-2 sm:px-6 py-1.5 z-50">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (currentView === 'exam-generator') {
+                  navigateTo('dashboard');
+                }
+              }}
+              className={`px-3 py-1 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                currentView !== 'exam-generator'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-sm shadow-amber-500/30'
+                  : 'bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-700'
+              }`}
+            >
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span>منصة السجلات والدرجات</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigateTo('exam-generator')}
+              className={`px-3 py-1 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                currentView === 'exam-generator'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-sm shadow-amber-500/30'
+                  : 'bg-slate-800/80 text-amber-300 hover:text-amber-200 hover:bg-slate-800 border border-amber-500/30'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>منصة صناعة وتوليد الامتحانات (Hesham-Exam)</span>
+            </button>
+          </div>
+
+          <div className="hidden md:flex items-center gap-2 text-[11px] text-slate-400 font-bold">
+            <span>المنصة الموحدة للمستر محمد هشام (السجلات + مولد الامتحانات الذكي)</span>
+          </div>
+        </div>
+      </div>
+
+      {currentView === 'exam-generator' ? (
+        <div className="flex-1 flex flex-col">
+          <HeshamExamApp
+            externalUser={currentUser}
+            onBackToRecords={() => navigateTo('dashboard')}
+          />
+        </div>
+      ) : (
+        <>
 
       {/* =================================================
           HEADER
@@ -2499,6 +2562,9 @@ export default function App() {
               isRefreshing={
                 isRefreshingPlatform
               }
+              onOpenExamGenerator={() =>
+                navigateTo('exam-generator')
+              }
             />
           )}
 
@@ -2604,6 +2670,9 @@ export default function App() {
               }
               onUpdateExamAttachment={
                 handleUpdateExamAttachment
+              }
+              onOpenExamGenerator={() =>
+                navigateTo('exam-generator')
               }
             />
           )}
@@ -2860,6 +2929,7 @@ export default function App() {
           { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard },
           { id: 'students', label: 'الطلاب', icon: Users, badge: students.length },
           { id: 'exams', label: 'الامتحانات', icon: FileSpreadsheet, badge: exams.length },
+          { id: 'exam-generator', label: 'مولد امتحان', icon: Sparkles },
           { id: 'scoring', label: 'الدرجات', icon: CheckSquare },
           { id: 'reports', label: 'التقارير', icon: BarChart3 },
           { id: 'settings', label: 'الإعدادات', icon: SettingsIcon },
@@ -2889,6 +2959,8 @@ export default function App() {
           );
         })}
       </nav>
+        </>
+      )}
     </div>
   );
 }

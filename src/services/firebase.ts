@@ -235,6 +235,18 @@ export async function signInWithGoogle(): Promise<User> {
     );
   }
 
+  // Also authenticate the Hesham-Exam secondary Firebase instance seamlessly with the same Google credential
+  try {
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential) {
+      const { auth: examAuth } = await import('../hesham-exam/config/firebase');
+      const { signInWithCredential } = await import('firebase/auth');
+      await signInWithCredential(examAuth, credential);
+    }
+  } catch (err) {
+    console.info('Secondary exam Firebase credential sync notice:', err);
+  }
+
   return user;
 }
 
