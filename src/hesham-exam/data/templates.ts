@@ -57,7 +57,7 @@ export const CODE_TEMPLATES: CodeTemplatePreset[] = [
 
     <!-- Top Navigation Bar matching the image -->
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
-      
+
       <!-- Bilingual Language Switcher (عربي | EN) -->
       <div>
         <button id="lang-btn" onclick="toggleLanguage()" class="px-4 py-1.5 rounded-full bg-teal-800 text-white text-xs font-bold shadow-md hover:bg-teal-900 transition flex items-center gap-1.5 cursor-pointer">
@@ -87,6 +87,10 @@ export const CODE_TEMPLATES: CodeTemplatePreset[] = [
           <span>🖨️</span>
           <span id="btn-print-text">طباعة</span>
         </button>
+        <button onclick="toggleExamLogo()" class="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center gap-1 shadow-sm transition cursor-pointer">
+          <span>🖼️</span>
+          <span id="btn-toggle-logo">إظهار/إخفاء اللوجو</span>
+        </button>
         <button onclick="reshuffleQuestions()" class="px-3.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold flex items-center gap-1 shadow-sm transition cursor-pointer">
           <span>🔄</span>
           <span id="btn-new-q-text">أسئلة جديدة</span>
@@ -101,17 +105,20 @@ export const CODE_TEMPLATES: CodeTemplatePreset[] = [
 
     <!-- Main Header Card -->
     <div class="bg-white teal-border-card p-6 md:p-8 mb-8 text-center">
+      <div id="exam-logo-box" class="flex justify-center mb-3">
+        <img src="/teacher-logo.jpg" alt="شعار الهوية" class="h-16 w-24 object-cover rounded-xl border border-teal-300 shadow-sm" onerror="if(!this.src.endsWith('/teacher-logo.jpg'))this.src='/teacher-logo.jpg'">
+      </div>
       <div class="flex items-center justify-center gap-2 mb-2">
         <span class="text-amber-500 text-2xl font-black">⚡</span>
         <h1 id="exam-title-display" class="text-2xl md:text-3xl font-black text-slate-800">
           اختبار الفيزياء: البادئات والوحدات الأساسية
         </h1>
       </div>
-      
+
       <p id="exam-subtitle-display" class="text-cyan-600 font-bold text-sm md:text-base mb-1">
         قطوف فيزيائية - تحويل الوحدات والبادئات النظامية
       </p>
-      
+
       <p id="exam-description-display" class="text-xs text-slate-500 mb-3">
         اختبار لقياس فهم الوحدات الأساسية والبادئات العشرية والتحويل بينها وتطبيقاتها
       </p>
@@ -218,43 +225,43 @@ export const CODE_TEMPLATES: CodeTemplatePreset[] = [
 
     <!-- Submit / Correct Button & Send to Teacher Section -->
     <div class="text-center mb-8 space-y-4">
-      <button 
-        id="submit-btn" 
-        onclick="submitAndGrade()" 
+      <button
+        id="submit-btn"
+        onclick="submitAndGrade()"
         class="px-10 py-3.5 rounded-2xl bg-teal-600 hover:bg-teal-500 active:scale-95 text-white font-black text-base shadow-xl shadow-teal-600/30 transition flex items-center justify-center gap-2 mx-auto cursor-pointer"
       >
         <span>🎯</span>
         <span id="submit-btn-text">صحح إجاباتي!</span>
       </button>
-      
+
       <!-- Results Banner with Send to Teacher actions -->
       <div id="result-banner" class="hidden mt-6 p-6 rounded-2xl bg-white teal-border-card text-center transition-all space-y-4">
         <h3 class="text-xl font-bold text-slate-800 mb-1" id="result-title">النتيجة النهائية</h3>
         <p class="text-4xl font-black text-teal-600 my-2" id="score-text">0 / 100</p>
         <p class="text-xs text-slate-500" id="feedback-text">أحسنت! راجع الإجابات الموضحة في الأسئلة.</p>
-        
+
         <!-- SEND TO TEACHER FEATURE (إرسال النتيجة للمعلم) -->
         <div class="pt-4 border-t border-teal-100 flex flex-wrap items-center justify-center gap-3">
           <span class="text-xs font-bold text-teal-900 w-full mb-1" id="send-teacher-title">📤 إرسال ورقة الإجابة والنتيجة إلى المعلم:</span>
-          
-          <button 
-            onclick="sendResultToTeacherWhatsApp()" 
+
+          <button
+            onclick="sendResultToTeacherWhatsApp()"
             class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition cursor-pointer"
           >
             <span>💬</span>
             <span id="btn-wa-text">إرسال عبر واتساب (WhatsApp)</span>
           </button>
-          
-          <button 
-            onclick="sendResultViaEmail()" 
+
+          <button
+            onclick="sendResultViaEmail()"
             class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition cursor-pointer"
           >
             <span>✉️</span>
             <span id="btn-email-text">إرسال عبر البريد الإلكتروني</span>
           </button>
 
-          <button 
-            onclick="copyResultSummary()" 
+          <button
+            onclick="copyResultSummary()"
             class="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold flex items-center gap-1.5 shadow transition cursor-pointer"
           >
             <span>📋</span>
@@ -343,9 +350,9 @@ export const CODE_TEMPLATES: CodeTemplatePreset[] = [
       if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return;
       }
-      
+
       container.innerHTML = '';
-      
+
       const qCountText = currentLang === 'ar' ? (questions.length + ' أسئلة') : (questions.length + ' Questions');
       const badge = document.getElementById('q-count-badge');
       if (badge) badge.textContent = qCountText;
@@ -438,6 +445,13 @@ export const CODE_TEMPLATES: CodeTemplatePreset[] = [
       });
     }
 
+    function toggleExamLogo() {
+      const box = document.getElementById('exam-logo-box');
+      if (box) {
+        box.classList.toggle('hidden');
+      }
+    }
+
     function reshuffleQuestions() {
       questions.sort(() => Math.random() - 0.5);
       userAnswers = {};
@@ -459,7 +473,7 @@ export const CODE_TEMPLATES: CodeTemplatePreset[] = [
     function toggleLanguage() {
       currentLang = currentLang === 'ar' ? 'en' : 'ar';
       const html = document.documentElement;
-      
+
       if (currentLang === 'en') {
         html.dir = 'ltr';
         html.lang = 'en';
@@ -525,7 +539,7 @@ export const CODE_TEMPLATES: CodeTemplatePreset[] = [
       const group = document.getElementById('student-group').value.trim() || '-';
       const score = document.getElementById('score-text').textContent;
       const title = document.getElementById('exam-title-display').textContent.trim();
-      
+
       const text = encodeURIComponent(
         \`السلام عليكم ورحمة الله،\nتقرير نتيجة امتحان الطالب:\n- الامتحان: \${title}\n- اسم الطالب: \${name}\n- الشعبة: \${group}\n- النتيجة: \${score}\n- التاريخ: 2026/09/16\`
       );
@@ -537,7 +551,7 @@ export const CODE_TEMPLATES: CodeTemplatePreset[] = [
       const name = document.getElementById('student-name').value.trim() || 'الطالب';
       const score = document.getElementById('score-text').textContent;
       const title = document.getElementById('exam-title-display').textContent.trim();
-      
+
       const subject = encodeURIComponent(\`نتيجة امتحان \${title} - الطالب: \${name}\`);
       const body = encodeURIComponent(\`امتحان: \${title}\nاسم الطالب: \${name}\nالدرجة النهائية: \${score}\nتاريخ الإجراء: 2026/09/16\`);
       window.location.href = \`mailto:\${teacherEmail}?subject=\${subject}&body=\${body}\`;
@@ -558,7 +572,7 @@ export const CODE_TEMPLATES: CodeTemplatePreset[] = [
         timerSeconds--;
         const mins = Math.floor(timerSeconds / 60);
         const secs = timerSeconds % 60;
-        document.getElementById('timer').textContent = 
+        document.getElementById('timer').textContent =
           String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
       }
     }, 1000);
@@ -669,7 +683,7 @@ export const CODE_TEMPLATES: CodeTemplatePreset[] = [
       document.getElementById('total-count').textContent = questions.length;
       document.getElementById('question-text').textContent = q.text;
       document.getElementById('progress-bar').style.width = ((currentIndex + 1) / questions.length * 100) + '%';
-      
+
       const optContainer = document.getElementById('options-container');
       optContainer.innerHTML = '';
 
@@ -677,8 +691,8 @@ export const CODE_TEMPLATES: CodeTemplatePreset[] = [
         const btn = document.createElement('button');
         const isSelected = userAnswers[currentIndex] === idx;
         btn.className = \`w-full text-right p-3.5 rounded-xl border transition-all text-sm font-medium flex items-center justify-between \${
-          isSelected 
-            ? 'bg-indigo-600/30 border-indigo-500 text-indigo-200' 
+          isSelected
+            ? 'bg-indigo-600/30 border-indigo-500 text-indigo-200'
             : 'bg-slate-700/50 border-slate-600 hover:bg-slate-700 text-slate-200'
         }\`;
         btn.innerHTML = \`<span>\${opt}</span><span class="w-5 h-5 rounded-full border border-slate-500 flex items-center justify-center text-xs \${isSelected ? 'bg-indigo-500 border-indigo-500 text-white' : ''}">\${isSelected ? '●' : ''}</span>\`;
@@ -824,7 +838,7 @@ def run_exam(exam_title="امتحان الفيزياء والرياضيات"):
     print("=" * 60)
     print(f"الدرجة النهائية: {score} من {len(QUESTIONS)} ({percentage}%)")
     print(f"الوقت المستغرق: {elapsed} ثانية")
-    
+
     if percentage >= 85:
         print("التقدير: ممتاز 🌟")
     elif percentage >= 70:

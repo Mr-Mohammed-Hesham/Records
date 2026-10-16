@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  X, 
-  FileSpreadsheet, 
-  Calendar, 
-  Filter, 
-  CheckCircle2, 
+import {
+  X,
+  FileSpreadsheet,
+  Calendar,
+  Filter,
+  CheckCircle2,
   Download,
   GraduationCap,
   BarChart3,
@@ -14,8 +14,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Student, Exam, ExamResult, TeacherSettings } from '../types';
-import { 
-  exportCustomAcademicExcel, 
+import {
+  exportCustomAcademicExcel,
   exportAllDataExcel,
   getSavedExcelPreferences,
   saveExcelPreferences,
@@ -116,6 +116,9 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   const [chartType, setChartType] = useState<'bars_and_columns' | 'bars_only' | 'distribution'>(
     initialPrefs.chartType
   );
+  const [includeLogoHeader, setIncludeLogoHeader] = useState<boolean>(
+    initialPrefs.includeLogoHeader !== undefined ? initialPrefs.includeLogoHeader : true
+  );
 
   const [isExporting, setIsExporting] = useState(false);
 
@@ -125,8 +128,9 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
       includeChart,
       layoutMode,
       chartType,
+      includeLogoHeader,
     });
-  }, [includeChart, layoutMode, chartType]);
+  }, [includeChart, layoutMode, chartType, includeLogoHeader]);
 
   useEffect(() => {
     try {
@@ -166,6 +170,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     setIncludeChart(true);
     setLayoutMode('mobile');
     setChartType('bars_and_columns');
+    setIncludeLogoHeader(true);
     try {
       localStorage.removeItem(MODAL_STATE_KEY);
     } catch {
@@ -223,6 +228,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
             includeChart,
             layoutMode,
             chartType,
+            includeLogoHeader,
           },
           settings.gradingScale
         );
@@ -258,7 +264,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   };
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden"
       onClick={onClose}
     >
@@ -304,7 +310,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-          
+
           {/* Format Type Selection */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
@@ -430,6 +436,30 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                   <option value="distribution">توزيع التقديرات والنسب فقط</option>
                 </select>
               )}
+            </div>
+
+            {/* Include Identity Logo / Brand Header Toggle */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-indigo-200/60 dark:border-indigo-800/50">
+              <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={includeLogoHeader}
+                  onChange={(e) => setIncludeLogoHeader(e.target.checked)}
+                  className="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+                />
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <span>🖼️</span>
+                  تضمين هوية وترويسة الشعار المعتمد في شيت الإكسيل
+                </span>
+              </label>
+
+              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg border ${
+                includeLogoHeader
+                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+              }`}>
+                {includeLogoHeader ? 'مع الشعار ✔' : 'بدون إضافة'}
+              </span>
             </div>
           </div>
 

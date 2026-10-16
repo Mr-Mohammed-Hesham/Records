@@ -1,10 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { 
-  X, 
-  FileSpreadsheet, 
-  Printer, 
-  Award, 
-  TrendingUp, 
+import {
+  X,
+  FileSpreadsheet,
+  Printer,
+  Award,
+  TrendingUp,
   GraduationCap,
   Smartphone,
   Monitor,
@@ -36,6 +36,26 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
   const savedExcelPrefs = getSavedExcelPreferences();
   const [excelLayoutMode, setExcelLayoutMode] = useState<'mobile' | 'desktop'>(savedExcelPrefs.layoutMode);
   const [excelIncludeChart, setExcelIncludeChart] = useState<boolean>(savedExcelPrefs.includeChart);
+
+  // Logo display toggle state (supports including or excluding logo in report)
+  const [showLogo, setShowLogo] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('mh_report_show_logo');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const handleToggleLogo = () => {
+    const nextVal = !showLogo;
+    setShowLogo(nextVal);
+    try {
+      localStorage.setItem('mh_report_show_logo', String(nextVal));
+    } catch {
+      // ignore
+    }
+  };
 
   const stats = calculateStudentStats(results, settings.gradingScale);
   const enrollmentStatus = getEffectiveEnrollmentStatus(student);
@@ -71,7 +91,7 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
   };
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden print:p-0 print:bg-white"
       onClick={onClose}
     >
@@ -106,34 +126,52 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
 
         {/* Scrollable Printable Report Body */}
         <div ref={printRef} className="flex-1 overflow-y-auto p-4 sm:p-7 space-y-6">
-          
-          {/* Header Card: Strictly Student Name and Grade */}
+
+          {/* Header Card: Strictly Student Name and Grade with Optional Official Logo */}
           <div className="bg-gradient-to-l from-slate-900 via-slate-800 to-slate-900 text-white rounded-2xl p-5 sm:p-6 shadow-md border border-slate-700/50 print:bg-white print:text-black print:border-b-2 print:border-black print:rounded-none print:p-2">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block mb-1">
-                  تقرير الأداء الأكاديمي
-                </span>
-                <h1 className="text-2xl font-black text-white print:text-black">
-                  {student.name}
-                </h1>
-                <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-300 print:text-slate-700">
-                  <span className="bg-slate-800/80 print:bg-slate-100 px-3 py-1 rounded-lg border border-slate-700 print:border-slate-300 font-bold">
-                    الصف الدراسي: {student.grade}
+              <div className="flex items-center gap-4">
+                {showLogo && (
+                  <div className="shrink-0 w-20 h-14 sm:w-24 sm:h-16 rounded-xl overflow-hidden border border-amber-500/40 shadow-md bg-black/40 print:border-black">
+                    <img
+                      src={`${import.meta.env.BASE_URL}teacher-logo.jpg`}
+                      alt="شعار الهوية"
+                      className="w-full h-full object-cover"
+                      crossOrigin="anonymous"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (!target.src.endsWith('/teacher-logo.jpg')) {
+                          target.src = '/teacher-logo.jpg';
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+                <div>
+                  <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block mb-1">
+                    تقرير الأداء الأكاديمي
                   </span>
-                  <span className="bg-amber-500/20 text-amber-300 print:bg-slate-100 print:text-black px-3 py-1 rounded-lg border border-amber-500/40 font-bold">
-                    حالة الملف: {statusMeta.label}
-                  </span>
-                  {student.subject && (
+                  <h1 className="text-2xl font-black text-white print:text-black">
+                    {student.name}
+                  </h1>
+                  <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-300 print:text-slate-700">
                     <span className="bg-slate-800/80 print:bg-slate-100 px-3 py-1 rounded-lg border border-slate-700 print:border-slate-300 font-bold">
-                      المادة: {student.subject}
+                      الصف الدراسي: {student.grade}
                     </span>
-                  )}
-                  {student.group && (
-                    <span className="bg-slate-800/80 print:bg-slate-100 px-3 py-1 rounded-lg border border-slate-700 print:border-slate-300">
-                      الشعبة: {student.group}
+                    <span className="bg-amber-500/20 text-amber-300 print:bg-slate-100 print:text-black px-3 py-1 rounded-lg border border-amber-500/40 font-bold">
+                      حالة الملف: {statusMeta.label}
                     </span>
-                  )}
+                    {student.subject && (
+                      <span className="bg-slate-800/80 print:bg-slate-100 px-3 py-1 rounded-lg border border-slate-700 print:border-slate-300 font-bold">
+                        المادة: {student.subject}
+                      </span>
+                    )}
+                    {student.group && (
+                      <span className="bg-slate-800/80 print:bg-slate-100 px-3 py-1 rounded-lg border border-slate-700 print:border-slate-300">
+                        الشعبة: {student.group}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -247,8 +285,8 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
                     {sortedResults.map((r) => (
-                      <tr 
-                        key={r.id} 
+                      <tr
+                        key={r.id}
                         className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                       >
                         <td className="py-3 px-3.5 font-bold text-slate-900 dark:text-white">
@@ -270,8 +308,8 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
                         </td>
                         <td className="py-3 px-3 text-center">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            r.passed 
-                              ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50' 
+                            r.passed
+                              ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50'
                               : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/50'
                           }`}>
                             {r.passed ? 'ناجح' : 'راسب'}
@@ -360,6 +398,20 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
             >
               <Printer className="w-4 h-4 text-slate-500 dark:text-slate-400" />
               طباعة / PDF
+            </button>
+
+            {/* Logo Toggle: Option to add or exclude logo */}
+            <button
+              type="button"
+              onClick={handleToggleLogo}
+              className={`inline-flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                showLogo
+                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
+                  : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+              }`}
+              title="إمكانية إضافة أو عدم إضافة شعار الهوية (اللوجو) للتقرير المطبوع والمصدر"
+            >
+              <span>{showLogo ? '🖼️ اللوجو مفعّل بالتقرير ✔' : '🖼️ التقرير بدون لوجو'}</span>
             </button>
           </div>
 

@@ -1,21 +1,21 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { 
-  Award, 
-  Sparkles, 
-  Download, 
-  Copy, 
-  Share2, 
-  Check, 
-  X, 
-  Filter, 
-  Calendar, 
+import {
+  Award,
+  Sparkles,
+  Download,
+  Copy,
+  Share2,
+  Check,
+  X,
+  Filter,
+  Calendar,
   RotateCcw,
-  User, 
-  BookOpen, 
-  Crown, 
-  Medal, 
-  MessageCircle, 
-  Printer, 
+  User,
+  BookOpen,
+  Crown,
+  Medal,
+  MessageCircle,
+  Printer,
   Layers,
   GraduationCap,
   Star,
@@ -136,6 +136,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         showSignature: true,
         showStamp: true,
         showDate: true,
+        showLogo: true,
+        logoChoice: 'institute' as 'institute' | 'teacher',
       }),
     []
   );
@@ -211,6 +213,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   const [showSignature, setShowSignature] = useState<boolean>(savedConfig.showSignature);
   const [showStamp, setShowStamp] = useState<boolean>(savedConfig.showStamp);
   const [showDate, setShowDate] = useState<boolean>(savedConfig.showDate);
+  const [showLogo, setShowLogo] = useState<boolean>(savedConfig.showLogo !== undefined ? savedConfig.showLogo : true);
+  const [logoChoice, setLogoChoice] = useState<'institute' | 'teacher'>(savedConfig.logoChoice || 'institute');
 
   // Auto-save all Honor Board / Knights Board settings whenever changed
   useEffect(() => {
@@ -239,6 +243,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
       showSignature,
       showStamp,
       showDate,
+      showLogo,
+      logoChoice,
     });
   }, [
     boardType,
@@ -265,6 +271,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     showSignature,
     showStamp,
     showDate,
+    showLogo,
+    logoChoice,
   ]);
 
   // Complete reset to start a brand new board design from scratch
@@ -273,6 +281,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     setBoardType('overall');
     setIncludeMostActiveSection(true);
     setMostActiveLimit(3);
+    setShowLogo(true);
+    setLogoChoice('institute');
     setSelectedGrade('all');
     setSelectedTrack('all');
     setStartDate('');
@@ -596,16 +606,16 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   if (!isOpen) return null;
 
   // Active Subject display
-  const displaySubject = boardType === 'exam' && currentExam 
-    ? currentExam.subject 
+  const displaySubject = boardType === 'exam' && currentExam
+    ? currentExam.subject
     : (settings.defaultSubject || 'الرياضيات');
 
-  const displayGrade = selectedGrade === 'all' 
-    ? 'جميع الصفوف' 
+  const displayGrade = selectedGrade === 'all'
+    ? 'جميع الصفوف'
     : selectedGrade;
 
-  const displayTrack = selectedTrack === 'all' 
-    ? '' 
+  const displayTrack = selectedTrack === 'all'
+    ? ''
     : `• مسار ${selectedTrack}`;
 
   const displayDate = new Date().toLocaleDateString('ar-AE', {
@@ -790,7 +800,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
     const encoded = encodeURIComponent(msg);
     window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
-    
+
     // Also prompt image download if they want to attach it
     handleDownloadImage();
   };
@@ -800,14 +810,14 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   };
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-6xl max-h-[96vh] flex flex-col shadow-2xl overflow-hidden animate-fadeIn">
-        
+
         {/* Modal Top Header */}
         <div className="shrink-0 p-4 sm:px-6 sm:py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90 backdrop-blur-md">
           <div className="flex items-center gap-3">
@@ -837,7 +847,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
         {/* Modal Main Content (Controls + Preview) */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-          
+
           {/* Controls Sidebar (4 cols on lg) */}
           <div className="lg:col-span-4 space-y-4 text-right">
             {/* Saved Settings Status & Start Fresh Controls */}
@@ -863,7 +873,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                 <span>تعديل جديد</span>
               </button>
             </div>
-            
+
             {/* Board Type Selection: Overall, Most Active, Combined, or Single Exam */}
             <div className="bg-slate-800/40 p-2.5 rounded-2xl border border-slate-700/60 space-y-2.5">
               <span className="block text-[11px] font-bold text-amber-400">
@@ -1201,7 +1211,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               {/* Custom Color Pickers */}
               <div className="pt-2 border-t border-slate-700/50 space-y-2.5">
                 <span className="text-[11px] text-slate-400 block font-medium">تعديل الألوان يدوياً:</span>
-                
+
                 <div className="grid grid-cols-2 gap-2">
                   {/* Background Color */}
                   <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-700/70 flex items-center justify-between">
@@ -1313,8 +1323,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     style={{ fontFamily: fontFamily }}
                   >
                     {FONT_OPTIONS.map((f) => (
-                      <option 
-                        key={f.id} 
+                      <option
+                        key={f.id}
                         value={f.family}
                         className="bg-slate-900 text-white py-1.5"
                       >
@@ -1365,7 +1375,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         <span className="font-bold text-amber-400">الخط المطبق: {currentFont.name}</span>
                         <span className="text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded font-medium">{currentFont.category}</span>
                       </div>
-                      <p 
+                      <p
                         className="text-xs text-slate-200 truncate pt-0.5"
                         style={{ fontFamily: fontFamily }}
                       >
@@ -1552,6 +1562,46 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   />
                   <span>إظهار ختم التميز والاعتماد الذهبي</span>
                 </label>
+
+                {/* Honor Board Dedicated Logo Toggle & Choice */}
+                <div className="pt-2 border-t border-slate-700/60 mt-1 space-y-2">
+                  <label className="flex items-center gap-2 text-xs text-amber-300 font-bold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showLogo}
+                      onChange={(e) => setShowLogo(e.target.checked)}
+                      className="rounded text-amber-500 focus:ring-amber-400 cursor-pointer w-4 h-4"
+                    />
+                    <span>إظهار لوجو لوحة الشرف (THE WAY INSTITUTE)</span>
+                  </label>
+
+                  {showLogo && (
+                    <div className="flex flex-wrap items-center gap-1.5 pr-6 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setLogoChoice('institute')}
+                        className={`px-2 py-1 rounded-lg font-bold border transition-colors cursor-pointer ${
+                          logoChoice === 'institute'
+                            ? 'bg-blue-600 text-white border-blue-400 shadow-xs'
+                            : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                        }`}
+                      >
+                        لوجو المعهد (THE WAY)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLogoChoice('teacher')}
+                        className={`px-2 py-1 rounded-lg font-bold border transition-colors cursor-pointer ${
+                          logoChoice === 'teacher'
+                            ? 'bg-amber-600 text-white border-amber-400 shadow-xs'
+                            : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                        }`}
+                      >
+                        لوجو الأستاذ
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1571,9 +1621,23 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
           {/* Board Live Preview (8 cols on lg) */}
           <div className="lg:col-span-8 flex flex-col items-center">
-            
-            <div className="w-full flex items-center justify-between mb-3 text-xs text-slate-400 px-1">
-              <span>معاينة البطاقة قبل التصدير (ستُصدّر بجودة Ultra-HD):</span>
+
+            <div className="w-full flex flex-wrap items-center justify-between gap-2 mb-3 text-xs text-slate-400 px-1">
+              <div className="flex items-center gap-2">
+                <span>معاينة لوحة الشرف قبل التصدير:</span>
+                <button
+                  type="button"
+                  onClick={() => setShowLogo(!showLogo)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                    showLogo
+                      ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                  }`}
+                  title="إمكانية إضافة أو عدم إضافة لوجو المعهد للوحة الشرف"
+                >
+                  {showLogo ? '🖼️ لوجو THE WAY INSTITUTE مفعّل ✔' : '🖼️ بدون إضافة اللوجو'}
+                </button>
+              </div>
               <span className="text-amber-400 font-bold">
                 {rankedStudents.length} طلاب متفوقين
               </span>
@@ -1581,11 +1645,11 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
             {/* Scrollable container for preview */}
             <div className="w-full overflow-x-auto bg-slate-950/80 p-2 sm:p-4 rounded-3xl border border-slate-800 flex justify-center shadow-inner">
-              
+
               {/* THE EXPORTABLE BOARD CONTAINER */}
               <div
                 ref={boardRef}
-                style={{ 
+                style={{
                   width: '740px',
                   backgroundColor: bgColor,
                   color: textColor,
@@ -1598,18 +1662,18 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                 }`}
               >
                 {/* Decorative Inner Border */}
-                <div 
+                <div
                   style={{
                     backgroundColor: isLightBg ? 'rgba(255, 255, 255, 0.75)' : 'rgba(15, 23, 42, 0.65)',
                     borderColor: `${accentColor}35`,
                   }}
                   className="p-6 rounded-2xl border-2 relative overflow-hidden"
                 >
-                  
+
                   {/* Subtle Background Radial Glow */}
-                  <div 
+                  <div
                     style={{ backgroundColor: `${accentColor}15` }}
-                    className="absolute top-0 right-1/2 translate-x-1/2 w-96 h-40 rounded-full blur-3xl pointer-events-none" 
+                    className="absolute top-0 right-1/2 translate-x-1/2 w-96 h-40 rounded-full blur-3xl pointer-events-none"
                   />
 
                   {/* Corner Ornaments */}
@@ -1619,58 +1683,83 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   <div style={{ color: `${accentColor}60` }} className="absolute bottom-2 left-2 text-xs font-serif">✦</div>
 
                   {/* Top Header Section */}
-                  <div 
+                  <div
                     style={{ borderColor: `${accentColor}30` }}
                     className="flex items-center justify-between pb-4 border-b"
                   >
                     <div>
                       {schoolName ? (
-                        <p 
-                          style={{ 
+                        <p
+                          style={{
                             color: accentColor,
                             fontSize: `${Math.round(12 * (fontSizeScale / 100))}px`
-                          }} 
+                          }}
                           className="font-bold"
                         >
                           {schoolName}
                         </p>
                       ) : (
-                        <p 
-                          style={{ 
+                        <p
+                          style={{
                             color: isLightBg ? '#64748b' : '#94a3b8',
                             fontSize: `${Math.round(11 * (fontSizeScale / 100))}px`
-                          }} 
+                          }}
                           className="font-bold"
                         >
-                          سجل التميز والإنجاز الأكاديمي
+                          {showLogo && logoChoice === 'institute' ? 'THE WAY INSTITUTE' : 'سجل التميز والإنجاز الأكاديمي'}
                         </p>
                       )}
-                      <p 
-                        style={{ 
+                      <p
+                        style={{
                           color: isLightBg ? '#475569' : '#cbd5e1',
                           fontSize: `${Math.round(12 * (fontSizeScale / 100))}px`
-                        }} 
+                        }}
                         className="font-bold mt-0.5"
                       >
                         مادة {displaySubject}
                       </p>
                     </div>
 
-                    {/* Laurels & Crest */}
+                    {/* Laurels & Crest / Official Honor Board Logo (THE WAY INSTITUTE) */}
                     <div className="flex flex-col items-center">
-                      <div 
-                        style={{
-                          background: `linear-gradient(135deg, ${accentColor}, #f59e0b)`,
-                          boxShadow: `0 8px 20px ${accentColor}35`
-                        }}
-                        className="w-12 h-12 rounded-2xl text-slate-950 flex items-center justify-center shadow-lg"
-                      >
-                        <Crown className="w-7 h-7" />
-                      </div>
+                      {showLogo ? (
+                        <div
+                          style={{
+                            borderColor: `${accentColor}55`,
+                            boxShadow: `0 6px 20px ${accentColor}25`
+                          }}
+                          className="relative rounded-2xl border-2 overflow-hidden bg-white p-1 flex items-center justify-center transition-all shadow-md"
+                        >
+                          <img
+                            src={logoChoice === 'teacher' ? `${import.meta.env.BASE_URL}teacher-logo.jpg` : `${import.meta.env.BASE_URL}the-way-institute-logo.svg`}
+                            alt={logoChoice === 'teacher' ? 'شعار الأستاذ' : 'شعار معهد THE WAY INSTITUTE'}
+                            className="w-20 h-14 object-contain rounded-xl"
+                            crossOrigin="anonymous"
+                            onError={(e) => {
+                              const target = e.currentTarget;
+                              if (logoChoice === 'institute' && !target.src.endsWith('/the-way-institute-logo.svg')) {
+                                target.src = '/the-way-institute-logo.svg';
+                              } else if (logoChoice === 'teacher' && !target.src.endsWith('/teacher-logo.jpg')) {
+                                target.src = '/teacher-logo.jpg';
+                              }
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            background: `linear-gradient(135deg, ${accentColor}, #f59e0b)`,
+                            boxShadow: `0 8px 20px ${accentColor}35`
+                          }}
+                          className="w-12 h-12 rounded-2xl text-slate-950 flex items-center justify-center shadow-lg"
+                        >
+                          <Crown className="w-7 h-7" />
+                        </div>
+                      )}
                     </div>
 
                     <div className="text-left">
-                      <span 
+                      <span
                         style={{
                           backgroundColor: `${accentColor}18`,
                           color: isLightBg ? '#b45309' : accentColor,
@@ -1682,7 +1771,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         {displayGrade} {displayTrack}
                       </span>
                       {periodLabel && (
-                        <div 
+                        <div
                           style={{
                             color: accentColor,
                             fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
@@ -1694,11 +1783,11 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         </div>
                       )}
                       {showDate && (
-                        <p 
-                          style={{ 
+                        <p
+                          style={{
                             color: isLightBg ? '#64748b' : '#94a3b8',
                             fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
-                          }} 
+                          }}
                           className="mt-0.5 font-mono"
                         >
                           {displayDate}
@@ -1709,7 +1798,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
                   {/* Main Title & Subtitle */}
                   <div className="text-center py-5">
-                    <div 
+                    <div
                       style={{
                         backgroundColor: `${accentColor}15`,
                         color: accentColor,
@@ -1739,8 +1828,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       )}
                     </div>
 
-                    <h1 
-                      style={{ 
+                    <h1
+                      style={{
                         fontFamily: fontFamily,
                         color: textColor,
                         fontSize: `${Math.round(27 * (fontSizeScale / 100))}px`
@@ -1751,8 +1840,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     </h1>
 
                     {/* Subtitle / Exam Title */}
-                    <p 
-                      style={{ 
+                    <p
+                      style={{
                         fontFamily: fontFamily,
                         color: accentColor,
                         fontSize: `${Math.round(13 * (fontSizeScale / 100))}px`
@@ -1769,8 +1858,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     </p>
 
                     {/* Encouraging Note for Parents & Students */}
-                    <p 
-                      style={{ 
+                    <p
+                      style={{
                         fontFamily: fontFamily,
                         color: isLightBg ? '#475569' : '#cbd5e1',
                         fontSize: `${Math.round(12 * (fontSizeScale / 100))}px`
@@ -1785,7 +1874,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   {boardType === 'combined' && (
                     <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-amber-500/20">
                       <Crown className="w-4 h-4 text-amber-400" />
-                      <h2 
+                      <h2
                         style={{ fontFamily: fontFamily, color: textColor }}
                         className="text-xs font-bold"
                       >
@@ -1813,8 +1902,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                               backgroundColor: isFirst
                                 ? isLightBg ? 'rgba(245, 158, 11, 0.14)' : 'rgba(245, 158, 11, 0.12)'
                                 : isLightBg ? 'rgba(255, 255, 255, 0.9)' : 'rgba(30, 41, 59, 0.6)',
-                              borderColor: isFirst 
-                                ? `${accentColor}80` 
+                              borderColor: isFirst
+                                ? `${accentColor}80`
                                 : isLightBg ? '#e2e8f0' : 'rgba(71, 85, 105, 0.4)'
                             }}
                             className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${
@@ -1843,8 +1932,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <h3 
-                                    style={{ 
+                                  <h3
+                                    style={{
                                       fontFamily: fontFamily,
                                       color: textColor,
                                       fontSize: `${Math.round(15 * (fontSizeScale / 100))}px`
@@ -1854,7 +1943,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                     {item.student.name}
                                   </h3>
                                   {isFirst && (
-                                    <span 
+                                    <span
                                       style={{
                                         backgroundColor: `${accentColor}25`,
                                         color: isLightBg ? '#b45309' : accentColor,
@@ -1867,8 +1956,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                     </span>
                                   )}
                                 </div>
-                                <p 
-                                  style={{ 
+                                <p
+                                  style={{
                                     color: isLightBg ? '#64748b' : '#94a3b8',
                                     fontSize: `${Math.round(11 * (fontSizeScale / 100))}px`
                                   }}
@@ -1884,7 +1973,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                             {/* Left: Score & Recognition Pill */}
                             <div className="text-left flex items-center gap-3">
                               <div className="hidden sm:block text-right">
-                                <span 
+                                <span
                                   style={{
                                     color: item.percentage >= 95 ? '#10b981' : accentColor,
                                     fontSize: `${Math.round(11 * (fontSizeScale / 100))}px`
@@ -1893,7 +1982,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                 >
                                   {item.gradeLabel}
                                 </span>
-                                <span 
+                                <span
                                   style={{
                                     color: isLightBg ? '#64748b' : '#94a3b8',
                                     fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
@@ -1903,12 +1992,12 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                   {boardType === 'most_active'
                                     ? `متوسط الدرجات: ${item.percentage}%`
                                     : boardType === 'overall' || boardType === 'combined'
-                                    ? `${item.totalExams} اختبارات مقيمة` 
+                                    ? `${item.totalExams} اختبارات مقيمة`
                                     : `الدرجة: ${item.score}/${currentExam?.totalScore || 100}`}
                                 </span>
                               </div>
 
-                              <div 
+                              <div
                                 style={{
                                   backgroundColor: `${accentColor}18`,
                                   borderColor: `${accentColor}40`,
@@ -1917,8 +2006,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                               >
                                 {boardType === 'most_active' ? (
                                   <>
-                                    <span 
-                                      style={{ 
+                                    <span
+                                      style={{
                                         color: accentColor,
                                         fontSize: `${Math.round(15 * (fontSizeScale / 100))}px`
                                       }}
@@ -1926,8 +2015,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                     >
                                       {item.totalExams} اختبار
                                     </span>
-                                    <span 
-                                      style={{ 
+                                    <span
+                                      style={{
                                         color: isLightBg ? '#64748b' : '#94a3b8',
                                         fontSize: `${Math.round(9 * (fontSizeScale / 100))}px`
                                       }}
@@ -1937,8 +2026,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                     </span>
                                   </>
                                 ) : (
-                                  <span 
-                                    style={{ 
+                                  <span
+                                    style={{
                                       color: accentColor,
                                       fontSize: `${Math.round(16 * (fontSizeScale / 100))}px`
                                     }}
@@ -1957,7 +2046,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
                   {/* Secondary Section: فرسان الالتزام والمثابرة (الأكثر حلاً للامتحانات) */}
                   {(boardType === 'combined' || (boardType === 'overall' && includeMostActiveSection)) && mostActiveStudents.length > 0 && (
-                    <div 
+                    <div
                       style={{
                         borderColor: `${accentColor}40`,
                         backgroundColor: isLightBg ? 'rgba(245, 158, 11, 0.05)' : 'rgba(245, 158, 11, 0.04)'
@@ -1967,15 +2056,15 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       {/* Section Header */}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <div 
+                          <div
                             style={{ backgroundColor: `${accentColor}25`, color: accentColor }}
                             className="w-7 h-7 rounded-xl flex items-center justify-center text-xs"
                           >
                             <Flame className="w-4 h-4" />
                           </div>
                           <div>
-                            <h2 
-                              style={{ 
+                            <h2
+                              style={{
                                 fontFamily: fontFamily,
                                 color: textColor,
                                 fontSize: `${Math.round(14 * (fontSizeScale / 100))}px`
@@ -1984,8 +2073,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                             >
                               فرسان الالتزام والمثابرة • الأكثر حلاً للامتحانات
                             </h2>
-                            <p 
-                              style={{ 
+                            <p
+                              style={{
                                 color: isLightBg ? '#64748b' : '#94a3b8',
                                 fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
                               }}
@@ -1994,9 +2083,9 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                             </p>
                           </div>
                         </div>
-                        <span 
-                          style={{ 
-                            color: accentColor, 
+                        <span
+                          style={{
+                            color: accentColor,
                             borderColor: `${accentColor}40`,
                             backgroundColor: `${accentColor}15`,
                             fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
@@ -2039,8 +2128,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                   {isFirst ? '🥇' : isSecond ? '🥈' : isThird ? '🥉' : act.rank}
                                 </div>
                                 <div>
-                                  <h4 
-                                    style={{ 
+                                  <h4
+                                    style={{
                                       fontFamily: fontFamily,
                                       color: textColor,
                                       fontSize: `${Math.round(13 * (fontSizeScale / 100))}px`
@@ -2049,8 +2138,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                   >
                                     {act.student.name}
                                   </h4>
-                                  <span 
-                                    style={{ 
+                                  <span
+                                    style={{
                                       color: isLightBg ? '#64748b' : '#94a3b8',
                                       fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
                                     }}
@@ -2061,15 +2150,15 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                 </div>
                               </div>
 
-                              <div 
+                              <div
                                 style={{
                                   backgroundColor: `${accentColor}18`,
                                   borderColor: `${accentColor}40`,
                                 }}
                                 className="border px-2 py-1 rounded-lg text-center shrink-0 min-w-[55px]"
                               >
-                                <span 
-                                  style={{ 
+                                <span
+                                  style={{
                                     color: accentColor,
                                     fontSize: `${Math.round(12 * (fontSizeScale / 100))}px`
                                   }}
@@ -2077,8 +2166,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                 >
                                   {act.totalExams} اختبار
                                 </span>
-                                <span 
-                                  style={{ 
+                                <span
+                                  style={{
                                     color: isLightBg ? '#64748b' : '#94a3b8',
                                     fontSize: `${Math.round(9 * (fontSizeScale / 100))}px`
                                   }}
@@ -2095,15 +2184,15 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   )}
 
                   {/* Footer & Teacher Signature / Stamp Block */}
-                  <div 
+                  <div
                     style={{ borderColor: `${accentColor}30` }}
                     className="mt-6 pt-5 border-t grid grid-cols-3 items-center"
                   >
-                    
+
                     {/* Right: Official Accreditation Statement */}
                     <div className="text-right">
-                      <p 
-                        style={{ 
+                      <p
+                        style={{
                           color: isLightBg ? '#334155' : '#cbd5e1',
                           fontSize: `${Math.round(11 * (fontSizeScale / 100))}px`
                         }}
@@ -2111,8 +2200,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       >
                         الاعتماد الرسمي
                       </p>
-                      <p 
-                        style={{ 
+                      <p
+                        style={{
                           color: isLightBg ? '#64748b' : '#94a3b8',
                           fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
                         }}
@@ -2129,31 +2218,31 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     {/* Center: Golden Excellence Seal / Stamp */}
                     <div className="flex justify-center">
                       {showStamp && (
-                        <div 
+                        <div
                           style={{ borderColor: `${accentColor}70` }}
                           className="w-20 h-20 rounded-full border-2 border-dashed p-1 flex items-center justify-center relative rotate-[-6deg]"
                         >
-                          <div 
-                            style={{ 
+                          <div
+                            style={{
                               borderColor: `${accentColor}40`,
                               backgroundColor: `${accentColor}12`
                             }}
                             className="w-full h-full rounded-full border flex flex-col items-center justify-center text-center p-1"
                           >
                             <Star className="w-3.5 h-3.5 mb-0.5" style={{ color: accentColor, fill: accentColor }} />
-                            <span 
+                            <span
                               style={{ color: accentColor }}
                               className="text-[8px] font-black uppercase tracking-tighter leading-none"
                             >
                               ختم التميز
                             </span>
-                            <span 
+                            <span
                               style={{ color: accentColor }}
                               className="text-[7px] mt-0.5 font-bold opacity-90"
                             >
                               EXCELLENCE
                             </span>
-                            <span 
+                            <span
                               style={{ color: isLightBg ? '#64748b' : '#94a3b8' }}
                               className="text-[7px] font-mono"
                             >
@@ -2166,8 +2255,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
                     {/* Left: Teacher Signature */}
                     <div className="flex flex-col items-center justify-center text-center min-w-[150px]">
-                      <p 
-                        style={{ 
+                      <p
+                        style={{
                           color: isLightBg ? '#64748b' : '#94a3b8',
                           fontSize: `${Math.round(11 * (fontSizeScale / 100))}px`
                         }}
@@ -2175,8 +2264,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       >
                         {teacherRole}
                       </p>
-                      <p 
-                        style={{ 
+                      <p
+                        style={{
                           color: isLightBg ? textColor : accentColor,
                           fontSize: `${Math.round(13 * (fontSizeScale / 100))}px`
                         }}
@@ -2188,20 +2277,20 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       {showSignature && (
                         <div className="mt-1.5 flex flex-col items-center justify-center w-full">
                           {signatureStyle === 'official_badge' ? (
-                            <div 
+                            <div
                               style={{
                                 backgroundColor: `${accentColor}15`,
                                 borderColor: `${accentColor}35`
                               }}
                               className="px-3 py-1 border rounded-lg flex items-center gap-1.5 mt-1 shadow-xs"
                             >
-                              <span 
+                              <span
                                 style={{ color: accentColor }}
                                 className="text-xs font-black whitespace-nowrap"
                               >
                                 {signatureText || teacherName}
                               </span>
-                              <span 
+                              <span
                                 style={{
                                   backgroundColor: `${accentColor}25`,
                                   color: accentColor
@@ -2214,12 +2303,12 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                           ) : (
                             <div className="flex flex-col items-center justify-center">
                               {/* Signature text - guaranteed single line */}
-                              <div 
+                              <div
                                 className="whitespace-nowrap select-none font-bold px-3 tracking-wide"
-                                style={{ 
+                                style={{
                                   color: accentColor,
-                                  fontFamily: signatureStyle === 'cursive_script' 
-                                    ? "'Plus Jakarta Sans', cursive, sans-serif" 
+                                  fontFamily: signatureStyle === 'cursive_script'
+                                    ? "'Plus Jakarta Sans', cursive, sans-serif"
                                     : "'Aref Ruqaa', 'Cairo', serif",
                                   fontSize: `${Math.round(22 * (fontSizeScale / 100))}px`,
                                   lineHeight: '1.2',
@@ -2231,29 +2320,29 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                               </div>
 
                               {/* Flowing pen stroke swoosh */}
-                              <svg 
-                                className="w-28 h-3.5 mt-0.5 overflow-visible" 
+                              <svg
+                                className="w-28 h-3.5 mt-0.5 overflow-visible"
                                 style={{ color: accentColor }}
-                                viewBox="0 0 110 14" 
-                                fill="none" 
+                                viewBox="0 0 110 14"
+                                fill="none"
                                 xmlns="http://www.w3.org/2000/svg"
                               >
-                                <path 
-                                  d="M 5 6 C 35 14, 75 3, 105 8" 
-                                  stroke="currentColor" 
-                                  strokeWidth="1.8" 
-                                  strokeLinecap="round" 
+                                <path
+                                  d="M 5 6 C 35 14, 75 3, 105 8"
+                                  stroke="currentColor"
+                                  strokeWidth="1.8"
+                                  strokeLinecap="round"
                                 />
-                                <path 
-                                  d="M 22 10 C 50 13, 80 8, 96 10" 
-                                  stroke="currentColor" 
-                                  strokeWidth="0.8" 
-                                  strokeLinecap="round" 
-                                  opacity="0.6" 
+                                <path
+                                  d="M 22 10 C 50 13, 80 8, 96 10"
+                                  stroke="currentColor"
+                                  strokeWidth="0.8"
+                                  strokeLinecap="round"
+                                  opacity="0.6"
                                 />
                               </svg>
 
-                              <div 
+                              <div
                                 style={{ color: isLightBg ? '#64748b' : '#94a3b8' }}
                                 className="flex items-center gap-1 mt-1 text-[9px] font-mono whitespace-nowrap"
                               >
@@ -2283,7 +2372,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
         {/* Modal Bottom Action Bar */}
         <div className="shrink-0 p-4 sm:px-6 sm:py-4 border-t border-slate-800 bg-slate-900/90 backdrop-blur-md flex flex-wrap items-center justify-between gap-3">
-          
+
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -2295,7 +2384,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            
+
             {/* Print Certificate Button */}
             <button
               type="button"

@@ -1,14 +1,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  BarChart3, 
-  FileSpreadsheet, 
-  Calendar, 
-  Users, 
-  Award, 
-  AlertTriangle, 
-  ArrowLeftRight, 
-  Filter, 
-  CheckCircle2, 
+import {
+  BarChart3,
+  FileSpreadsheet,
+  Calendar,
+  Users,
+  Award,
+  AlertTriangle,
+  ArrowLeftRight,
+  Filter,
+  CheckCircle2,
   Clock,
   Printer,
   GraduationCap,
@@ -35,10 +35,10 @@ import {
 } from 'recharts';
 import { Student, Exam, ExamResult, TeacherSettings } from '../types';
 import { calculateStudentStats } from '../utils/grading';
-import { 
-  exportSingleStudentAcademicReport, 
-  exportCustomAcademicExcel, 
-  exportAllDataExcel, 
+import {
+  exportSingleStudentAcademicReport,
+  exportCustomAcademicExcel,
+  exportAllDataExcel,
   exportExamResultsExcel,
   exportCompletedStudentsExcel,
   loadExcelPreferences,
@@ -99,11 +99,30 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [excelLayoutMode, setExcelLayoutMode] = useState<'mobile' | 'desktop'>(initialExcelPrefs.layoutMode);
   const [excelIncludeChart, setExcelIncludeChart] = useState<boolean>(initialExcelPrefs.includeChart);
 
+  // Logo in reports toggle state (include or exclude logo in exported reports)
+  const [showReportLogo, setShowReportLogo] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('mh_reports_view_show_logo');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const handleToggleReportLogo = () => {
+    const nextVal = !showReportLogo;
+    setShowReportLogo(nextVal);
+    try {
+      localStorage.setItem('mh_reports_view_show_logo', String(nextVal));
+    } catch {}
+  };
+
   const getExportOptions = () => {
-    saveExcelPreferences({ layoutMode: excelLayoutMode, includeChart: excelIncludeChart });
+    saveExcelPreferences({ layoutMode: excelLayoutMode, includeChart: excelIncludeChart, includeLogoHeader: showReportLogo });
     return {
       layoutMode: excelLayoutMode,
       includeChart: excelIncludeChart,
+      includeLogoHeader: showReportLogo,
       chartType: 'both' as const,
     };
   };
@@ -208,7 +227,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   // Grade rating distribution for selected exam (Recharts data)
   const examRatingDistribution = useMemo(() => {
     if (!currentExamResults.length) return [];
-    
+
     // Default standard rating buckets
     const ratingBuckets: Record<string, { label: string; count: number; color: string; order: number }> = {
       'ممتاز مرتفع (A+)': { label: 'A+ ممتاز مرتفع', count: 0, color: '#10b981', order: 1 },
@@ -297,7 +316,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   }, [compareExamIds, exams, dateFilteredResults]);
 
   const toggleCompareExam = (id: string) => {
-    setCompareExamIds(prev => 
+    setCompareExamIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
   };
@@ -340,6 +359,20 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           >
             <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             تصدير الكل
+          </button>
+
+          {/* Quick Logo Toggle for Reports */}
+          <button
+            type="button"
+            onClick={handleToggleReportLogo}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+              showReportLogo
+                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
+                : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+            }`}
+            title="إمكانية إضافة أو عدم إضافة شعار الهوية (اللوجو) في التقارير المصدرة"
+          >
+            <span>{showReportLogo ? '🖼️ اللوجو مفعّل بالتقارير ✔' : '🖼️ التقارير بدون لوجو'}</span>
           </button>
         </div>
       </div>
@@ -386,6 +419,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             />
             <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
               إدراج الرسم البياني للدرجات داخل الشيت
+            </span>
+          </label>
+          <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showReportLogo}
+              onChange={(e) => handleToggleReportLogo()}
+              className="w-3.5 h-3.5 accent-amber-500 rounded cursor-pointer"
+            />
+            <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
+              إظهار شعار الهوية (اللوجو)
             </span>
           </label>
         </div>
@@ -578,21 +622,39 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       {/* 1. Single Student Report (Strictly: Student Name, Grade, and Exam Specifications) */}
       {reportType === 'single_student' && currentStudent && (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-7 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-6">
-          
-          {/* Header Card: Strictly Student Name & Grade */}
+
+          {/* Header Card: Strictly Student Name & Grade with Optional Logo */}
           <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div>
-              <span className="text-[11px] font-bold text-amber-500 uppercase tracking-wider block mb-1">
-                تقرير الطالب الأكاديمي
-              </span>
-              <h2 className="text-2xl font-black text-slate-900 dark:text-white">
-                {currentStudent.name}
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                الصف الدراسي: <strong className="text-slate-800 dark:text-slate-200">{currentStudent.grade}</strong>
-                {currentStudent.subject && <span> • المادة: <strong className="text-slate-800 dark:text-slate-200">{currentStudent.subject}</strong></span>}
-                {currentStudent.group && <span> • الشعبة: <strong className="text-slate-800 dark:text-slate-200">{currentStudent.group}</strong></span>}
-              </p>
+            <div className="flex items-center gap-3.5">
+              {showReportLogo && (
+                <div className="w-16 h-12 rounded-xl overflow-hidden border border-amber-500/30 shadow-xs shrink-0 bg-black/30">
+                  <img
+                    src={`${import.meta.env.BASE_URL}teacher-logo.jpg`}
+                    alt="شعار الهوية"
+                    className="w-full h-full object-cover"
+                    crossOrigin="anonymous"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      if (!target.src.endsWith('/teacher-logo.jpg')) {
+                        target.src = '/teacher-logo.jpg';
+                      }
+                    }}
+                  />
+                </div>
+              )}
+              <div>
+                <span className="text-[11px] font-bold text-amber-500 uppercase tracking-wider block mb-1">
+                  تقرير الطالب الأكاديمي
+                </span>
+                <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+                  {currentStudent.name}
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  الصف الدراسي: <strong className="text-slate-800 dark:text-slate-200">{currentStudent.grade}</strong>
+                  {currentStudent.subject && <span> • المادة: <strong className="text-slate-800 dark:text-slate-200">{currentStudent.subject}</strong></span>}
+                  {currentStudent.group && <span> • الشعبة: <strong className="text-slate-800 dark:text-slate-200">{currentStudent.group}</strong></span>}
+                </p>
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -702,8 +764,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                         </td>
                         <td className="py-3 px-3 text-center">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            r.passed 
-                              ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50' 
+                            r.passed
+                              ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50'
                               : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/50'
                           }`}>
                             {r.passed ? 'ناجح' : 'راسب'}
@@ -769,8 +831,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   const res = dateFilteredResults.filter(r => r.studentDocId === st.id);
                   const stStats = calculateStudentStats(res, settings.gradingScale);
                   return (
-                    <tr 
-                      key={st.id} 
+                    <tr
+                      key={st.id}
                       onClick={() => onOpenStudentProfile(st)}
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
                     >
@@ -867,16 +929,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                         margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" opacity={0.6} />
-                        <XAxis 
-                          dataKey="label" 
-                          tick={{ fontSize: 11, fill: '#64748b' }} 
+                        <XAxis
+                          dataKey="label"
+                          tick={{ fontSize: 11, fill: '#64748b' }}
                           tickLine={false}
                           interval={0}
                         />
-                        <YAxis 
-                          allowDecimals={false} 
-                          tick={{ fontSize: 11, fill: '#64748b' }} 
-                          tickLine={false} 
+                        <YAxis
+                          allowDecimals={false}
+                          tick={{ fontSize: 11, fill: '#64748b' }}
+                          tickLine={false}
                           axisLine={false}
                         />
                         <Tooltip
@@ -942,9 +1004,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                           }}
                           formatter={(value: any, name: any) => [`${value} طالب (${Math.round((Number(value) / currentExamResults.length) * 100)}%)`, name]}
                         />
-                        <Legend 
-                          verticalAlign="bottom" 
-                          height={30} 
+                        <Legend
+                          verticalAlign="bottom"
+                          height={30}
                           formatter={(value) => <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 mr-2">{value}</span>}
                         />
                       </PieChart>
@@ -1056,7 +1118,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   const res = dateFilteredResults.filter(r => r.studentDocId === st.id);
                   const stStats = calculateStudentStats(res, settings.gradingScale);
                   return (
-                    <tr 
+                    <tr
                       key={st.id}
                       onClick={() => onOpenStudentProfile(st)}
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
@@ -1069,7 +1131,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       <td className="py-2.5 px-3 text-center">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                           stStats.status === 'ممتاز' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' :
-                          stStats.status === 'جيد' ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300' : 
+                          stStats.status === 'جيد' ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300' :
                           'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
                         }`}>
                           {stStats.status}

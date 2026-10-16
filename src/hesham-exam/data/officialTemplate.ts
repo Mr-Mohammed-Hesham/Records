@@ -7,7 +7,7 @@ export const OFFICIAL_HESHAM_EXAM_TEMPLATE = `<!DOCTYPE html>
     <title>قالب امتحان تفاعلي | Interactive Exam Template</title>
     <meta name="description" content="امتحان تفاعلي شامل - منصة مستر محمد هشام">
     <meta name="author" content="Mr. Mohammed Hesham">
-    
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
@@ -149,12 +149,16 @@ export const OFFICIAL_HESHAM_EXAM_TEMPLATE = `<!DOCTYPE html>
     <div class="max-w-4xl mx-auto mb-6 flex flex-wrap gap-3 justify-center no-print">
         <button onclick="toggleAnswers()" class="bg-teal-600 hover:bg-teal-700 text-white px-5 py-2 rounded-xl font-medium transition shadow cursor-pointer" data-ar="👀 إظهار / إخفاء الإجابات" data-en="👀 Show / Hide Answers">👀 إظهار / إخفاء الإجابات</button>
         <button onclick="window.print()" class="bg-gray-700 hover:bg-gray-900 text-white px-5 py-2 rounded-xl font-medium transition shadow cursor-pointer" data-ar="🖨️ طباعة" data-en="🖨️ Print">🖨️ طباعة</button>
+        <button onclick="toggleExamLogo()" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl font-medium transition shadow cursor-pointer" data-ar="🖼️ إظهار/إخفاء اللوجو" data-en="🖼️ Toggle Logo">🖼️ إظهار/إخفاء اللوجو</button>
         <button onclick="reshuffleExam()" class="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white px-5 py-2 rounded-xl font-medium transition shadow cursor-pointer" data-ar="🔄 أسئلة جديدة" data-en="🔄 New Questions">🔄 أسئلة جديدة</button>
         <button onclick="clearProgress()" class="bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-xl font-medium transition shadow cursor-pointer" data-ar="🗑️ مسح التقدم" data-en="🗑️ Clear Progress">🗑️ مسح التقدم</button>
     </div>
 
     <!-- 📝 عناوين الامتحان والوصف المعتمد لمادتي الفيزياء والرياضيات -->
     <header class="max-w-4xl mx-auto bg-white p-6 rounded-2xl shadow-lg mb-8 border-4 border-teal-400">
+        <div id="exam-logo-box" class="flex justify-center mb-3">
+            <img src="/teacher-logo.jpg" alt="شعار الهوية" class="h-16 w-24 object-cover rounded-xl border border-teal-300 shadow-sm" onerror="if(!this.src.endsWith('/teacher-logo.jpg'))this.src='/teacher-logo.jpg'">
+        </div>
         <div class="text-center">
             <h1 class="text-2xl md:text-3xl font-bold text-gray-900 mb-2" data-ar="📐 امتحان الفيزياء والرياضيات التفاعلي المتكامل" data-en="📐 Interactive Physics & Mathematics Integrated Exam">📐 امتحان الفيزياء والرياضيات التفاعلي المتكامل</h1>
             <h2 class="text-lg text-teal-600 font-semibold" data-ar="الصف الثاني عشر / المرحلة الثانوية - فيزياء ورياضيات" data-en="Grade 12 / Secondary - Physics & Mathematics">الصف الثاني عشر / المرحلة الثانوية - فيزياء ورياضيات</h2>
@@ -224,7 +228,7 @@ emailjs.init(PUBLIC_KEY);
 
 // ==================== 💾 نظام حفظ التقدم ====================
 // 📝 غيّر اسم المفتاح ليكون فريداً لكل امتحان جديد
-const STORAGE_KEY = 'generic_exam_template_v1'; 
+const STORAGE_KEY = 'generic_exam_template_v1';
 
 // ⚠️ هام: يجب أن تتطابق هذه الأرقام مع عدد الأسئلة والأقسام التي تضعها في originalExamData بالأسفل
 const TOTAL_TIME = 3600; // الوقت بالثواني (3600 = 60 دقيقة)
@@ -930,6 +934,13 @@ function toggleAnswers() {
     saveState(false);
 }
 
+function toggleExamLogo() {
+    const box = document.getElementById('exam-logo-box');
+    if (box) {
+        box.classList.toggle('hidden');
+    }
+}
+
 function gradeExam() {
     let correctCount = 0;
     const sectionScores = new Array(TOTAL_SECTIONS).fill(0);
@@ -938,12 +949,12 @@ function gradeExam() {
         const li = document.getElementById(\`q-\${i}\`);
         if (li) {
             const isCorrect = sel && sel.value === correctAnswersMap[i];
-            if (isCorrect) { 
-                correctCount++; 
-                li.classList.add('correct'); 
-                li.classList.remove('incorrect'); 
+            if (isCorrect) {
+                correctCount++;
+                li.classList.add('correct');
+                li.classList.remove('incorrect');
                 const secIdx = Math.min(TOTAL_SECTIONS - 1, Math.floor(i / Math.max(1, QUESTIONS_PER_SECTION)));
-                if (sectionScores[secIdx] !== undefined) sectionScores[secIdx]++; 
+                if (sectionScores[secIdx] !== undefined) sectionScores[secIdx]++;
             }
             else { li.classList.add('incorrect'); li.classList.remove('correct'); }
         }

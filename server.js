@@ -50,7 +50,7 @@ var OFFICIAL_HESHAM_EXAM_TEMPLATE = `<!DOCTYPE html>
     <title>\u0642\u0627\u0644\u0628 \u0627\u0645\u062A\u062D\u0627\u0646 \u062A\u0641\u0627\u0639\u0644\u064A | Interactive Exam Template</title>
     <meta name="description" content="\u0627\u0645\u062A\u062D\u0627\u0646 \u062A\u0641\u0627\u0639\u0644\u064A \u0634\u0627\u0645\u0644 - \u0645\u0646\u0635\u0629 \u0645\u0633\u062A\u0631 \u0645\u062D\u0645\u062F \u0647\u0634\u0627\u0645">
     <meta name="author" content="Mr. Mohammed Hesham">
-    
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
@@ -192,12 +192,16 @@ var OFFICIAL_HESHAM_EXAM_TEMPLATE = `<!DOCTYPE html>
     <div class="max-w-4xl mx-auto mb-6 flex flex-wrap gap-3 justify-center no-print">
         <button onclick="toggleAnswers()" class="bg-teal-600 hover:bg-teal-700 text-white px-5 py-2 rounded-xl font-medium transition shadow cursor-pointer" data-ar="\u{1F440} \u0625\u0638\u0647\u0627\u0631 / \u0625\u062E\u0641\u0627\u0621 \u0627\u0644\u0625\u062C\u0627\u0628\u0627\u062A" data-en="\u{1F440} Show / Hide Answers">\u{1F440} \u0625\u0638\u0647\u0627\u0631 / \u0625\u062E\u0641\u0627\u0621 \u0627\u0644\u0625\u062C\u0627\u0628\u0627\u062A</button>
         <button onclick="window.print()" class="bg-gray-700 hover:bg-gray-900 text-white px-5 py-2 rounded-xl font-medium transition shadow cursor-pointer" data-ar="\u{1F5A8}\uFE0F \u0637\u0628\u0627\u0639\u0629" data-en="\u{1F5A8}\uFE0F Print">\u{1F5A8}\uFE0F \u0637\u0628\u0627\u0639\u0629</button>
+        <button onclick="toggleExamLogo()" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl font-medium transition shadow cursor-pointer" data-ar="\u{1F5BC}\uFE0F \u0625\u0638\u0647\u0627\u0631/\u0625\u062E\u0641\u0627\u0621 \u0627\u0644\u0644\u0648\u062C\u0648" data-en="\u{1F5BC}\uFE0F Toggle Logo">\u{1F5BC}\uFE0F \u0625\u0638\u0647\u0627\u0631/\u0625\u062E\u0641\u0627\u0621 \u0627\u0644\u0644\u0648\u062C\u0648</button>
         <button onclick="reshuffleExam()" class="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white px-5 py-2 rounded-xl font-medium transition shadow cursor-pointer" data-ar="\u{1F504} \u0623\u0633\u0626\u0644\u0629 \u062C\u062F\u064A\u062F\u0629" data-en="\u{1F504} New Questions">\u{1F504} \u0623\u0633\u0626\u0644\u0629 \u062C\u062F\u064A\u062F\u0629</button>
         <button onclick="clearProgress()" class="bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-xl font-medium transition shadow cursor-pointer" data-ar="\u{1F5D1}\uFE0F \u0645\u0633\u062D \u0627\u0644\u062A\u0642\u062F\u0645" data-en="\u{1F5D1}\uFE0F Clear Progress">\u{1F5D1}\uFE0F \u0645\u0633\u062D \u0627\u0644\u062A\u0642\u062F\u0645</button>
     </div>
 
     <!-- \u{1F4DD} \u0639\u0646\u0627\u0648\u064A\u0646 \u0627\u0644\u0627\u0645\u062A\u062D\u0627\u0646 \u0648\u0627\u0644\u0648\u0635\u0641 \u0627\u0644\u0645\u0639\u062A\u0645\u062F \u0644\u0645\u0627\u062F\u062A\u064A \u0627\u0644\u0641\u064A\u0632\u064A\u0627\u0621 \u0648\u0627\u0644\u0631\u064A\u0627\u0636\u064A\u0627\u062A -->
     <header class="max-w-4xl mx-auto bg-white p-6 rounded-2xl shadow-lg mb-8 border-4 border-teal-400">
+        <div id="exam-logo-box" class="flex justify-center mb-3">
+            <img src="/teacher-logo.jpg" alt="\u0634\u0639\u0627\u0631 \u0627\u0644\u0647\u0648\u064A\u0629" class="h-16 w-24 object-cover rounded-xl border border-teal-300 shadow-sm" onerror="if(!this.src.endsWith('/teacher-logo.jpg'))this.src='/teacher-logo.jpg'">
+        </div>
         <div class="text-center">
             <h1 class="text-2xl md:text-3xl font-bold text-gray-900 mb-2" data-ar="\u{1F4D0} \u0627\u0645\u062A\u062D\u0627\u0646 \u0627\u0644\u0641\u064A\u0632\u064A\u0627\u0621 \u0648\u0627\u0644\u0631\u064A\u0627\u0636\u064A\u0627\u062A \u0627\u0644\u062A\u0641\u0627\u0639\u0644\u064A \u0627\u0644\u0645\u062A\u0643\u0627\u0645\u0644" data-en="\u{1F4D0} Interactive Physics & Mathematics Integrated Exam">\u{1F4D0} \u0627\u0645\u062A\u062D\u0627\u0646 \u0627\u0644\u0641\u064A\u0632\u064A\u0627\u0621 \u0648\u0627\u0644\u0631\u064A\u0627\u0636\u064A\u0627\u062A \u0627\u0644\u062A\u0641\u0627\u0639\u0644\u064A \u0627\u0644\u0645\u062A\u0643\u0627\u0645\u0644</h1>
             <h2 class="text-lg text-teal-600 font-semibold" data-ar="\u0627\u0644\u0635\u0641 \u0627\u0644\u062B\u0627\u0646\u064A \u0639\u0634\u0631 / \u0627\u0644\u0645\u0631\u062D\u0644\u0629 \u0627\u0644\u062B\u0627\u0646\u0648\u064A\u0629 - \u0641\u064A\u0632\u064A\u0627\u0621 \u0648\u0631\u064A\u0627\u0636\u064A\u0627\u062A" data-en="Grade 12 / Secondary - Physics & Mathematics">\u0627\u0644\u0635\u0641 \u0627\u0644\u062B\u0627\u0646\u064A \u0639\u0634\u0631 / \u0627\u0644\u0645\u0631\u062D\u0644\u0629 \u0627\u0644\u062B\u0627\u0646\u0648\u064A\u0629 - \u0641\u064A\u0632\u064A\u0627\u0621 \u0648\u0631\u064A\u0627\u0636\u064A\u0627\u062A</h2>
@@ -267,7 +271,7 @@ emailjs.init(PUBLIC_KEY);
 
 // ==================== \u{1F4BE} \u0646\u0638\u0627\u0645 \u062D\u0641\u0638 \u0627\u0644\u062A\u0642\u062F\u0645 ====================
 // \u{1F4DD} \u063A\u064A\u0651\u0631 \u0627\u0633\u0645 \u0627\u0644\u0645\u0641\u062A\u0627\u062D \u0644\u064A\u0643\u0648\u0646 \u0641\u0631\u064A\u062F\u0627\u064B \u0644\u0643\u0644 \u0627\u0645\u062A\u062D\u0627\u0646 \u062C\u062F\u064A\u062F
-const STORAGE_KEY = 'generic_exam_template_v1'; 
+const STORAGE_KEY = 'generic_exam_template_v1';
 
 // \u26A0\uFE0F \u0647\u0627\u0645: \u064A\u062C\u0628 \u0623\u0646 \u062A\u062A\u0637\u0627\u0628\u0642 \u0647\u0630\u0647 \u0627\u0644\u0623\u0631\u0642\u0627\u0645 \u0645\u0639 \u0639\u062F\u062F \u0627\u0644\u0623\u0633\u0626\u0644\u0629 \u0648\u0627\u0644\u0623\u0642\u0633\u0627\u0645 \u0627\u0644\u062A\u064A \u062A\u0636\u0639\u0647\u0627 \u0641\u064A originalExamData \u0628\u0627\u0644\u0623\u0633\u0641\u0644
 const TOTAL_TIME = 3600; // \u0627\u0644\u0648\u0642\u062A \u0628\u0627\u0644\u062B\u0648\u0627\u0646\u064A (3600 = 60 \u062F\u0642\u064A\u0642\u0629)
@@ -973,6 +977,13 @@ function toggleAnswers() {
     saveState(false);
 }
 
+function toggleExamLogo() {
+    const box = document.getElementById('exam-logo-box');
+    if (box) {
+        box.classList.toggle('hidden');
+    }
+}
+
 function gradeExam() {
     let correctCount = 0;
     const sectionScores = new Array(TOTAL_SECTIONS).fill(0);
@@ -981,12 +992,12 @@ function gradeExam() {
         const li = document.getElementById(\`q-\${i}\`);
         if (li) {
             const isCorrect = sel && sel.value === correctAnswersMap[i];
-            if (isCorrect) { 
-                correctCount++; 
-                li.classList.add('correct'); 
-                li.classList.remove('incorrect'); 
+            if (isCorrect) {
+                correctCount++;
+                li.classList.add('correct');
+                li.classList.remove('incorrect');
                 const secIdx = Math.min(TOTAL_SECTIONS - 1, Math.floor(i / Math.max(1, QUESTIONS_PER_SECTION)));
-                if (sectionScores[secIdx] !== undefined) sectionScores[secIdx]++; 
+                if (sectionScores[secIdx] !== undefined) sectionScores[secIdx]++;
             }
             else { li.classList.add('incorrect'); li.classList.remove('correct'); }
         }
@@ -1149,7 +1160,7 @@ var CODE_TEMPLATES = [
 
     <!-- Top Navigation Bar matching the image -->
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
-      
+
       <!-- Bilingual Language Switcher (\u0639\u0631\u0628\u064A | EN) -->
       <div>
         <button id="lang-btn" onclick="toggleLanguage()" class="px-4 py-1.5 rounded-full bg-teal-800 text-white text-xs font-bold shadow-md hover:bg-teal-900 transition flex items-center gap-1.5 cursor-pointer">
@@ -1179,6 +1190,10 @@ var CODE_TEMPLATES = [
           <span>\u{1F5A8}\uFE0F</span>
           <span id="btn-print-text">\u0637\u0628\u0627\u0639\u0629</span>
         </button>
+        <button onclick="toggleExamLogo()" class="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center gap-1 shadow-sm transition cursor-pointer">
+          <span>\u{1F5BC}\uFE0F</span>
+          <span id="btn-toggle-logo">\u0625\u0638\u0647\u0627\u0631/\u0625\u062E\u0641\u0627\u0621 \u0627\u0644\u0644\u0648\u062C\u0648</span>
+        </button>
         <button onclick="reshuffleQuestions()" class="px-3.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold flex items-center gap-1 shadow-sm transition cursor-pointer">
           <span>\u{1F504}</span>
           <span id="btn-new-q-text">\u0623\u0633\u0626\u0644\u0629 \u062C\u062F\u064A\u062F\u0629</span>
@@ -1193,17 +1208,20 @@ var CODE_TEMPLATES = [
 
     <!-- Main Header Card -->
     <div class="bg-white teal-border-card p-6 md:p-8 mb-8 text-center">
+      <div id="exam-logo-box" class="flex justify-center mb-3">
+        <img src="/teacher-logo.jpg" alt="\u0634\u0639\u0627\u0631 \u0627\u0644\u0647\u0648\u064A\u0629" class="h-16 w-24 object-cover rounded-xl border border-teal-300 shadow-sm" onerror="if(!this.src.endsWith('/teacher-logo.jpg'))this.src='/teacher-logo.jpg'">
+      </div>
       <div class="flex items-center justify-center gap-2 mb-2">
         <span class="text-amber-500 text-2xl font-black">\u26A1</span>
         <h1 id="exam-title-display" class="text-2xl md:text-3xl font-black text-slate-800">
           \u0627\u062E\u062A\u0628\u0627\u0631 \u0627\u0644\u0641\u064A\u0632\u064A\u0627\u0621: \u0627\u0644\u0628\u0627\u062F\u0626\u0627\u062A \u0648\u0627\u0644\u0648\u062D\u062F\u0627\u062A \u0627\u0644\u0623\u0633\u0627\u0633\u064A\u0629
         </h1>
       </div>
-      
+
       <p id="exam-subtitle-display" class="text-cyan-600 font-bold text-sm md:text-base mb-1">
         \u0642\u0637\u0648\u0641 \u0641\u064A\u0632\u064A\u0627\u0626\u064A\u0629 - \u062A\u062D\u0648\u064A\u0644 \u0627\u0644\u0648\u062D\u062F\u0627\u062A \u0648\u0627\u0644\u0628\u0627\u062F\u0626\u0627\u062A \u0627\u0644\u0646\u0638\u0627\u0645\u064A\u0629
       </p>
-      
+
       <p id="exam-description-display" class="text-xs text-slate-500 mb-3">
         \u0627\u062E\u062A\u0628\u0627\u0631 \u0644\u0642\u064A\u0627\u0633 \u0641\u0647\u0645 \u0627\u0644\u0648\u062D\u062F\u0627\u062A \u0627\u0644\u0623\u0633\u0627\u0633\u064A\u0629 \u0648\u0627\u0644\u0628\u0627\u062F\u0626\u0627\u062A \u0627\u0644\u0639\u0634\u0631\u064A\u0629 \u0648\u0627\u0644\u062A\u062D\u0648\u064A\u0644 \u0628\u064A\u0646\u0647\u0627 \u0648\u062A\u0637\u0628\u064A\u0642\u0627\u062A\u0647\u0627
       </p>
@@ -1310,43 +1328,43 @@ var CODE_TEMPLATES = [
 
     <!-- Submit / Correct Button & Send to Teacher Section -->
     <div class="text-center mb-8 space-y-4">
-      <button 
-        id="submit-btn" 
-        onclick="submitAndGrade()" 
+      <button
+        id="submit-btn"
+        onclick="submitAndGrade()"
         class="px-10 py-3.5 rounded-2xl bg-teal-600 hover:bg-teal-500 active:scale-95 text-white font-black text-base shadow-xl shadow-teal-600/30 transition flex items-center justify-center gap-2 mx-auto cursor-pointer"
       >
         <span>\u{1F3AF}</span>
         <span id="submit-btn-text">\u0635\u062D\u062D \u0625\u062C\u0627\u0628\u0627\u062A\u064A!</span>
       </button>
-      
+
       <!-- Results Banner with Send to Teacher actions -->
       <div id="result-banner" class="hidden mt-6 p-6 rounded-2xl bg-white teal-border-card text-center transition-all space-y-4">
         <h3 class="text-xl font-bold text-slate-800 mb-1" id="result-title">\u0627\u0644\u0646\u062A\u064A\u062C\u0629 \u0627\u0644\u0646\u0647\u0627\u0626\u064A\u0629</h3>
         <p class="text-4xl font-black text-teal-600 my-2" id="score-text">0 / 100</p>
         <p class="text-xs text-slate-500" id="feedback-text">\u0623\u062D\u0633\u0646\u062A! \u0631\u0627\u062C\u0639 \u0627\u0644\u0625\u062C\u0627\u0628\u0627\u062A \u0627\u0644\u0645\u0648\u0636\u062D\u0629 \u0641\u064A \u0627\u0644\u0623\u0633\u0626\u0644\u0629.</p>
-        
+
         <!-- SEND TO TEACHER FEATURE (\u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0646\u062A\u064A\u062C\u0629 \u0644\u0644\u0645\u0639\u0644\u0645) -->
         <div class="pt-4 border-t border-teal-100 flex flex-wrap items-center justify-center gap-3">
           <span class="text-xs font-bold text-teal-900 w-full mb-1" id="send-teacher-title">\u{1F4E4} \u0625\u0631\u0633\u0627\u0644 \u0648\u0631\u0642\u0629 \u0627\u0644\u0625\u062C\u0627\u0628\u0629 \u0648\u0627\u0644\u0646\u062A\u064A\u062C\u0629 \u0625\u0644\u0649 \u0627\u0644\u0645\u0639\u0644\u0645:</span>
-          
-          <button 
-            onclick="sendResultToTeacherWhatsApp()" 
+
+          <button
+            onclick="sendResultToTeacherWhatsApp()"
             class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition cursor-pointer"
           >
             <span>\u{1F4AC}</span>
             <span id="btn-wa-text">\u0625\u0631\u0633\u0627\u0644 \u0639\u0628\u0631 \u0648\u0627\u062A\u0633\u0627\u0628 (WhatsApp)</span>
           </button>
-          
-          <button 
-            onclick="sendResultViaEmail()" 
+
+          <button
+            onclick="sendResultViaEmail()"
             class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition cursor-pointer"
           >
             <span>\u2709\uFE0F</span>
             <span id="btn-email-text">\u0625\u0631\u0633\u0627\u0644 \u0639\u0628\u0631 \u0627\u0644\u0628\u0631\u064A\u062F \u0627\u0644\u0625\u0644\u0643\u062A\u0631\u0648\u0646\u064A</span>
           </button>
 
-          <button 
-            onclick="copyResultSummary()" 
+          <button
+            onclick="copyResultSummary()"
             class="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold flex items-center gap-1.5 shadow transition cursor-pointer"
           >
             <span>\u{1F4CB}</span>
@@ -1435,9 +1453,9 @@ var CODE_TEMPLATES = [
       if (!questions || !Array.isArray(questions) || questions.length === 0) {
         return;
       }
-      
+
       container.innerHTML = '';
-      
+
       const qCountText = currentLang === 'ar' ? (questions.length + ' \u0623\u0633\u0626\u0644\u0629') : (questions.length + ' Questions');
       const badge = document.getElementById('q-count-badge');
       if (badge) badge.textContent = qCountText;
@@ -1530,6 +1548,13 @@ var CODE_TEMPLATES = [
       });
     }
 
+    function toggleExamLogo() {
+      const box = document.getElementById('exam-logo-box');
+      if (box) {
+        box.classList.toggle('hidden');
+      }
+    }
+
     function reshuffleQuestions() {
       questions.sort(() => Math.random() - 0.5);
       userAnswers = {};
@@ -1551,7 +1576,7 @@ var CODE_TEMPLATES = [
     function toggleLanguage() {
       currentLang = currentLang === 'ar' ? 'en' : 'ar';
       const html = document.documentElement;
-      
+
       if (currentLang === 'en') {
         html.dir = 'ltr';
         html.lang = 'en';
@@ -1617,7 +1642,7 @@ var CODE_TEMPLATES = [
       const group = document.getElementById('student-group').value.trim() || '-';
       const score = document.getElementById('score-text').textContent;
       const title = document.getElementById('exam-title-display').textContent.trim();
-      
+
       const text = encodeURIComponent(
         \`\u0627\u0644\u0633\u0644\u0627\u0645 \u0639\u0644\u064A\u0643\u0645 \u0648\u0631\u062D\u0645\u0629 \u0627\u0644\u0644\u0647\u060C
 \u062A\u0642\u0631\u064A\u0631 \u0646\u062A\u064A\u062C\u0629 \u0627\u0645\u062A\u062D\u0627\u0646 \u0627\u0644\u0637\u0627\u0644\u0628:
@@ -1635,7 +1660,7 @@ var CODE_TEMPLATES = [
       const name = document.getElementById('student-name').value.trim() || '\u0627\u0644\u0637\u0627\u0644\u0628';
       const score = document.getElementById('score-text').textContent;
       const title = document.getElementById('exam-title-display').textContent.trim();
-      
+
       const subject = encodeURIComponent(\`\u0646\u062A\u064A\u062C\u0629 \u0627\u0645\u062A\u062D\u0627\u0646 \${title} - \u0627\u0644\u0637\u0627\u0644\u0628: \${name}\`);
       const body = encodeURIComponent(\`\u0627\u0645\u062A\u062D\u0627\u0646: \${title}
 \u0627\u0633\u0645 \u0627\u0644\u0637\u0627\u0644\u0628: \${name}
@@ -1662,7 +1687,7 @@ var CODE_TEMPLATES = [
         timerSeconds--;
         const mins = Math.floor(timerSeconds / 60);
         const secs = timerSeconds % 60;
-        document.getElementById('timer').textContent = 
+        document.getElementById('timer').textContent =
           String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
       }
     }, 1000);
@@ -1773,7 +1798,7 @@ var CODE_TEMPLATES = [
       document.getElementById('total-count').textContent = questions.length;
       document.getElementById('question-text').textContent = q.text;
       document.getElementById('progress-bar').style.width = ((currentIndex + 1) / questions.length * 100) + '%';
-      
+
       const optContainer = document.getElementById('options-container');
       optContainer.innerHTML = '';
 
@@ -1781,8 +1806,8 @@ var CODE_TEMPLATES = [
         const btn = document.createElement('button');
         const isSelected = userAnswers[currentIndex] === idx;
         btn.className = \`w-full text-right p-3.5 rounded-xl border transition-all text-sm font-medium flex items-center justify-between \${
-          isSelected 
-            ? 'bg-indigo-600/30 border-indigo-500 text-indigo-200' 
+          isSelected
+            ? 'bg-indigo-600/30 border-indigo-500 text-indigo-200'
             : 'bg-slate-700/50 border-slate-600 hover:bg-slate-700 text-slate-200'
         }\`;
         btn.innerHTML = \`<span>\${opt}</span><span class="w-5 h-5 rounded-full border border-slate-500 flex items-center justify-center text-xs \${isSelected ? 'bg-indigo-500 border-indigo-500 text-white' : ''}">\${isSelected ? '\u25CF' : ''}</span>\`;
@@ -1928,7 +1953,7 @@ def run_exam(exam_title="\u0627\u0645\u062A\u062D\u0627\u0646 \u0627\u0644\u0641
     print("=" * 60)
     print(f"\u0627\u0644\u062F\u0631\u062C\u0629 \u0627\u0644\u0646\u0647\u0627\u0626\u064A\u0629: {score} \u0645\u0646 {len(QUESTIONS)} ({percentage}%)")
     print(f"\u0627\u0644\u0648\u0642\u062A \u0627\u0644\u0645\u0633\u062A\u063A\u0631\u0642: {elapsed} \u062B\u0627\u0646\u064A\u0629")
-    
+
     if percentage >= 85:
         print("\u0627\u0644\u062A\u0642\u062F\u064A\u0631: \u0645\u0645\u062A\u0627\u0632 \u{1F31F}")
     elif percentage >= 70:
@@ -2838,11 +2863,11 @@ ${cardsHtml}
           ${escapeHtml(meta.examTitle || "\u0627\u062E\u062A\u0628\u0627\u0631 \u062A\u0641\u0627\u0639\u0644\u064A \u062C\u062F\u064A\u062F")}
         </h1>
       </div>
-      
+
       <p id="exam-subtitle-display" class="text-cyan-600 font-bold text-sm md:text-base mb-1">
         ${escapeHtml(meta.examTitle || "\u0627\u0645\u062A\u062D\u0627\u0646 \u062A\u0641\u0627\u0639\u0644\u064A")} - \u0623\u0633\u0626\u0644\u0629 \u0648\u062A\u0637\u0628\u064A\u0642\u0627\u062A \u062A\u0641\u0627\u0639\u0644\u064A\u0629
       </p>
-      
+
       <p id="exam-description-display" class="text-xs text-slate-500 mb-3">
         \u0627\u062E\u062A\u0628\u0627\u0631 \u0644\u0642\u064A\u0627\u0633 \u0641\u0647\u0645 \u0648\u0627\u0633\u062A\u064A\u0639\u0627\u0628 \u0627\u0644\u0645\u0641\u0627\u0647\u064A\u0645 \u0645\u0639 \u0627\u0644\u062A\u0635\u062D\u064A\u062D \u0627\u0644\u062A\u0641\u0627\u0639\u0644\u064A \u0648\u062D\u0641\u0638 \u0627\u0644\u0625\u062C\u0627\u0628\u0627\u062A \u0648\u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0646\u062A\u064A\u062C\u0629 \u0644\u0644\u0645\u0639\u0644\u0645
       </p>
