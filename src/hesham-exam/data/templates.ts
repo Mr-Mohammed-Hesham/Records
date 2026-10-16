@@ -87,6 +87,10 @@ export const CODE_TEMPLATES: CodeTemplatePreset[] = [
           <span>🖨️</span>
           <span id="btn-print-text">طباعة</span>
         </button>
+        <button onclick="toggleExamLogo()" class="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center gap-1 shadow-sm transition cursor-pointer">
+          <span>🖼️</span>
+          <span id="btn-toggle-logo">إظهار/إخفاء اللوجو</span>
+        </button>
         <button onclick="reshuffleQuestions()" class="px-3.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold flex items-center gap-1 shadow-sm transition cursor-pointer">
           <span>🔄</span>
           <span id="btn-new-q-text">أسئلة جديدة</span>
@@ -101,6 +105,9 @@ export const CODE_TEMPLATES: CodeTemplatePreset[] = [
 
     <!-- Main Header Card -->
     <div class="bg-white teal-border-card p-6 md:p-8 mb-8 text-center">
+      <div id="exam-logo-box" class="flex justify-center mb-3">
+        <img src="/teacher-logo.jpg" alt="شعار الهوية" class="h-16 w-24 object-cover rounded-xl border border-teal-300 shadow-sm" onerror="if(!this.src.endsWith('/teacher-logo.jpg'))this.src='/teacher-logo.jpg'">
+      </div>
       <div class="flex items-center justify-center gap-2 mb-2">
         <span class="text-amber-500 text-2xl font-black">⚡</span>
         <h1 id="exam-title-display" class="text-2xl md:text-3xl font-black text-slate-800">
@@ -436,6 +443,13 @@ export const CODE_TEMPLATES: CodeTemplatePreset[] = [
           else expl.classList.add('hidden');
         }
       });
+    }
+
+    function toggleExamLogo() {
+      const box = document.getElementById('exam-logo-box');
+      if (box) {
+        box.classList.toggle('hidden');
+      }
     }
 
     function reshuffleQuestions() {

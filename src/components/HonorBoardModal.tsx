@@ -136,6 +136,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         showSignature: true,
         showStamp: true,
         showDate: true,
+        showLogo: true,
+        logoChoice: 'institute' as 'institute' | 'teacher',
       }),
     []
   );
@@ -211,6 +213,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   const [showSignature, setShowSignature] = useState<boolean>(savedConfig.showSignature);
   const [showStamp, setShowStamp] = useState<boolean>(savedConfig.showStamp);
   const [showDate, setShowDate] = useState<boolean>(savedConfig.showDate);
+  const [showLogo, setShowLogo] = useState<boolean>(savedConfig.showLogo !== undefined ? savedConfig.showLogo : true);
+  const [logoChoice, setLogoChoice] = useState<'institute' | 'teacher'>(savedConfig.logoChoice || 'institute');
 
   // Auto-save all Honor Board / Knights Board settings whenever changed
   useEffect(() => {
@@ -239,6 +243,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
       showSignature,
       showStamp,
       showDate,
+      showLogo,
+      logoChoice,
     });
   }, [
     boardType,
@@ -265,6 +271,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     showSignature,
     showStamp,
     showDate,
+    showLogo,
+    logoChoice,
   ]);
 
   // Complete reset to start a brand new board design from scratch
@@ -273,6 +281,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     setBoardType('overall');
     setIncludeMostActiveSection(true);
     setMostActiveLimit(3);
+    setShowLogo(true);
+    setLogoChoice('institute');
     setSelectedGrade('all');
     setSelectedTrack('all');
     setStartDate('');
@@ -1552,6 +1562,46 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   />
                   <span>إظهار ختم التميز والاعتماد الذهبي</span>
                 </label>
+
+                {/* Honor Board Dedicated Logo Toggle & Choice */}
+                <div className="pt-2 border-t border-slate-700/60 mt-1 space-y-2">
+                  <label className="flex items-center gap-2 text-xs text-amber-300 font-bold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showLogo}
+                      onChange={(e) => setShowLogo(e.target.checked)}
+                      className="rounded text-amber-500 focus:ring-amber-400 cursor-pointer w-4 h-4"
+                    />
+                    <span>إظهار لوجو لوحة الشرف (THE WAY INSTITUTE)</span>
+                  </label>
+
+                  {showLogo && (
+                    <div className="flex flex-wrap items-center gap-1.5 pr-6 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setLogoChoice('institute')}
+                        className={`px-2 py-1 rounded-lg font-bold border transition-colors cursor-pointer ${
+                          logoChoice === 'institute'
+                            ? 'bg-blue-600 text-white border-blue-400 shadow-xs'
+                            : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                        }`}
+                      >
+                        لوجو المعهد (THE WAY)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLogoChoice('teacher')}
+                        className={`px-2 py-1 rounded-lg font-bold border transition-colors cursor-pointer ${
+                          logoChoice === 'teacher'
+                            ? 'bg-amber-600 text-white border-amber-400 shadow-xs'
+                            : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                        }`}
+                      >
+                        لوجو الأستاذ
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1572,8 +1622,22 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
           {/* Board Live Preview (8 cols on lg) */}
           <div className="lg:col-span-8 flex flex-col items-center">
             
-            <div className="w-full flex items-center justify-between mb-3 text-xs text-slate-400 px-1">
-              <span>معاينة البطاقة قبل التصدير (ستُصدّر بجودة Ultra-HD):</span>
+            <div className="w-full flex flex-wrap items-center justify-between gap-2 mb-3 text-xs text-slate-400 px-1">
+              <div className="flex items-center gap-2">
+                <span>معاينة لوحة الشرف قبل التصدير:</span>
+                <button
+                  type="button"
+                  onClick={() => setShowLogo(!showLogo)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                    showLogo
+                      ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                  }`}
+                  title="إمكانية إضافة أو عدم إضافة لوجو المعهد للوحة الشرف"
+                >
+                  {showLogo ? '🖼️ لوجو THE WAY INSTITUTE مفعّل ✔' : '🖼️ بدون إضافة اللوجو'}
+                </button>
+              </div>
               <span className="text-amber-400 font-bold">
                 {rankedStudents.length} طلاب متفوقين
               </span>
@@ -1642,7 +1706,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                           }} 
                           className="font-bold"
                         >
-                          سجل التميز والإنجاز الأكاديمي
+                          {showLogo && logoChoice === 'institute' ? 'THE WAY INSTITUTE' : 'سجل التميز والإنجاز الأكاديمي'}
                         </p>
                       )}
                       <p 
@@ -1656,17 +1720,42 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       </p>
                     </div>
 
-                    {/* Laurels & Crest */}
+                    {/* Laurels & Crest / Official Honor Board Logo (THE WAY INSTITUTE) */}
                     <div className="flex flex-col items-center">
-                      <div 
-                        style={{
-                          background: `linear-gradient(135deg, ${accentColor}, #f59e0b)`,
-                          boxShadow: `0 8px 20px ${accentColor}35`
-                        }}
-                        className="w-12 h-12 rounded-2xl text-slate-950 flex items-center justify-center shadow-lg"
-                      >
-                        <Crown className="w-7 h-7" />
-                      </div>
+                      {showLogo ? (
+                        <div 
+                          style={{
+                            borderColor: `${accentColor}55`,
+                            boxShadow: `0 6px 20px ${accentColor}25`
+                          }}
+                          className="relative rounded-2xl border-2 overflow-hidden bg-white p-1 flex items-center justify-center transition-all shadow-md"
+                        >
+                          <img 
+                            src={logoChoice === 'teacher' ? `${import.meta.env.BASE_URL}teacher-logo.jpg` : `${import.meta.env.BASE_URL}the-way-institute-logo.svg`}
+                            alt={logoChoice === 'teacher' ? 'شعار الأستاذ' : 'شعار معهد THE WAY INSTITUTE'} 
+                            className="w-20 h-14 object-contain rounded-xl"
+                            crossOrigin="anonymous"
+                            onError={(e) => {
+                              const target = e.currentTarget;
+                              if (logoChoice === 'institute' && !target.src.endsWith('/the-way-institute-logo.svg')) {
+                                target.src = '/the-way-institute-logo.svg';
+                              } else if (logoChoice === 'teacher' && !target.src.endsWith('/teacher-logo.jpg')) {
+                                target.src = '/teacher-logo.jpg';
+                              }
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div 
+                          style={{
+                            background: `linear-gradient(135deg, ${accentColor}, #f59e0b)`,
+                            boxShadow: `0 8px 20px ${accentColor}35`
+                          }}
+                          className="w-12 h-12 rounded-2xl text-slate-950 flex items-center justify-center shadow-lg"
+                        >
+                          <Crown className="w-7 h-7" />
+                        </div>
+                      )}
                     </div>
 
                     <div className="text-left">

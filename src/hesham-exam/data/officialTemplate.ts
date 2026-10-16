@@ -149,12 +149,16 @@ export const OFFICIAL_HESHAM_EXAM_TEMPLATE = `<!DOCTYPE html>
     <div class="max-w-4xl mx-auto mb-6 flex flex-wrap gap-3 justify-center no-print">
         <button onclick="toggleAnswers()" class="bg-teal-600 hover:bg-teal-700 text-white px-5 py-2 rounded-xl font-medium transition shadow cursor-pointer" data-ar="👀 إظهار / إخفاء الإجابات" data-en="👀 Show / Hide Answers">👀 إظهار / إخفاء الإجابات</button>
         <button onclick="window.print()" class="bg-gray-700 hover:bg-gray-900 text-white px-5 py-2 rounded-xl font-medium transition shadow cursor-pointer" data-ar="🖨️ طباعة" data-en="🖨️ Print">🖨️ طباعة</button>
+        <button onclick="toggleExamLogo()" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl font-medium transition shadow cursor-pointer" data-ar="🖼️ إظهار/إخفاء اللوجو" data-en="🖼️ Toggle Logo">🖼️ إظهار/إخفاء اللوجو</button>
         <button onclick="reshuffleExam()" class="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white px-5 py-2 rounded-xl font-medium transition shadow cursor-pointer" data-ar="🔄 أسئلة جديدة" data-en="🔄 New Questions">🔄 أسئلة جديدة</button>
         <button onclick="clearProgress()" class="bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-xl font-medium transition shadow cursor-pointer" data-ar="🗑️ مسح التقدم" data-en="🗑️ Clear Progress">🗑️ مسح التقدم</button>
     </div>
 
     <!-- 📝 عناوين الامتحان والوصف المعتمد لمادتي الفيزياء والرياضيات -->
     <header class="max-w-4xl mx-auto bg-white p-6 rounded-2xl shadow-lg mb-8 border-4 border-teal-400">
+        <div id="exam-logo-box" class="flex justify-center mb-3">
+            <img src="/teacher-logo.jpg" alt="شعار الهوية" class="h-16 w-24 object-cover rounded-xl border border-teal-300 shadow-sm" onerror="if(!this.src.endsWith('/teacher-logo.jpg'))this.src='/teacher-logo.jpg'">
+        </div>
         <div class="text-center">
             <h1 class="text-2xl md:text-3xl font-bold text-gray-900 mb-2" data-ar="📐 امتحان الفيزياء والرياضيات التفاعلي المتكامل" data-en="📐 Interactive Physics & Mathematics Integrated Exam">📐 امتحان الفيزياء والرياضيات التفاعلي المتكامل</h1>
             <h2 class="text-lg text-teal-600 font-semibold" data-ar="الصف الثاني عشر / المرحلة الثانوية - فيزياء ورياضيات" data-en="Grade 12 / Secondary - Physics & Mathematics">الصف الثاني عشر / المرحلة الثانوية - فيزياء ورياضيات</h2>
@@ -928,6 +932,13 @@ function toggleAnswers() {
     answersVisible = !answersVisible;
     document.querySelectorAll('.answer-box').forEach(el => el.classList.toggle('hidden', !answersVisible));
     saveState(false);
+}
+
+function toggleExamLogo() {
+    const box = document.getElementById('exam-logo-box');
+    if (box) {
+        box.classList.toggle('hidden');
+    }
 }
 
 function gradeExam() {

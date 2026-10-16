@@ -7,6 +7,7 @@ export interface ExcelLayoutAndChartOptions {
   includeChart?: boolean;       // تضمين الرسم البياني للدرجات في التقرير (افتراضي: true)
   layoutMode?: 'mobile' | 'desktop'; // وضع الهاتف المحمول (مدمج ومتناسق) أو الوضع المكتبي الواسع
   chartType?: 'bars_and_columns' | 'bars_only' | 'distribution' | 'both' | 'bars' | 'columns';
+  includeLogoHeader?: boolean;  // إمكانية إضافة أو عدم إضافة ترويسة وهوية الشعار (افتراضي: true)
 }
 
 const EXCEL_PREFS_KEY = 'mh_excel_export_config_v1';
@@ -20,6 +21,7 @@ export function getSavedExcelPreferences(): Required<ExcelLayoutAndChartOptions>
         includeChart: parsed.includeChart !== undefined ? Boolean(parsed.includeChart) : true,
         layoutMode: parsed.layoutMode === 'desktop' ? 'desktop' : 'mobile',
         chartType: parsed.chartType || 'bars_and_columns',
+        includeLogoHeader: parsed.includeLogoHeader !== undefined ? Boolean(parsed.includeLogoHeader) : true,
       };
     }
   } catch {
@@ -29,6 +31,7 @@ export function getSavedExcelPreferences(): Required<ExcelLayoutAndChartOptions>
     includeChart: true,
     layoutMode: 'mobile',
     chartType: 'bars_and_columns',
+    includeLogoHeader: true,
   };
 }
 
@@ -235,8 +238,12 @@ export function exportSingleStudentAcademicReport(
     // ═══════════════════════════════════════════════════════════════════
     // وضع الهاتف المحمول (4 أعمدة متناسقة جداً لا تحتاج لتمرير أفقي)
     // ═══════════════════════════════════════════════════════════════════
+    const mainReportTitle = prefs.includeLogoHeader !== false
+      ? '📋 تقرير الأداء الأكاديمي للطالب - سجلات مستر محمد هشام (شعار الهوية المعتمد)'
+      : '📋 تقرير الأداء الأكاديمي للطالب';
+
     const sheetRows: any[][] = [
-      ['📋 تقرير الأداء الأكاديمي للطالب - سجلات مستر محمد هشام', '', '', ''],
+      [mainReportTitle, '', '', ''],
       ['تاريخ الاستخراج:', new Date().toLocaleDateString('ar-EG'), 'وضع العرض:', '📱 متوافق مع الهاتف والطباعة'],
       [''],
       ['👤 أولاً: البيانات الأساسية للطالب', '', '', ''],
@@ -298,8 +305,12 @@ export function exportSingleStudentAcademicReport(
     // ═══════════════════════════════════════════════════════════════════
     // الوضع المكتبي الواسع (8 أعمدة مفصلة للشاشات الكبيرة والطباعة)
     // ═══════════════════════════════════════════════════════════════════
+    const mainDesktopTitle = prefs.includeLogoHeader !== false
+      ? 'تقرير الأداء الأكاديمي الشامل للطالب - سجلات مستر محمد هشام (شعار الهوية المعتمد)'
+      : 'تقرير الأداء الأكاديمي الشامل للطالب';
+
     const headerData: any[][] = [
-      ['تقرير الأداء الأكاديمي الشامل للطالب - سجلات مستر محمد هشام', '', '', '', '', '', '', ''],
+      [mainDesktopTitle, '', '', '', '', '', '', ''],
       ['تاريخ استخراج التقرير:', new Date().toLocaleDateString('ar-EG'), 'حالة ملف الطالب:', statusLabel, 'كود الطالب:', student.studentId, '', ''],
       [''],
       ['بيانات الطالب الأساسية', '', '', '', '', '', '', ''],
@@ -453,8 +464,12 @@ export function exportCustomAcademicExcel(
       : 'كافة الفترات';
 
   // --- SHEET 1: ملخص أداء الطلاب والرسم البياني العام ---
+  const customReportTitle = prefs.includeLogoHeader !== false
+    ? '📊 تقرير الأداء الأكاديمي الشامل للطلاب - Mr Mohammed Hesham (شعار الهوية المعتمد)'
+    : '📊 تقرير الأداء الأكاديمي الشامل للطلاب';
+
   const filterSummary: any[][] = [
-    ['📊 تقرير الأداء الأكاديمي الشامل للطلاب - Mr Mohammed Hesham', '', '', '', '', ''],
+    [customReportTitle, '', '', '', '', ''],
     ['تاريخ الاستخراج:', new Date().toLocaleDateString('ar-EG'), 'نطاق التقرير:', periodLabel, 'وضع التنسيق:', isMobile ? '📱 وضع الهاتف المدمج' : '💻 الوضع المكتبي'],
     ['الصف المحدد:', options.grade || 'كافة الصفوف', 'المادة المحددة:', options.subject || 'كافة المواد', 'عدد الطلاب:', `${filteredStudents.length} طالب`],
     [''],
