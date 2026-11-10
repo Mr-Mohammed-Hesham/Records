@@ -409,7 +409,9 @@ export interface ExportFilterOptions extends ExcelLayoutAndChartOptions {
   grade?: string;
   subject?: string;
   group?: string;
-  enrollmentStatus?: string; // 'الكل' | 'active' | 'completed' | 'paused' | 'withdrawn'
+  term?: string; // 'الكل' | 'الفصل الأول' | 'الفصل الثاني' | 'الفصل الثالث'
+  enrollmentStatus?: string; // 'الكل' | 'active' | 'exclude_completed' | 'completed' | 'paused' | 'withdrawn'
+  excludeCompletedFiles?: boolean; // استبعاد الطلبة منتهي الملف صراحة
 }
 
 /**
@@ -441,15 +443,32 @@ export function exportCustomAcademicExcel(
   if (options.group && options.group !== 'الكل') {
     filteredStudents = filteredStudents.filter((s) => s.group === options.group);
   }
+  // فلترة حسب الفصل الدراسي (الترم)
+  if (options.term && options.term !== 'الكل') {
+    filteredStudents = filteredStudents.filter((s) => !s.term || s.term === options.term);
+  }
+  // فلترة حسب حالة ملف الطالب بالكورس
   if (options.enrollmentStatus && options.enrollmentStatus !== 'الكل') {
+    if (options.enrollmentStatus === 'exclude_completed') {
+      filteredStudents = filteredStudents.filter(
+        (s) => getEffectiveEnrollmentStatus(s) !== 'completed'
+      );
+    } else {
+      filteredStudents = filteredStudents.filter(
+        (s) => getEffectiveEnrollmentStatus(s) === options.enrollmentStatus
+      );
+    }
+  }
+  if (options.excludeCompletedFiles) {
     filteredStudents = filteredStudents.filter(
-      (s) => getEffectiveEnrollmentStatus(s) === options.enrollmentStatus
+      (s) => getEffectiveEnrollmentStatus(s) !== 'completed'
     );
   }
 
   const validStudentIds = new Set(filteredStudents.map((s) => s.id));
+  const examMap = new Map(exams.map((e) => [e.id, e]));
 
-  // 2. Filter results by date & students
+  // 2. Filter results by date, students & term
   let filteredResults = allResults.filter((r) => validStudentIds.has(r.studentDocId));
   if (options.startDate) {
     filteredResults = filteredResults.filter((r) => r.examDate >= options.startDate!);
@@ -457,11 +476,29 @@ export function exportCustomAcademicExcel(
   if (options.endDate) {
     filteredResults = filteredResults.filter((r) => r.examDate <= options.endDate!);
   }
+  // إذا تم تحديد فصل دراسي معين، عزل الامتحانات والنتائج التابعة لهذا الفصل فقط
+  if (options.term && options.term !== 'الكل') {
+    filteredResults = filteredResults.filter((r) => {
+      const exam = examMap.get(r.examId);
+      if (exam && exam.term) {
+        return exam.term === options.term;
+      }
+      return true;
+    });
+  }
 
   const periodLabel =
     options.startDate || options.endDate
       ? `الفترة: ${options.startDate || 'البداية'} إلى ${options.endDate || 'الآن'}`
       : 'كافة الفترات';
+
+  const termLabel = options.term && options.term !== 'الكل' ? options.term : 'كافة الفصول';
+  const statusLabel =
+    options.enrollmentStatus === 'exclude_completed' || options.excludeCompletedFiles
+      ? 'الطلاب الفعالين (استبعاد منتهي الكورس)'
+      : options.enrollmentStatus && options.enrollmentStatus !== 'الكل'
+      ? ENROLLMENT_STATUS_META[options.enrollmentStatus as any]?.label || options.enrollmentStatus
+      : 'كافة الحالات';
 
   // --- SHEET 1: ملخص أداء الطلاب والرسم البياني العام ---
   const customReportTitle = prefs.includeLogoHeader !== false
@@ -471,7 +508,8 @@ export function exportCustomAcademicExcel(
   const filterSummary: any[][] = [
     [customReportTitle, '', '', '', '', ''],
     ['تاريخ الاستخراج:', new Date().toLocaleDateString('ar-EG'), 'نطاق التقرير:', periodLabel, 'وضع التنسيق:', isMobile ? '📱 وضع الهاتف المدمج' : '💻 الوضع المكتبي'],
-    ['الصف المحدد:', options.grade || 'كافة الصفوف', 'المادة المحددة:', options.subject || 'كافة المواد', 'عدد الطلاب:', `${filteredStudents.length} طالب`],
+    ['الصف المحدد:', options.grade || 'كافة الصفوف', 'المادة المحددة:', options.subject || 'كافة المواد', 'الفصل الدراسي (الترم):', termLabel],
+    ['حالة ملفات الطلاب:', statusLabel, 'عدد الطلاب المشمولين:', `${filteredStudents.length} طالب`, '', ''],
     [''],
   ];
 
@@ -613,8 +651,11 @@ export function exportCustomAcademicExcel(
 
   const gradeTag = options.grade && options.grade !== 'الكل' ? `_${options.grade.replace(/\s+/g, '_')}` : '';
   const subjTag = options.subject && options.subject !== 'الكل' ? `_${options.subject.replace(/\s+/g, '_')}` : '';
+  const termTag = options.term && options.term !== 'الكل' ? `_${options.term.replace(/\s+/g, '_')}` : '';
   const statusTag =
-    options.enrollmentStatus === 'completed'
+    options.enrollmentStatus === 'exclude_completed' || options.excludeCompletedFiles
+      ? '_الطلبة_الفعالين'
+      : options.enrollmentStatus === 'completed'
       ? '_منتهي_الكورس'
       : options.enrollmentStatus === 'withdrawn'
       ? '_المنقطعين'
@@ -624,7 +665,7 @@ export function exportCustomAcademicExcel(
       ? `_من_${options.startDate || 'البداية'}_إلى_${options.endDate || 'الآن'}`
       : '';
 
-  const fileName = `تقارير_الطلاب_الأكاديمية${statusTag}${gradeTag}${subjTag}${dateTag}.xlsx`;
+  const fileName = `تقارير_الطلاب_الأكاديمية${termTag}${statusTag}${gradeTag}${subjTag}${dateTag}.xlsx`;
   XLSX.writeFile(wb, fileName);
 }
 

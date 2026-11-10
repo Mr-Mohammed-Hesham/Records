@@ -21,6 +21,7 @@ import {
   saveExcelPreferences,
 } from '../utils/excel';
 import { getEffectiveEnrollmentStatus, ENROLLMENT_STATUS_LIST } from '../utils/studentStatus';
+import { ACADEMIC_TERMS } from '../services/firebase';
 
 interface ExcelExportModalProps {
   isOpen: boolean;
@@ -31,9 +32,11 @@ interface ExcelExportModalProps {
   settings: TeacherSettings;
   defaultGrade?: string;
   defaultSubject?: string;
+  defaultTerm?: string;
+  defaultStatus?: string;
 }
 
-const MODAL_STATE_KEY = 'mh_excel_modal_saved_filters_v1';
+const MODAL_STATE_KEY = 'mh_excel_modal_saved_filters_v2';
 
 export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   isOpen,
@@ -44,6 +47,8 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   settings,
   defaultGrade,
   defaultSubject,
+  defaultTerm,
+  defaultStatus,
 }) => {
   const initialPrefs = useMemo(() => getSavedExcelPreferences(), []);
 
@@ -53,6 +58,15 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
       return defaultGrade || saved.selectedGrade || 'الكل';
     } catch {
       return defaultGrade || 'الكل';
+    }
+  });
+
+  const [selectedTerm, setSelectedTerm] = useState<string>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(MODAL_STATE_KEY) || '{}');
+      return defaultTerm || saved.selectedTerm || 'الكل';
+    } catch {
+      return defaultTerm || 'الكل';
     }
   });
 
@@ -77,9 +91,9 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   const [enrollmentStatusFilter, setEnrollmentStatusFilter] = useState<string>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(MODAL_STATE_KEY) || '{}');
-      return saved.enrollmentStatusFilter || 'الكل';
+      return defaultStatus || saved.enrollmentStatusFilter || 'exclude_completed';
     } catch {
-      return 'الكل';
+      return defaultStatus || 'exclude_completed';
     }
   });
 
@@ -138,6 +152,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
         MODAL_STATE_KEY,
         JSON.stringify({
           selectedGrade,
+          selectedTerm,
           selectedSubject,
           selectedGroup,
           enrollmentStatusFilter,
@@ -151,6 +166,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     }
   }, [
     selectedGrade,
+    selectedTerm,
     selectedSubject,
     selectedGroup,
     enrollmentStatusFilter,
@@ -161,9 +177,10 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
 
   const handleResetAll = () => {
     setSelectedGrade('الكل');
+    setSelectedTerm('الكل');
     setSelectedSubject('الكل');
     setSelectedGroup('الكل');
-    setEnrollmentStatusFilter('الكل');
+    setEnrollmentStatusFilter('exclude_completed');
     setStartDate('');
     setEndDate('');
     setExportMode('academic_reports');
@@ -190,23 +207,36 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
       if (selectedGrade !== 'الكل' && s.grade !== selectedGrade) return false;
+      if (selectedTerm !== 'الكل' && s.term && s.term !== selectedTerm) return false;
       if (selectedSubject !== 'الكل' && s.subject !== selectedSubject && !(Array.isArray(s.subjects) && s.subjects.includes(selectedSubject))) return false;
       if (selectedGroup !== 'الكل' && s.group !== selectedGroup) return false;
-      if (enrollmentStatusFilter !== 'الكل' && getEffectiveEnrollmentStatus(s) !== enrollmentStatusFilter) return false;
+      
+      // فلترة حالة الملف للطالب
+      const effStatus = getEffectiveEnrollmentStatus(s);
+      if (enrollmentStatusFilter === 'exclude_completed') {
+        if (effStatus === 'completed') return false;
+      } else if (enrollmentStatusFilter !== 'الكل') {
+        if (effStatus !== enrollmentStatusFilter) return false;
+      }
       return true;
     });
-  }, [students, selectedGrade, selectedSubject, selectedGroup, enrollmentStatusFilter]);
+  }, [students, selectedGrade, selectedTerm, selectedSubject, selectedGroup, enrollmentStatusFilter]);
 
   const studentIdsSet = useMemo(() => new Set(filteredStudents.map(s => s.id)), [filteredStudents]);
+  const examMap = useMemo(() => new Map(exams.map(e => [e.id, e])), [exams]);
 
   const filteredResults = useMemo(() => {
     return allResults.filter(r => {
       if (!studentIdsSet.has(r.studentDocId)) return false;
       if (startDate && r.examDate < startDate) return false;
       if (endDate && r.examDate > endDate) return false;
+      if (selectedTerm !== 'الكل') {
+        const ex = examMap.get(r.examId);
+        if (ex && ex.term && ex.term !== selectedTerm) return false;
+      }
       return true;
     });
-  }, [allResults, studentIdsSet, startDate, endDate]);
+  }, [allResults, studentIdsSet, startDate, endDate, selectedTerm, examMap]);
 
   if (!isOpen) return null;
 
@@ -220,6 +250,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
           allResults,
           {
             grade: selectedGrade,
+            term: selectedTerm,
             subject: selectedSubject,
             group: selectedGroup,
             enrollmentStatus: enrollmentStatusFilter,
@@ -233,7 +264,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
           settings.gradingScale
         );
       } else {
-        exportAllDataExcel(students, exams, allResults, settings);
+        exportAllDataExcel(filteredStudents, exams, filteredResults, settings);
       }
       setTimeout(() => {
         setIsExporting(false);
@@ -465,13 +496,64 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
 
           {/* Filtering Options */}
           <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
-            <h4 className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
-              <Filter className="w-3.5 h-3.5 text-amber-500" />
-              <span>فلاتر الاستخراج (الصف / المادة / حالة ملف الطالب / الفترة):</span>
-            </h4>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                <Filter className="w-3.5 h-3.5 text-amber-500" />
+                <span>فلاتر الاستخراج (الصف / الترم / المادة / حالة ملف الطالب / الفترة):</span>
+              </h4>
 
-            {/* Grade, Subject & Student File Status */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Quick status chips */}
+              <div className="flex items-center gap-1.5 text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => setEnrollmentStatusFilter('exclude_completed')}
+                  className={`px-2 py-0.5 rounded-lg font-bold border transition cursor-pointer ${
+                    enrollmentStatusFilter === 'exclude_completed'
+                      ? 'bg-emerald-500 text-white border-emerald-600 shadow-xs'
+                      : 'bg-white dark:bg-slate-900 text-emerald-600 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50'
+                  }`}
+                  title="منع تصدير تقارير للطلبة الذين انتهى الكورس لهم"
+                >
+                  🚫 استبعاد منتهي الملف
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTerm(selectedTerm === 'الفصل الأول' ? 'الكل' : 'الفصل الأول')}
+                  className={`px-2 py-0.5 rounded-lg font-bold border transition cursor-pointer ${
+                    selectedTerm === 'الفصل الأول'
+                      ? 'bg-amber-500 text-slate-950 border-amber-600'
+                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  الفصل الأول
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTerm(selectedTerm === 'الفصل الثاني' ? 'الكل' : 'الفصل الثاني')}
+                  className={`px-2 py-0.5 rounded-lg font-bold border transition cursor-pointer ${
+                    selectedTerm === 'الفصل الثاني'
+                      ? 'bg-amber-500 text-slate-950 border-amber-600'
+                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  الفصل الثاني
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTerm(selectedTerm === 'الفصل الثالث' ? 'الكل' : 'الفصل الثالث')}
+                  className={`px-2 py-0.5 rounded-lg font-bold border transition cursor-pointer ${
+                    selectedTerm === 'الفصل الثالث'
+                      ? 'bg-amber-500 text-slate-950 border-amber-600'
+                      : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  الفصل الثالث
+                </button>
+              </div>
+            </div>
+
+            {/* Grade, Term, Subject & Student File Status */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
                   الصف الدراسي:
@@ -479,11 +561,30 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                 <select
                   value={selectedGrade}
                   onChange={(e) => setSelectedGrade(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
+                  className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
                 >
-                  <option value="الكل">كافة الصفوف الدراسية</option>
+                  <option value="الكل">كافة الصفوف</option>
                   {settings.grades.map((g) => (
                     <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1 flex items-center justify-between">
+                  <span>الفصل الدراسي (الترم):</span>
+                  {selectedTerm !== 'الكل' && (
+                    <span className="text-[10px] text-amber-500 font-bold">محدد</span>
+                  )}
+                </label>
+                <select
+                  value={selectedTerm}
+                  onChange={(e) => setSelectedTerm(e.target.value)}
+                  className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-amber-300/80 dark:border-amber-700/80 text-slate-900 dark:text-white rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  <option value="الكل">كافة الفصول الثلاثة</option>
+                  {ACADEMIC_TERMS.map((t) => (
+                    <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
               </div>
@@ -495,9 +596,9 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                 <select
                   value={selectedSubject}
                   onChange={(e) => setSelectedSubject(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
+                  className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
                 >
-                  <option value="الكل">كافة المواد الدراسية</option>
+                  <option value="الكل">كافة المواد</option>
                   {availableSubjects.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
@@ -505,20 +606,23 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                  حالة ملف الطالب بالكورس:
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1 flex items-center justify-between">
+                  <span>حالة ملف الطالب:</span>
+                  {enrollmentStatusFilter === 'exclude_completed' && (
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">استبعاد المنتهي</span>
+                  )}
                 </label>
                 <select
                   value={enrollmentStatusFilter}
                   onChange={(e) => setEnrollmentStatusFilter(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-bold cursor-pointer"
+                  className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-emerald-300/80 dark:border-emerald-700/80 text-slate-900 dark:text-white rounded-xl text-xs font-bold cursor-pointer"
                 >
-                  <option value="الكل">كافة الطلاب (الكل)</option>
-                  {ENROLLMENT_STATUS_LIST.map((st) => (
-                    <option key={st.id} value={st.id}>
-                      {st.label}
-                    </option>
-                  ))}
+                  <option value="exclude_completed">🚫 استبعاد منتهي الملف (الفعال فقط) [موصى به]</option>
+                  <option value="active">🟢 ملف فعال (مستمر بالكورس فقط)</option>
+                  <option value="completed">🎓 منتهي الكورس فقط (الخريجون)</option>
+                  <option value="paused">🟡 متوقف مؤقتاً / مؤجل</option>
+                  <option value="withdrawn">🔴 منقطع عن الكورس</option>
+                  <option value="الكل">🌐 كافة الطلاب (يشمل منتهي الملف)</option>
                 </select>
               </div>
             </div>

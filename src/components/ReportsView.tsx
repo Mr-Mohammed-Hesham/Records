@@ -44,7 +44,8 @@ import {
   loadExcelPreferences,
   saveExcelPreferences,
 } from '../utils/excel';
-import { getEffectiveEnrollmentStatus, ENROLLMENT_STATUS_META } from '../utils/studentStatus';
+import { getEffectiveEnrollmentStatus, ENROLLMENT_STATUS_META, ENROLLMENT_STATUS_LIST } from '../utils/studentStatus';
+import { ACADEMIC_TERMS } from '../services/firebase';
 import { loadViewState, saveViewState, clearViewState, recordLastActivity } from '../utils/activityTracker';
 import { DynamicGradesChart } from './DynamicGradesChart';
 import { ExcelExportModal } from './ExcelExportModal';
@@ -83,6 +84,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         selectedExamId: exams?.[0]?.id || '',
         selectedGrade: settings?.grades?.[0] || 'الأول الثانوي',
         selectedGroup: settings?.groups?.[0] || 'المجموعة A',
+        selectedTerm: 'الكل',
+        selectedEnrollmentStatus: 'exclude_completed',
         compareExamIds: [] as string[],
         startDate: '',
         endDate: '',
@@ -117,6 +120,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     } catch {}
   };
 
+  // Selected Term filter (الفصل الدراسي) & File status filter (حالة ملف الطالب)
+  const [selectedTerm, setSelectedTerm] = useState<string>(
+    savedReportState.selectedTerm || 'الكل'
+  );
+  const [selectedEnrollmentStatus, setSelectedEnrollmentStatus] = useState<string>(
+    savedReportState.selectedEnrollmentStatus || 'exclude_completed'
+  );
+
   const getExportOptions = () => {
     saveExcelPreferences({ layoutMode: excelLayoutMode, includeChart: excelIncludeChart, includeLogoHeader: showReportLogo });
     return {
@@ -124,6 +135,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       includeChart: excelIncludeChart,
       includeLogoHeader: showReportLogo,
       chartType: 'both' as const,
+      term: selectedTerm,
+      enrollmentStatus: selectedEnrollmentStatus,
     };
   };
 
@@ -156,18 +169,42 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [startDate, setStartDate] = useState<string>(savedReportState.startDate || '');
   const [endDate, setEndDate] = useState<string>(savedReportState.endDate || '');
 
-  // Ensure valid student/exam selection when data loads
+  // 1. فلترة قائمة الطلاب حسب الفصل الدراسي وحالة الملف لمنع ظهور منتهي الملف عند طلب الفعالين فقط
+  const filteredStudents = useMemo(() => {
+    return students.filter((s) => {
+      // فلترة الترم / الفصل الدراسي
+      if (selectedTerm !== 'الكل' && s.term && s.term !== selectedTerm) return false;
+      // فلترة حالة الملف
+      const effStatus = getEffectiveEnrollmentStatus(s);
+      if (selectedEnrollmentStatus === 'exclude_completed') {
+        if (effStatus === 'completed') return false;
+      } else if (selectedEnrollmentStatus === 'active') {
+        if (effStatus !== 'active') return false;
+      } else if (selectedEnrollmentStatus !== 'الكل') {
+        if (effStatus !== selectedEnrollmentStatus) return false;
+      }
+      return true;
+    });
+  }, [students, selectedTerm, selectedEnrollmentStatus]);
+
+  // 2. فلترة الامتحانات حسب الفصل الدراسي
+  const filteredExams = useMemo(() => {
+    if (selectedTerm === 'الكل') return exams;
+    return exams.filter((e) => !e.term || e.term === selectedTerm);
+  }, [exams, selectedTerm]);
+
+  // Ensure valid student/exam selection when data or filters change
   useEffect(() => {
-    if ((!selectedStudentId || !students.some((s) => s.id === selectedStudentId)) && students.length > 0) {
-      setSelectedStudentId(students[0].id);
+    if (filteredStudents.length > 0 && !filteredStudents.some((s) => s.id === selectedStudentId)) {
+      setSelectedStudentId(filteredStudents[0].id);
     }
-  }, [students, selectedStudentId]);
+  }, [filteredStudents, selectedStudentId]);
 
   useEffect(() => {
-    if ((!selectedExamId || !exams.some((e) => e.id === selectedExamId)) && exams.length > 0) {
-      setSelectedExamId(exams[0].id);
+    if (filteredExams.length > 0 && !filteredExams.some((e) => e.id === selectedExamId)) {
+      setSelectedExamId(filteredExams[0].id);
     }
-  }, [exams, selectedExamId]);
+  }, [filteredExams, selectedExamId]);
 
   // Persist Reports View state automatically
   useEffect(() => {
@@ -177,6 +214,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       selectedExamId,
       selectedGrade,
       selectedGroup,
+      selectedTerm,
+      selectedEnrollmentStatus,
       compareExamIds,
       startDate,
       endDate,
@@ -185,11 +224,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       tab: 'reports',
       actionLabel: 'استعراض التقارير الأكاديمية والرسوم البيانية',
     });
-  }, [reportType, selectedStudentId, selectedExamId, selectedGrade, selectedGroup, compareExamIds, startDate, endDate]);
+  }, [reportType, selectedStudentId, selectedExamId, selectedGrade, selectedGroup, selectedTerm, selectedEnrollmentStatus, compareExamIds, startDate, endDate]);
 
   const handleResetReportActivity = () => {
     clearViewState('REPORTS_VIEW');
     setReportType('single_student');
+    setSelectedTerm('الكل');
+    setSelectedEnrollmentStatus('exclude_completed');
     setSelectedStudentId(students?.[0]?.id || '');
     setSelectedExamId(exams?.[0]?.id || '');
     setSelectedGrade(settings?.grades?.[0] || 'الأول الثانوي');
@@ -199,30 +240,44 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     setEndDate('');
   };
 
-  // Filtered results based on date range
+  const examMap = useMemo(() => new Map(exams.map(e => [e.id, e])), [exams]);
+
+  // Filtered results based on date range and selected term
   const dateFilteredResults = useMemo(() => {
     return allResults.filter(r => {
       if (startDate && r.examDate < startDate) return false;
       if (endDate && r.examDate > endDate) return false;
+      if (selectedTerm !== 'الكل') {
+        const ex = examMap.get(r.examId);
+        if (ex && ex.term && ex.term !== selectedTerm) return false;
+      }
       return true;
     });
-  }, [allResults, startDate, endDate]);
+  }, [allResults, startDate, endDate, selectedTerm, examMap]);
 
   // Selected student data
-  const currentStudent = students.find(s => s.id === selectedStudentId);
+  const currentStudent = useMemo(() => {
+    return filteredStudents.find(s => s.id === selectedStudentId) || filteredStudents[0] || students.find(s => s.id === selectedStudentId);
+  }, [filteredStudents, students, selectedStudentId]);
+
   const currentStudentResults = useMemo(() => {
-    return dateFilteredResults.filter(r => r.studentDocId === selectedStudentId);
-  }, [dateFilteredResults, selectedStudentId]);
+    if (!currentStudent) return [];
+    return dateFilteredResults.filter(r => r.studentDocId === currentStudent.id);
+  }, [dateFilteredResults, currentStudent]);
 
   const currentStudentStats = useMemo(() => {
     return calculateStudentStats(currentStudentResults, settings.gradingScale);
   }, [currentStudentResults, settings.gradingScale]);
 
   // Selected exam data
-  const currentExam = exams.find(e => e.id === selectedExamId);
+  const currentExam = useMemo(() => {
+    return filteredExams.find(e => e.id === selectedExamId) || filteredExams[0] || exams.find(e => e.id === selectedExamId);
+  }, [filteredExams, exams, selectedExamId]);
+
   const currentExamResults = useMemo(() => {
-    return dateFilteredResults.filter(r => r.examId === selectedExamId);
-  }, [dateFilteredResults, selectedExamId]);
+    if (!currentExam) return [];
+    return dateFilteredResults.filter(r => r.examId === currentExam.id);
+  }, [dateFilteredResults, currentExam]);
 
   // Grade rating distribution for selected exam (Recharts data)
   const examRatingDistribution = useMemo(() => {
@@ -294,13 +349,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   // Grade reports
   const gradeStudents = useMemo(() => {
-    return students.filter(s => s.grade === selectedGrade);
-  }, [students, selectedGrade]);
+    return filteredStudents.filter(s => s.grade === selectedGrade);
+  }, [filteredStudents, selectedGrade]);
 
   // Group reports
   const groupStudents = useMemo(() => {
-    return students.filter(s => s.group === selectedGroup);
-  }, [students, selectedGroup]);
+    return filteredStudents.filter(s => s.group === selectedGroup);
+  }, [filteredStudents, selectedGroup]);
 
   // Exam comparison data
   const comparedExamsData = useMemo(() => {
@@ -354,11 +409,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </button>
 
           <button
-            onClick={() => exportAllDataExcel(students, exams, allResults, settings, getExportOptions())}
+            onClick={() => exportAllDataExcel(filteredStudents, filteredExams, dateFilteredResults, settings, getExportOptions())}
             className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700 rounded-xl transition-all cursor-pointer"
           >
             <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            تصدير الكل
+            تصدير الكل ({filteredStudents.length} طالب)
           </button>
 
           {/* Quick Logo Toggle for Reports */}
@@ -520,100 +575,207 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </button>
         </div>
 
-        {/* Filters bar: Date Range & Selector */}
-        <div className="flex flex-wrap items-center justify-between gap-4 text-xs">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-bold">
-              <Calendar className="w-3.5 h-3.5 text-amber-500" />
-              <span>فترة التقرير:</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs"
-                placeholder="من"
-              />
-              <span className="text-slate-400">إلى</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs"
-                placeholder="إلى"
-              />
-              {(startDate || endDate) && (
-                <button
-                  onClick={() => { setStartDate(''); setEndDate(''); }}
-                  className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline cursor-pointer font-bold"
+        {/* Filters bar: Term, File Status, Date Range & Selectors */}
+        <div className="space-y-3 pt-1">
+          {/* Top row: Term selector and Student File Status selector */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Term Filter */}
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-slate-700 dark:text-slate-300">الفصل الدراسي (الترم):</span>
+                <select
+                  value={selectedTerm}
+                  onChange={(e) => setSelectedTerm(e.target.value)}
+                  className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-slate-900 dark:text-white rounded-xl text-xs font-bold cursor-pointer"
                 >
-                  إعادة ضبط
-                </button>
-              )}
+                  <option value="الكل">كافة الفصول الثلاثة</option>
+                  {ACADEMIC_TERMS.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Student File Status Filter */}
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-slate-700 dark:text-slate-300">حالة ملف الطالب:</span>
+                <select
+                  value={selectedEnrollmentStatus}
+                  onChange={(e) => setSelectedEnrollmentStatus(e.target.value)}
+                  className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-slate-900 dark:text-white rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  <option value="exclude_completed">🚫 استبعاد منتهي الملف (الفعال فقط) [موصى به]</option>
+                  <option value="active">🟢 ملف فعال (مستمر بالكورس فقط)</option>
+                  <option value="completed">🎓 منتهي الكورس فقط (الخريجون)</option>
+                  <option value="paused">🟡 متوقف مؤقتاً / مؤجل</option>
+                  <option value="withdrawn">🔴 منقطع عن الكورس</option>
+                  <option value="الكل">🌐 كافة الطلاب (يشمل منتهي الملف)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Quick chips & stats summary */}
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setSelectedEnrollmentStatus(selectedEnrollmentStatus === 'exclude_completed' ? 'الكل' : 'exclude_completed')}
+                className={`px-2.5 py-1 rounded-xl font-bold border transition cursor-pointer ${
+                  selectedEnrollmentStatus === 'exclude_completed'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-white dark:bg-slate-900 text-emerald-600 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50'
+                }`}
+                title="منع تصدير وعرض تقارير للطلبة منتهي الملف"
+              >
+                🚫 استبعاد منتهي الملف
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedTerm(selectedTerm === 'الفصل الأول' ? 'الكل' : 'الفصل الأول')}
+                className={`px-2 py-1 rounded-xl font-bold border transition cursor-pointer ${
+                  selectedTerm === 'الفصل الأول'
+                    ? 'bg-amber-500 text-slate-950 border-amber-600'
+                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                الفصل الأول
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedTerm(selectedTerm === 'الفصل الثاني' ? 'الكل' : 'الفصل الثاني')}
+                className={`px-2 py-1 rounded-xl font-bold border transition cursor-pointer ${
+                  selectedTerm === 'الفصل الثاني'
+                    ? 'bg-amber-500 text-slate-950 border-amber-600'
+                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                الفصل الثاني
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedTerm(selectedTerm === 'الفصل الثالث' ? 'الكل' : 'الفصل الثالث')}
+                className={`px-2 py-1 rounded-xl font-bold border transition cursor-pointer ${
+                  selectedTerm === 'الفصل الثالث'
+                    ? 'bg-amber-500 text-slate-950 border-amber-600'
+                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                الفصل الثالث
+              </button>
+              <span className="text-slate-400 font-mono text-[10px] mr-1">
+                ({filteredStudents.length} طالب مشمول)
+              </span>
             </div>
           </div>
 
-          {/* Conditional dropdown based on report type */}
-          {reportType === 'single_student' && (
-            <div className="flex items-center gap-2">
-              <span className="text-slate-600 dark:text-slate-300 font-bold">اختر الطالب:</span>
-              <select
-                value={selectedStudentId}
-                onChange={(e) => setSelectedStudentId(e.target.value)}
-                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
-              >
-                {students.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.grade})</option>
-                ))}
-              </select>
+          {/* Bottom row: Date range & Context selector */}
+          <div className="flex flex-wrap items-center justify-between gap-4 text-xs">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-bold">
+                <Calendar className="w-3.5 h-3.5 text-amber-500" />
+                <span>فترة التقرير:</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs"
+                  placeholder="من"
+                />
+                <span className="text-slate-400">إلى</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs"
+                  placeholder="إلى"
+                />
+                {(startDate || endDate) && (
+                  <button
+                    onClick={() => { setStartDate(''); setEndDate(''); }}
+                    className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline cursor-pointer font-bold"
+                  >
+                    إعادة ضبط
+                  </button>
+                )}
+              </div>
             </div>
-          )}
 
-          {reportType === 'single_exam' && (
-            <div className="flex items-center gap-2">
-              <span className="text-slate-600 dark:text-slate-300 font-bold">اختر الامتحان:</span>
-              <select
-                value={selectedExamId}
-                onChange={(e) => setSelectedExamId(e.target.value)}
-                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
-              >
-                {exams.map(e => (
-                  <option key={e.id} value={e.id}>{e.title} ({e.date})</option>
-                ))}
-              </select>
-            </div>
-          )}
+            {/* Conditional dropdown based on report type */}
+            {reportType === 'single_student' && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-600 dark:text-slate-300 font-bold">اختر الطالب:</span>
+                <select
+                  value={selectedStudentId}
+                  onChange={(e) => setSelectedStudentId(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer max-w-xs"
+                >
+                  {filteredStudents.length === 0 ? (
+                    <option value="">لا يوجد طلاب يطابقون الفلاتر</option>
+                  ) : (
+                    filteredStudents.map(s => {
+                      const stMeta = ENROLLMENT_STATUS_META[getEffectiveEnrollmentStatus(s)];
+                      return (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.grade}{s.term ? ` - ${s.term}` : ''} - {stMeta?.shortLabel || 'فعال'})
+                        </option>
+                      );
+                    })
+                  )}
+                </select>
+              </div>
+            )}
 
-          {reportType === 'by_grade' && (
-            <div className="flex items-center gap-2">
-              <span className="text-slate-600 dark:text-slate-300 font-bold">اختر الصف:</span>
-              <select
-                value={selectedGrade}
-                onChange={(e) => setSelectedGrade(e.target.value)}
-                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
-              >
-                {(settings?.grades || []).map(g => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-            </div>
-          )}
+            {reportType === 'single_exam' && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-600 dark:text-slate-300 font-bold">اختر الامتحان:</span>
+                <select
+                  value={selectedExamId}
+                  onChange={(e) => setSelectedExamId(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer max-w-xs"
+                >
+                  {filteredExams.length === 0 ? (
+                    <option value="">لا توجد امتحانات في هذا الفصل</option>
+                  ) : (
+                    filteredExams.map(e => (
+                      <option key={e.id} value={e.id}>
+                        {e.title} ({e.date}{e.term ? ` - ${e.term}` : ''})
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+            )}
 
-          {reportType === 'by_group' && (
-            <div className="flex items-center gap-2">
-              <span className="text-slate-600 dark:text-slate-300 font-bold">اختر الشعبة:</span>
-              <select
-                value={selectedGroup}
-                onChange={(e) => setSelectedGroup(e.target.value)}
-                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
-              >
-                {(settings?.groups || []).map(grp => (
-                  <option key={grp} value={grp}>{grp}</option>
-                ))}
-              </select>
-            </div>
-          )}
+            {reportType === 'by_grade' && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-600 dark:text-slate-300 font-bold">اختر الصف:</span>
+                <select
+                  value={selectedGrade}
+                  onChange={(e) => setSelectedGrade(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
+                >
+                  {(settings?.grades || []).map(g => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {reportType === 'by_group' && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-600 dark:text-slate-300 font-bold">اختر الشعبة:</span>
+                <select
+                  value={selectedGroup}
+                  onChange={(e) => setSelectedGroup(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
+                >
+                  {(settings?.groups || []).map(grp => (
+                    <option key={grp} value={grp}>{grp}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -798,8 +960,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-7 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
             <div>
-              <h3 className="font-bold text-slate-900 dark:text-white text-base">تقرير أداء جميع الطلاب</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">إحصائيات إجمالية ومعدلات كل طالب في النظام</p>
+              <h3 className="font-bold text-slate-900 dark:text-white text-base">تقرير أداء الطلاب المشمولين بالفلاتر</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                إجمالي الطلاب المعروضين: {filteredStudents.length} طالب (الفصل: {selectedTerm} | الحالة: {selectedEnrollmentStatus === 'exclude_completed' ? 'استبعاد منتهي الملف' : selectedEnrollmentStatus})
+              </p>
             </div>
 
             <button
@@ -819,6 +983,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   <th className="py-3 px-3">اسم الطالب</th>
                   <th className="py-3 px-3">الصف</th>
                   <th className="py-3 px-3">المجموعة</th>
+                  <th className="py-3 px-3">حالة الملف</th>
                   <th className="py-3 px-3 text-center">الامتحانات</th>
                   <th className="py-3 px-3 text-center">المتوسط %</th>
                   <th className="py-3 px-3 text-center">أعلى %</th>
@@ -827,19 +992,32 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-                {students.map((st, i) => {
-                  const res = dateFilteredResults.filter(r => r.studentDocId === st.id);
-                  const stStats = calculateStudentStats(res, settings.gradingScale);
-                  return (
-                    <tr
-                      key={st.id}
-                      onClick={() => onOpenStudentProfile(st)}
-                      className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
-                    >
-                      <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">{i + 1}</td>
-                      <td className="py-2.5 px-3 font-extrabold text-slate-900 dark:text-slate-50">{st.name}</td>
-                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{st.grade}</td>
-                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{st.group}</td>
+                {filteredStudents.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="py-8 text-center text-slate-400 text-xs">
+                      لا يوجد طلاب يطابقون الفلاتر المحددة (يمكنك تغيير الفصل الدراسي أو حالة الملف)
+                    </td>
+                  </tr>
+                ) : (
+                  filteredStudents.map((st, i) => {
+                    const res = dateFilteredResults.filter(r => r.studentDocId === st.id);
+                    const stStats = calculateStudentStats(res, settings.gradingScale);
+                    const stMeta = ENROLLMENT_STATUS_META[getEffectiveEnrollmentStatus(st)];
+                    return (
+                      <tr
+                        key={st.id}
+                        onClick={() => onOpenStudentProfile(st)}
+                        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
+                      >
+                        <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">{i + 1}</td>
+                        <td className="py-2.5 px-3 font-extrabold text-slate-900 dark:text-slate-50">{st.name}</td>
+                        <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{st.grade}</td>
+                        <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{st.group}</td>
+                        <td className="py-2.5 px-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${stMeta?.badgeBg} ${stMeta?.badgeText} ${stMeta?.badgeBorder}`}>
+                            {stMeta?.shortLabel || 'فعال'}
+                          </span>
+                        </td>
                       <td className="py-2.5 px-3 text-center font-mono text-slate-700 dark:text-slate-200">{stStats.totalExams}</td>
                       <td className="py-2.5 px-3 text-center font-mono font-bold text-amber-600 dark:text-amber-400">{stStats.averagePercentage}%</td>
                       <td className="py-2.5 px-3 text-center font-mono text-emerald-600 dark:text-emerald-400">{stStats.highestPercentage}%</td>
@@ -853,9 +1031,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                           {stStats.status}
                         </span>
                       </td>
-                    </tr>
-                  );
-                })}
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -1287,6 +1466,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         exams={exams}
         allResults={allResults}
         settings={settings}
+        defaultGrade={selectedGrade}
+        defaultTerm={selectedTerm}
+        defaultStatus={selectedEnrollmentStatus}
       />
 
       {/* Student Academic Report Modal */}
