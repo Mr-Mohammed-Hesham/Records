@@ -13,15 +13,25 @@ import {
   RotateCcw,
   Sparkles,
 } from 'lucide-react';
-import { Student, Exam, ExamResult, TeacherSettings } from '../types';
+import {
+  Student,
+  Exam,
+  ExamResult,
+  TeacherSettings,
+  ExamStructure,
+  StudentStructureProgress,
+} from '../types';
 import {
   exportCustomAcademicExcel,
   exportAllDataExcel,
+  exportStructuresReportExcel,
   getSavedExcelPreferences,
   saveExcelPreferences,
 } from '../utils/excel';
 import { getEffectiveEnrollmentStatus, ENROLLMENT_STATUS_LIST } from '../utils/studentStatus';
-import { ACADEMIC_TERMS } from '../services/firebase';
+import { ACADEMIC_TERMS, ACADEMIC_TRACKS, ACADEMIC_YEARS } from '../services/firebase';
+
+export type ExcelExportModalMode = 'academic_reports' | 'structures_reports' | 'all_data';
 
 interface ExcelExportModalProps {
   isOpen: boolean;
@@ -30,10 +40,16 @@ interface ExcelExportModalProps {
   exams: Exam[];
   allResults: ExamResult[];
   settings: TeacherSettings;
+  structures?: ExamStructure[];
+  structureProgress?: StudentStructureProgress[];
   defaultGrade?: string;
   defaultSubject?: string;
   defaultTerm?: string;
   defaultStatus?: string;
+  defaultExportMode?: ExcelExportModalMode;
+  defaultTrack?: string;
+  defaultYear?: string;
+  defaultStructureId?: string;
 }
 
 const MODAL_STATE_KEY = 'mh_excel_modal_saved_filters_v2';
@@ -45,10 +61,16 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   exams,
   allResults,
   settings,
+  structures = [],
+  structureProgress = [],
   defaultGrade,
   defaultSubject,
   defaultTerm,
   defaultStatus,
+  defaultExportMode,
+  defaultTrack,
+  defaultYear,
+  defaultStructureId,
 }) => {
   const initialPrefs = useMemo(() => getSavedExcelPreferences(), []);
 
@@ -115,14 +137,63 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     }
   });
 
-  const [exportMode, setExportMode] = useState<'academic_reports' | 'all_data'>(() => {
+  const [selectedTrack, setSelectedTrack] = useState<string>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(MODAL_STATE_KEY) || '{}');
-      return saved.exportMode === 'all_data' ? 'all_data' : 'academic_reports';
+      return defaultTrack || saved.selectedTrack || 'الكل';
+    } catch {
+      return defaultTrack || 'الكل';
+    }
+  });
+
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(MODAL_STATE_KEY) || '{}');
+      return defaultYear || saved.selectedAcademicYear || 'الكل';
+    } catch {
+      return defaultYear || 'الكل';
+    }
+  });
+
+  const [selectedStructureId, setSelectedStructureId] = useState<string>(() => {
+    return defaultStructureId || 'الكل';
+  });
+
+  const [exportMode, setExportMode] = useState<ExcelExportModalMode>(() => {
+    if (defaultExportMode) return defaultExportMode;
+    try {
+      const saved = JSON.parse(localStorage.getItem(MODAL_STATE_KEY) || '{}');
+      if (saved.exportMode === 'all_data' || saved.exportMode === 'structures_reports') {
+        return saved.exportMode;
+      }
+      return 'academic_reports';
     } catch {
       return 'academic_reports';
     }
   });
+
+  useEffect(() => {
+    if (isOpen && defaultExportMode) {
+      setExportMode(defaultExportMode);
+    }
+    if (isOpen && defaultGrade) setSelectedGrade(defaultGrade);
+    if (isOpen && defaultTerm) setSelectedTerm(defaultTerm);
+    if (isOpen && defaultSubject) setSelectedSubject(defaultSubject);
+    if (isOpen && defaultStatus) setEnrollmentStatusFilter(defaultStatus);
+    if (isOpen && defaultTrack) setSelectedTrack(defaultTrack);
+    if (isOpen && defaultYear) setSelectedAcademicYear(defaultYear);
+    if (isOpen && defaultStructureId) setSelectedStructureId(defaultStructureId);
+  }, [
+    isOpen,
+    defaultExportMode,
+    defaultGrade,
+    defaultTerm,
+    defaultSubject,
+    defaultStatus,
+    defaultTrack,
+    defaultYear,
+    defaultStructureId,
+  ]);
 
   // Chart & Layout preferences
   const [includeChart, setIncludeChart] = useState<boolean>(initialPrefs.includeChart);
@@ -155,6 +226,8 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
           selectedTerm,
           selectedSubject,
           selectedGroup,
+          selectedTrack,
+          selectedAcademicYear,
           enrollmentStatusFilter,
           startDate,
           endDate,
@@ -169,6 +242,8 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     selectedTerm,
     selectedSubject,
     selectedGroup,
+    selectedTrack,
+    selectedAcademicYear,
     enrollmentStatusFilter,
     startDate,
     endDate,
@@ -180,10 +255,13 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     setSelectedTerm('الكل');
     setSelectedSubject('الكل');
     setSelectedGroup('الكل');
+    setSelectedTrack('الكل');
+    setSelectedAcademicYear('الكل');
+    setSelectedStructureId('الكل');
     setEnrollmentStatusFilter('exclude_completed');
     setStartDate('');
     setEndDate('');
-    setExportMode('academic_reports');
+    setExportMode(defaultExportMode || 'academic_reports');
     setIncludeChart(true);
     setLayoutMode('mobile');
     setChartType('bars_and_columns');
@@ -195,13 +273,27 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     }
   };
 
-  // Available subjects from settings & students
+  // Available subjects, tracks, years from settings, students & structures
   const availableSubjects = useMemo(() => {
     const set = new Set<string>();
     settings.subjects?.forEach(s => set.add(s));
     students.forEach(s => { if (s.subject) set.add(s.subject); });
+    structures.forEach(st => { if (st.subject) set.add(st.subject); });
     return Array.from(set);
-  }, [settings.subjects, students]);
+  }, [settings.subjects, students, structures]);
+
+  const availableTracks = useMemo(() => {
+    const set = new Set<string>(ACADEMIC_TRACKS);
+    structures.forEach(st => { if (st.track) set.add(st.track); });
+    students.forEach(s => { if (s.track) set.add(s.track); });
+    return Array.from(set);
+  }, [structures, students]);
+
+  const availableYears = useMemo(() => {
+    const set = new Set<string>(ACADEMIC_YEARS);
+    structures.forEach(st => { if (st.academicYear) set.add(st.academicYear); });
+    return Array.from(set);
+  }, [structures]);
 
   // Filtered counts for preview
   const filteredStudents = useMemo(() => {
@@ -223,6 +315,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   }, [students, selectedGrade, selectedTerm, selectedSubject, selectedGroup, enrollmentStatusFilter]);
 
   const studentIdsSet = useMemo(() => new Set(filteredStudents.map(s => s.id)), [filteredStudents]);
+  const studentByIdMap = useMemo(() => new Map(students.map(s => [s.id, s])), [students]);
   const examMap = useMemo(() => new Map(exams.map(e => [e.id, e])), [exams]);
 
   const filteredResults = useMemo(() => {
@@ -238,7 +331,69 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     });
   }, [allResults, studentIdsSet, startDate, endDate, selectedTerm, examMap]);
 
+  // Filtered Structures & Structure Progress for preview
+  const filteredStructuresList = useMemo(() => {
+    return structures.filter(st => {
+      if (selectedStructureId !== 'الكل' && st.id !== selectedStructureId) return false;
+      if (selectedGrade !== 'الكل' && st.grade !== selectedGrade) return false;
+      if (selectedTerm !== 'الكل' && st.term !== selectedTerm) return false;
+      if (selectedTrack !== 'الكل' && st.track !== selectedTrack) return false;
+      if (selectedAcademicYear !== 'الكل' && st.academicYear !== selectedAcademicYear) return false;
+      if (selectedSubject !== 'الكل' && st.subject !== selectedSubject) return false;
+      return true;
+    });
+  }, [structures, selectedStructureId, selectedGrade, selectedTerm, selectedTrack, selectedAcademicYear, selectedSubject]);
+
+  const filteredStructureProgressList = useMemo(() => {
+    return structureProgress.filter(rec => {
+      if (selectedStructureId !== 'الكل' && rec.structureId !== selectedStructureId) return false;
+      if (selectedGrade !== 'الكل' && rec.grade !== selectedGrade) return false;
+      if (selectedTerm !== 'الكل' && rec.term !== selectedTerm) return false;
+      if (selectedTrack !== 'الكل' && rec.track !== selectedTrack) return false;
+      if (selectedAcademicYear !== 'الكل' && rec.academicYear !== selectedAcademicYear) return false;
+      if (selectedSubject !== 'الكل' && rec.subject !== selectedSubject) return false;
+
+      const recDate = rec.date || (rec.updatedAt ? rec.updatedAt.split('T')[0] : '');
+      if (startDate && recDate && recDate < startDate) return false;
+      if (endDate && recDate && recDate > endDate) return false;
+
+      const st = studentByIdMap.get(rec.studentDocId);
+      if (st) {
+        if (selectedGroup !== 'الكل' && st.group !== selectedGroup) return false;
+        const effStatus = getEffectiveEnrollmentStatus(st);
+        if (enrollmentStatusFilter === 'exclude_completed' && effStatus === 'completed') return false;
+        if (enrollmentStatusFilter !== 'الكل' && enrollmentStatusFilter !== 'exclude_completed' && effStatus !== enrollmentStatusFilter) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [
+    structureProgress,
+    selectedStructureId,
+    selectedGrade,
+    selectedTerm,
+    selectedTrack,
+    selectedAcademicYear,
+    selectedSubject,
+    selectedGroup,
+    startDate,
+    endDate,
+    studentByIdMap,
+    enrollmentStatusFilter,
+  ]);
+
+  const uniqueStructureStudentsCount = useMemo(
+    () => new Set(filteredStructureProgressList.map(p => p.studentDocId)).size,
+    [filteredStructureProgressList]
+  );
+
   if (!isOpen) return null;
+
+  const canExport =
+    exportMode === 'structures_reports'
+      ? filteredStructuresList.length > 0 || filteredStructureProgressList.length > 0
+      : filteredStudents.length > 0;
 
   const handleExport = () => {
     setIsExporting(true);
@@ -263,8 +418,30 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
           },
           settings.gradingScale
         );
+      } else if (exportMode === 'structures_reports') {
+        exportStructuresReportExcel(structures, structureProgress, students, {
+          grade: selectedGrade,
+          term: selectedTerm,
+          track: selectedTrack,
+          academicYear: selectedAcademicYear,
+          subject: selectedSubject,
+          group: selectedGroup,
+          structureId: selectedStructureId,
+          enrollmentStatus: enrollmentStatusFilter,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+          includeChart,
+          layoutMode,
+          chartType,
+          includeLogoHeader,
+        });
       } else {
-        exportAllDataExcel(filteredStudents, exams, filteredResults, settings);
+        exportAllDataExcel(filteredStudents, exams, filteredResults, settings, {
+          includeChart,
+          layoutMode,
+          chartType,
+          includeLogoHeader,
+        });
       }
       setTimeout(() => {
         setIsExporting(false);
@@ -347,7 +524,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
               تنسيق ونوع التقرير المطلوب:
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <button
                 type="button"
                 onClick={() => setExportMode('academic_reports')}
@@ -357,12 +534,30 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                     : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-1">
                   <span className="font-bold text-xs">تقارير الطلاب الأكاديمية (مع الرسم البياني)</span>
-                  <CheckCircle2 className={`w-4 h-4 ${exportMode === 'academic_reports' ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600'}`} />
+                  <CheckCircle2 className={`w-4 h-4 shrink-0 ${exportMode === 'academic_reports' ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600'}`} />
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
-                  تحتوي على: اسم الطالب، الصف، حالة الملف، درجات كل امتحان، الرسم البياني للتطور، وملاحظات التقدم
+                  ملخص أداء الطلاب + تقارير مفصلة لكل طالب ودرجة كل امتحان وملاحظات التقدم
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setExportMode('structures_reports')}
+                className={`p-3.5 rounded-2xl border text-right transition cursor-pointer flex flex-col justify-between gap-1.5 ${
+                  exportMode === 'structures_reports'
+                    ? 'bg-amber-500/10 border-amber-500 text-amber-900 dark:text-amber-200 shadow-xs'
+                    : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-bold text-xs">تقارير قسم الهياكل ونسب الأسئلة</span>
+                  <CheckCircle2 className={`w-4 h-4 shrink-0 ${exportMode === 'structures_reports' ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600'}`} />
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
+                  بنفس التقسيم: ملخص الهياكل + تقارير مفصلة لكل طالب وسؤال + مصفوفة النسب + الرسم البياني
                 </p>
               </button>
 
@@ -375,9 +570,9 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                     : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-1">
                   <span className="font-bold text-xs">سجل الجداول الشامل (جميع الشيتات)</span>
-                  <CheckCircle2 className={`w-4 h-4 ${exportMode === 'all_data' ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600'}`} />
+                  <CheckCircle2 className={`w-4 h-4 shrink-0 ${exportMode === 'all_data' ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600'}`} />
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
                   ملف شامل بـ 4 شيتات: قائمة الطلاب وحالاتهم، سجل الدرجات، بيانات الامتحانات، والإحصائيات
@@ -627,12 +822,71 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
               </div>
             </div>
 
+            {/* Extra Filters for Structures (Track, Year, Specific Structure) */}
+            {exportMode === 'structures_reports' && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                    المسار الدراسي:
+                  </label>
+                  <select
+                    value={selectedTrack}
+                    onChange={(e) => setSelectedTrack(e.target.value)}
+                    className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
+                  >
+                    <option value="الكل">كافة المسارات</option>
+                    {availableTracks.map((tr) => (
+                      <option key={tr} value={tr}>{tr}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                    السنة الدراسية:
+                  </label>
+                  <select
+                    value={selectedAcademicYear}
+                    onChange={(e) => setSelectedAcademicYear(e.target.value)}
+                    className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-mono font-bold cursor-pointer"
+                  >
+                    <option value="الكل">كل السنوات</option>
+                    {availableYears.map((yr) => (
+                      <option key={yr} value={yr}>{yr}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                    الهيكل المحدد:
+                  </label>
+                  <select
+                    value={selectedStructureId}
+                    onChange={(e) => setSelectedStructureId(e.target.value)}
+                    className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    <option value="الكل">جميع الهياكل المطابقة ({structures.length})</option>
+                    {structures.map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.title} ({st.grade} - {st.term})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
             {/* Date Range Filtering */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
                   <Calendar className="w-3 h-3 text-slate-400" />
-                  <span>تحديد الفترة الزمنية للامتحانات:</span>
+                  <span>
+                    {exportMode === 'structures_reports'
+                      ? 'تحديد الفترة الزمنية لرصد الهياكل:'
+                      : 'تحديد الفترة الزمنية للامتحانات:'}
+                  </span>
                 </label>
                 <div className="flex items-center gap-2 text-[10px]">
                   <button
@@ -692,13 +946,25 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
               <GraduationCap className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <span>بيانات التقرير المستخرج:</span>
             </div>
-            <div className="flex items-center gap-3 font-mono font-bold text-amber-800 dark:text-amber-300">
-              <span>{filteredStudents.length} طالب</span>
-              <span>•</span>
-              <span>{filteredResults.length} نتيجة امتحان</span>
-              <span>•</span>
-              <span>{layoutMode === 'mobile' ? '📱 مقاس الهاتف' : '💻 مقاس الكمبيوتر'}</span>
-            </div>
+            {exportMode === 'structures_reports' ? (
+              <div className="flex flex-wrap items-center gap-3 font-mono font-bold text-amber-800 dark:text-amber-300">
+                <span>{filteredStructuresList.length} هيكل</span>
+                <span>•</span>
+                <span>{uniqueStructureStudentsCount} طالب</span>
+                <span>•</span>
+                <span>{filteredStructureProgressList.length} سجل رصد</span>
+                <span>•</span>
+                <span>{layoutMode === 'mobile' ? '📱 مقاس الهاتف' : '💻 مقاس الكمبيوتر'}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 font-mono font-bold text-amber-800 dark:text-amber-300">
+                <span>{filteredStudents.length} طالب</span>
+                <span>•</span>
+                <span>{filteredResults.length} نتيجة امتحان</span>
+                <span>•</span>
+                <span>{layoutMode === 'mobile' ? '📱 مقاس الهاتف' : '💻 مقاس الكمبيوتر'}</span>
+              </div>
+            )}
           </div>
 
         </div>
@@ -716,7 +982,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
           <button
             type="button"
             onClick={handleExport}
-            disabled={isExporting || filteredStudents.length === 0}
+            disabled={isExporting || !canExport}
             className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-98 rounded-xl shadow-md shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50"
           >
             <Download className="w-4 h-4" />

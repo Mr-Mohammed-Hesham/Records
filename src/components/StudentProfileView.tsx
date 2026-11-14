@@ -34,7 +34,12 @@ import {
 } from 'lucide-react';
 import { Student, Exam, ExamResult, TeacherSettings, ResultAttachment, StudentEnrollmentStatus, StudentStructureProgress } from '../types';
 import { calculateStudentStats, getGradeRating } from '../utils/grading';
-import { exportSingleStudentAcademicReport, getSavedExcelPreferences, saveExcelPreferences } from '../utils/excel';
+import {
+  exportSingleStudentAcademicReport,
+  exportSingleStudentStructuresReport,
+  getSavedExcelPreferences,
+  saveExcelPreferences,
+} from '../utils/excel';
 import {
   ENROLLMENT_STATUS_LIST,
   ENROLLMENT_STATUS_META,
@@ -1066,16 +1071,37 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
               متابعة الهياكل المسجلة للطالب وعدد الأسئلة المحلولة ونسبة صحة كل سؤال
             </p>
           </div>
-          {onOpenStructures && (
-            <button
-              type="button"
-              onClick={onOpenStructures}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-800 rounded-xl transition cursor-pointer"
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>إدارة ورصد في قسم الهياكل</span>
-            </button>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {structureProgress.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  saveExcelPreferences({
+                    layoutMode: excelLayoutMode,
+                    includeChart: excelIncludeChart,
+                  });
+                  exportSingleStudentStructuresReport(student, structureProgress, [], {
+                    layoutMode: excelLayoutMode,
+                    includeChart: excelIncludeChart,
+                  });
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition cursor-pointer"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>تصدير تقرير الهياكل (Excel)</span>
+              </button>
+            )}
+            {onOpenStructures && (
+              <button
+                type="button"
+                onClick={onOpenStructures}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-800 rounded-xl transition cursor-pointer"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>إدارة ورصد في قسم الهياكل</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {structureProgress.length === 0 ? (
@@ -1142,6 +1168,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           student={student}
           results={results}
           settings={settings}
+          structureProgress={structureProgress}
           onClose={() => setShowAcademicReportModal(false)}
         />
       )}

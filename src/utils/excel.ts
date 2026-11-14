@@ -167,7 +167,7 @@ function buildStudentChartRows(
   rows.push(['']);
 
   // 2. مخطط الأعمدة الرأسي داخل الشيت (إذا تم اختيار أعمدة وكان عدد الامتحانات مناسباً لعرض الشاشة)
-  if (chartType === 'bars_and_columns' && sorted.length >= 2) {
+  if ((chartType === 'bars_and_columns' || chartType === 'both' || chartType === 'columns') && sorted.length >= 2) {
     const maxCols = isMobile ? Math.min(sorted.length, 5) : Math.min(sorted.length, 8);
     const chartExams = sorted.slice(-maxCols);
 
@@ -985,235 +985,93 @@ export function exportExamResultsExcel(
   XLSX.writeFile(wb, `نتائج_امتحان_${safeTitle}_${exam.date}.xlsx`);
 }
 
+function getStructureAccuracyRating(percentage: number): string {
+  if (percentage >= 90) return 'ممتاز (A+)';
+  if (percentage >= 80) return 'جيد جداً (B)';
+  if (percentage >= 70) return 'جيد (C)';
+  if (percentage >= 60) return 'مقبول (D)';
+  return 'يحتاج تحسين (F)';
+}
+
+function getStructurePerformanceNote(
+  solvedCount: number,
+  totalQuestions: number,
+  overallAccuracy: number,
+  notes?: string
+): string {
+  if (notes && notes.trim()) return notes.trim();
+  if (solvedCount === 0) return 'لم يبدأ الطالب حل أسئلة هذا الهيكل بعد';
+  if (overallAccuracy >= 90 && solvedCount >= totalQuestions) {
+    return 'إتقان ممتاز وشامل لجميع أسئلة الهيكل';
+  }
+  if (overallAccuracy >= 80) {
+    return solvedCount < totalQuestions
+      ? `مستوى جيد جداً في الأسئلة المحلولة (${solvedCount}/${totalQuestions}) ويُنصح باستكمال الباقي`
+      : 'مستوى جيد جداً في أسئلة الهيكل';
+  }
+  if (overallAccuracy >= 65) {
+    return 'مستوى جيد ويُنصح بمراجعة الأسئلة التي تقل نسبتها عن 70%';
+  }
+  return 'يحتاج متابعة ومراجعة شاملة لأسئلة الهيكل';
+}
+
 /**
- * تصدير تقرير قسم الهياكل وسجلات حل الطلاب ونسب صحة كل سؤال إلى Excel
+ * بناء قسم الرسم البياني للهياكل ونسب صحة كل سؤال (أشرطة أفقية + أعمدة رأسية + توزيع تقديرات)
+ * بنفس تكنيك buildStudentChartRows للتقارير الأكاديمية
  */
-export function exportStructuresReportExcel(
+function buildStructureChartRows(
   structures: ExamStructure[],
   progressRecords: StudentStructureProgress[],
-  students: Student[],
-  customOptions?: ExcelLayoutAndChartOptions & { filterLabel?: string }
-) {
-  const prefs = { ...getSavedExcelPreferences(), ...customOptions };
-  const isMobile = prefs.layoutMode === 'mobile';
-  const includeChart = prefs.includeChart !== false;
-  const studentMap = new Map(students.map((s) => [s.id, s]));
-
-  const wb = XLSX.utils.book_new();
-  const titleHeader =
-    prefs.includeLogoHeader !== false
-      ? '📐 تقرير قسم الهياكل ومتابعة حل الأسئلة ونسب الصحة - سجلات مستر محمد هشام (شعار الهوية المعتمد)'
-      : '📐 تقرير قسم الهياكل ومتابعة حل الأسئلة ونسب الصحة';
-
-  // Sheet 1: ملخص سجلات الطلاب في الهياكل
-  const summaryMeta: any[][] = [
-    [titleHeader, '', '', '', '', ''],
-    [
-      'تاريخ التصدير:',
-      new Date().toLocaleDateString('ar-EG'),
-      'نطاق الفلترة:',
-      customOptions?.filterLabel || 'كافة الهياكل والطلاب المشمولين',
-      'عدد السجلات:',
-      `${progressRecords.length} سجل`,
-    ],
-    [''],
-  ];
-
-  const summaryHeader = isMobile
-    ? [
-        'م',
-        'اسم الطالب',
-        'الهيكل (الصف/الفصل/المسار/المادة)',
-        'المحلول من الهيكل',
-        'متوسط الصحة %',
-      ]
-    : [
-        'م',
-        'اسم الطالب',
-        'كود الطالب',
-        'حالة الملف',
-        'اسم الهيكل',
-        'الصف الدراسي',
-        'الفصل',
-        'المسار',
-        'السنة الدراسية',
-        'المادة',
-        'الشعبة',
-        'الأسئلة المحلولة',
-        'نسبة الإنجاز %',
-        'متوسط نسبة الصحة %',
-        'المؤشر البياني للصحة',
-        'تاريخ الرصد',
-        'ملاحظات',
-      ];
-
-  const summaryRows = progressRecords.map((rec, idx) => {
-    const st = studentMap.get(rec.studentDocId);
-    const statusLabel = st
-      ? ENROLLMENT_STATUS_META[getEffectiveEnrollmentStatus(st)]?.shortLabel || 'فعال'
-      : 'فعال';
-
-    if (isMobile) {
-      return [
-        idx + 1,
-        rec.studentName,
-        `${rec.structureTitle} (${rec.grade} • ${rec.term} • ${rec.track} • ${rec.subject})`,
-        `${rec.solvedCount} / ${rec.totalQuestions} (${rec.completionPercentage}%)`,
-        `${buildVisualScoreBar(rec.overallAccuracyPercentage, true)}`,
-      ];
-    }
-
+  isMobile: boolean,
+  chartType: 'bars_and_columns' | 'bars_only' | 'distribution' | 'both' | 'bars' | 'columns' = 'bars_and_columns'
+): any[][] {
+  if (progressRecords.length === 0) {
     return [
-      idx + 1,
-      rec.studentName,
-      rec.studentId || st?.studentId || '-',
-      statusLabel,
-      rec.structureTitle,
-      rec.grade,
-      rec.term,
-      rec.track,
-      rec.academicYear,
-      rec.subject,
-      rec.group || st?.group || '-',
-      `${rec.solvedCount} / ${rec.totalQuestions}`,
-      `${rec.completionPercentage}%`,
-      `${rec.overallAccuracyPercentage}%`,
-      buildVisualScoreBar(rec.overallAccuracyPercentage, false),
-      rec.date || (rec.updatedAt ? rec.updatedAt.split('T')[0] : '-'),
-      rec.notes || '',
-    ];
-  });
-
-  const wsSummaryRows = [...summaryMeta, summaryHeader, ...summaryRows];
-  const wsSummary = XLSX.utils.aoa_to_sheet(wsSummaryRows);
-  applyWorksheetFormatting(
-    wsSummary,
-    wsSummaryRows.length,
-    isMobile
-      ? [6, 24, 34, 20, 26]
-      : [6, 24, 14, 14, 26, 18, 14, 12, 14, 16, 14, 16, 14, 16, 28, 14, 28],
-    [{ s: { r: 0, c: 0 }, e: { r: 0, c: isMobile ? 4 : 7 } }],
-    isMobile
-  );
-  XLSX.utils.book_append_sheet(wb, wsSummary, 'ملخص الهياكل والطلاب');
-
-  // Sheet 2: تفصيل نسبة صحة كل سؤال (لكل هيكل)
-  const targetStructures = structures.filter((st) =>
-    progressRecords.some((p) => p.structureId === st.id)
-  );
-  const structuresForSheet = targetStructures.length > 0 ? targetStructures : structures;
-
-  if (structuresForSheet.length > 0) {
-    const detailRows: any[][] = [
-      ['📊 تفصيل نسبة صحة كل سؤال حسب الهيكل والطالب', '', '', ''],
+      ['📊 الرسم البياني للهياكل ونسب صحة الأسئلة', 'لا توجد سجلات طلاب مرصودة بعد لرسم المخطط البياني'],
       [''],
     ];
-
-    let maxColsCount = 7;
-
-    structuresForSheet.forEach((struct) => {
-      const structProgress = progressRecords.filter((p) => p.structureId === struct.id);
-      const qCount = Math.max(1, struct.totalQuestions || struct.questions?.length || 1);
-      maxColsCount = Math.max(maxColsCount, 7 + qCount);
-
-      detailRows.push([
-        `الهيكل: ${struct.title}`,
-        `الصف: ${struct.grade}`,
-        `الفصل: ${struct.term}`,
-        `المسار: ${struct.track}`,
-        `السنة: ${struct.academicYear}`,
-        `المادة: ${struct.subject}`,
-        `إجمالي الأسئلة: ${qCount}`,
-      ]);
-
-      const qHeaders: string[] = [];
-      for (let q = 1; q <= qCount; q++) {
-        const qItem = struct.questions?.find((item) => item.questionNumber === q);
-        qHeaders.push(qItem?.title ? `س${q} (${qItem.title}) %` : `س${q} %`);
-      }
-
-      detailRows.push([
-        'اسم الطالب',
-        'كود الطالب',
-        'الصف / المسار',
-        'الفصل / السنة',
-        'المحلول من الهيكل',
-        'نسبة الإنجاز %',
-        'متوسط الصحة %',
-        ...qHeaders,
-      ]);
-
-      if (structProgress.length === 0) {
-        detailRows.push(['لا توجد سجلات طلاب مسجلة لهذا الهيكل ضمن الفلاتر الحالية']);
-      } else {
-        structProgress.forEach((p) => {
-          const scoreMap = new Map((p.questionScores || []).map((qs) => [qs.questionNumber, qs]));
-          const qCells: string[] = [];
-          for (let q = 1; q <= qCount; q++) {
-            const qs = scoreMap.get(q);
-            if (!qs || !qs.solved) {
-              qCells.push('لم يُحل');
-            } else {
-              qCells.push(`${qs.accuracyPercentage}%`);
-            }
-          }
-          detailRows.push([
-            p.studentName,
-            p.studentId || '-',
-            `${p.grade} (${p.track})`,
-            `${p.term} • ${p.academicYear}`,
-            `${p.solvedCount} / ${p.totalQuestions}`,
-            `${p.completionPercentage}%`,
-            `${p.overallAccuracyPercentage}%`,
-            ...qCells,
-          ]);
-        });
-
-        // Row: Average accuracy per question across students
-        const qAverages: string[] = [];
-        for (let q = 1; q <= qCount; q++) {
-          const solvedEntries = structProgress
-            .map((p) => (p.questionScores || []).find((qs) => qs.questionNumber === q))
-            .filter((qs): qs is NonNullable<typeof qs> => Boolean(qs && qs.solved));
-          if (solvedEntries.length === 0) {
-            qAverages.push('-');
-          } else {
-            const avg = Math.round(
-              solvedEntries.reduce((acc, item) => acc + (Number(item.accuracyPercentage) || 0), 0) /
-                solvedEntries.length
-            );
-            qAverages.push(`${avg}% (${solvedEntries.length} ط)`);
-          }
-        }
-        detailRows.push([
-          'متوسط صحة كل سؤال للدفعة',
-          '-',
-          '-',
-          '-',
-          '-',
-          '-',
-          '-',
-          ...qAverages,
-        ]);
-      }
-
-      detailRows.push(['']);
-    });
-
-    const wsDetails = XLSX.utils.aoa_to_sheet(detailRows);
-    const colWidths = [24, 14, 22, 20, 16, 14, 15, ...Array(Math.max(1, maxColsCount - 7)).fill(14)];
-    applyWorksheetFormatting(wsDetails, detailRows.length, colWidths, [], isMobile);
-    XLSX.utils.book_append_sheet(wb, wsDetails, 'نسب صحة كل سؤال');
   }
 
-  // Sheet 3: تحليل بصري للأسئلة (إذا كان خيار الرسم البياني مفعلاً)
-  if (includeChart && structuresForSheet.length > 0 && progressRecords.length > 0) {
-    const chartRows: any[][] = [
-      ['📈 المؤشر البياني لنسبة صحة أسئلة الهياكل عبر الطلاب', '', '', ''],
-      ['الهيكل', 'السؤال', 'عدد الطلاب الحالّين', 'متوسط نسبة الصحة والتمثيل البياني'],
-    ];
+  const rows: any[][] = [];
+  const structMap = new Map(structures.map((s) => [s.id, s]));
+  const involvedStructIds = Array.from(new Set(progressRecords.map((p) => p.structureId)));
+  const activeStructures = involvedStructIds
+    .map((id) => structMap.get(id))
+    .filter((s): s is ExamStructure => Boolean(s));
 
-    structuresForSheet.forEach((struct) => {
+  const fallbackStructs: ExamStructure[] =
+    activeStructures.length > 0
+      ? activeStructures
+      : structures.length > 0
+      ? structures
+      : [];
+
+  const isColumnsEnabled =
+    chartType === 'bars_and_columns' || chartType === 'both' || chartType === 'columns';
+  const showBars = chartType !== 'distribution';
+
+  // تجميع بيانات كل سؤال لكل هيكل
+  interface QuestionChartEntry {
+    label: string;
+    shortLabel: string;
+    solvedInfo: string;
+    avgAccuracy: number;
+    rating: string;
+  }
+
+  const allQuestionEntries: QuestionChartEntry[] = [];
+  const allSolvedQuestionAccuracies: number[] = [];
+
+  progressRecords.forEach((rec) => {
+    (rec.questionScores || []).forEach((qs) => {
+      if (qs.solved) {
+        allSolvedQuestionAccuracies.push(Number(qs.accuracyPercentage) || 0);
+      }
+    });
+  });
+
+  if (fallbackStructs.length > 0) {
+    fallbackStructs.forEach((struct) => {
       const structProgress = progressRecords.filter((p) => p.structureId === struct.id);
       if (structProgress.length === 0) return;
       const qCount = Math.max(1, struct.totalQuestions || struct.questions?.length || 1);
@@ -1229,23 +1087,808 @@ export function exportStructuresReportExcel(
                   solvedEntries.length
               )
             : 0;
-        chartRows.push([
-          struct.title,
-          qItem?.title ? `س${q}: ${qItem.title}` : `سؤال ${q}`,
-          `${solvedEntries.length} / ${structProgress.length}`,
-          solvedEntries.length > 0 ? buildVisualScoreBar(avg, isMobile) : 'لم يُحل بعد',
+        allQuestionEntries.push({
+          label: `${struct.title} — ${qItem?.title ? `س${q} (${qItem.title})` : `سؤال ${q}`}`,
+          shortLabel: `س${q}`,
+          solvedInfo: `${solvedEntries.length} / ${structProgress.length} طالب`,
+          avgAccuracy: avg,
+          rating: solvedEntries.length > 0 ? getStructureAccuracyRating(avg) : 'لم يُحل بعد',
+        });
+      }
+    });
+  } else {
+    progressRecords.forEach((rec) => {
+      const qCount = Math.max(1, rec.totalQuestions || rec.questionScores?.length || 1);
+      for (let q = 1; q <= qCount; q++) {
+        const qs = (rec.questionScores || []).find((item) => item.questionNumber === q);
+        const acc = qs && qs.solved ? Number(qs.accuracyPercentage) || 0 : 0;
+        allQuestionEntries.push({
+          label: `${rec.structureTitle} — سؤال ${q}`,
+          shortLabel: `س${q}`,
+          solvedInfo: qs && qs.solved ? 'تم الحل' : 'لم يُحل',
+          avgAccuracy: acc,
+          rating: qs && qs.solved ? getStructureAccuracyRating(acc) : 'لم يُحل بعد',
+        });
+      }
+    });
+  }
+
+  // 1. مخطط الأشرطة البيانية لمتوسط صحة كل سؤال أو لكل هيكل
+  if (showBars) {
+    rows.push(['📊 أولاً: الرسم البياني لنسب صحة أسئلة الهياكل', '', '', '']);
+    rows.push([
+      'الهيكل والسؤال',
+      'نسبة الحل / الطلاب',
+      'المؤشر البياني لنسبة الصحة (0% ⟵ 100%)',
+      'التقدير ومستوى الإتقان',
+    ]);
+
+    if (allQuestionEntries.length === 0) {
+      progressRecords.forEach((rec) => {
+        rows.push([
+          `${rec.structureTitle} (${rec.studentName})`,
+          `${rec.solvedCount} / ${rec.totalQuestions}`,
+          buildVisualScoreBar(rec.overallAccuracyPercentage, isMobile),
+          getStructureAccuracyRating(rec.overallAccuracyPercentage),
+        ]);
+      });
+    } else {
+      allQuestionEntries.forEach((entry) => {
+        rows.push([
+          entry.label,
+          entry.solvedInfo,
+          buildVisualScoreBar(entry.avgAccuracy, isMobile),
+          `${entry.avgAccuracy}% | ${entry.rating}`,
+        ]);
+      });
+    }
+    rows.push(['']);
+  }
+
+  // 2. مخطط الأعمدة الرأسي داخل الشيت
+  if (isColumnsEnabled && allQuestionEntries.length >= 2) {
+    const maxCols = isMobile
+      ? Math.min(allQuestionEntries.length, 5)
+      : Math.min(allQuestionEntries.length, 8);
+    const chartEntries = allQuestionEntries.slice(0, maxCols);
+
+    rows.push(['📈 ثانياً: مخطط الأعمدة الرأسي لنسب صحة أسئلة الهياكل', '', '', '']);
+    const levels = [100, 80, 60, 40, 20];
+    levels.forEach((lvl) => {
+      const lvlRow: any[] = [`مستوى ${lvl}%`];
+      chartEntries.forEach((qEntry) => {
+        if (qEntry.avgAccuracy >= lvl) {
+          lvlRow.push(
+            qEntry.avgAccuracy >= 85 ? '   🟩🟩   ' : qEntry.avgAccuracy >= 65 ? '   🟦🟦   ' : '   🟨🟨   '
+          );
+        } else if (qEntry.avgAccuracy >= lvl - 10) {
+          lvlRow.push('   ▄▄▄▄   ');
+        } else {
+          lvlRow.push('    ..    ');
+        }
+      });
+      rows.push(lvlRow);
+    });
+
+    rows.push(['متوسط الصحة %', ...chartEntries.map((e) => `${e.avgAccuracy}%`)]);
+    rows.push(['رقم السؤال', ...chartEntries.map((e) => e.shortLabel)]);
+    rows.push(['']);
+  }
+
+  // 3. جدول ومخطط التوزيع النسبي لإتقان الأسئلة المحلولة
+  const samplePool =
+    allSolvedQuestionAccuracies.length > 0
+      ? allSolvedQuestionAccuracies
+      : progressRecords.map((p) => p.overallAccuracyPercentage);
+
+  const ratingCounts = [
+    { label: 'ممتاز (90% فأعلى)', count: samplePool.filter((v) => v >= 90).length, icon: '🟩' },
+    { label: 'جيد جداً (80% - 89%)', count: samplePool.filter((v) => v >= 80 && v < 90).length, icon: '🟦' },
+    { label: 'جيد (70% - 79%)', count: samplePool.filter((v) => v >= 70 && v < 80).length, icon: '🟨' },
+    { label: 'مقبول (60% - 69%)', count: samplePool.filter((v) => v >= 60 && v < 70).length, icon: '🟧' },
+    { label: 'يحتاج تحسين (<60%)', count: samplePool.filter((v) => v < 60).length, icon: '🟥' },
+  ];
+
+  rows.push(['🍩 ثالثاً: توزيع تقديرات ونسب إتقان الأسئلة في الهياكل', '', '', '']);
+  rows.push(['الفئة والتقدير', 'عدد الأسئلة المحلولة', 'التمثيل البياني للحصة النسبية', 'النسبة من الإجمالي']);
+
+  ratingCounts.forEach((band) => {
+    const sharePercent = samplePool.length > 0 ? Math.round((band.count / samplePool.length) * 100) : 0;
+    const blocks = Math.round((sharePercent / 100) * 10);
+    const visualShare = band.icon.repeat(blocks) + '⬜'.repeat(Math.max(0, 10 - blocks));
+    rows.push([
+      band.label,
+      `${band.count} سؤال`,
+      `${visualShare} ${sharePercent}%`,
+      sharePercent > 0 ? `${sharePercent}% من الإجابات` : 'لا يوجد',
+    ]);
+  });
+
+  rows.push(['']);
+  return rows;
+}
+
+/**
+ * تصدير تقرير الهياكل لطالب واحد مع دعم كامل للرسم البياني وتنسيق الهاتف المحمول أو الكمبيوتر
+ * بنفس تكنيك exportSingleStudentAcademicReport
+ */
+export function exportSingleStudentStructuresReport(
+  student: Student,
+  progressRecords: StudentStructureProgress[],
+  structures: ExamStructure[] = [],
+  customOptions?: ExcelLayoutAndChartOptions
+) {
+  const prefs = { ...getSavedExcelPreferences(), ...customOptions };
+  const isMobile = prefs.layoutMode === 'mobile';
+  const includeChart = prefs.includeChart !== false;
+
+  const wb = XLSX.utils.book_new();
+  const statusId = getEffectiveEnrollmentStatus(student);
+  const statusLabel = ENROLLMENT_STATUS_META[statusId]?.label || 'ملف فعال';
+  const statusNote = getEffectiveEnrollmentNote(student);
+  const structMap = new Map(structures.map((s) => [s.id, s]));
+
+  const sortedRecords = [...progressRecords].sort(
+    (a, b) => new Date(b.updatedAt || b.date || 0).getTime() - new Date(a.updatedAt || a.date || 0).getTime()
+  );
+
+  const totalStructuresCount = sortedRecords.length;
+  const totalQuestionsSum = sortedRecords.reduce((acc, r) => acc + (r.totalQuestions || 0), 0);
+  const totalSolvedSum = sortedRecords.reduce((acc, r) => acc + (r.solvedCount || 0), 0);
+  const avgCompletionPct =
+    totalStructuresCount > 0
+      ? Math.round(sortedRecords.reduce((acc, r) => acc + (r.completionPercentage || 0), 0) / totalStructuresCount)
+      : 0;
+  const avgAccuracyPct =
+    totalStructuresCount > 0
+      ? Math.round(sortedRecords.reduce((acc, r) => acc + (r.overallAccuracyPercentage || 0), 0) / totalStructuresCount)
+      : 0;
+  const overallRating = totalStructuresCount > 0 ? getStructureAccuracyRating(avgAccuracyPct) : 'لا توجد سجلات';
+
+  if (isMobile) {
+    // ═══════════════════════════════════════════════════════════════════
+    // وضع الهاتف المحمول (4 أعمدة متناسقة جداً لا تحتاج لتمرير أفقي)
+    // ═══════════════════════════════════════════════════════════════════
+    const mainReportTitle =
+      prefs.includeLogoHeader !== false
+        ? '📐 تقرير أداء الطالب في قسم الهياكل - سجلات مستر محمد هشام (شعار الهوية المعتمد)'
+        : '📐 تقرير أداء الطالب في قسم الهياكل';
+
+    const sheetRows: any[][] = [
+      [mainReportTitle, '', '', ''],
+      ['تاريخ الاستخراج:', new Date().toLocaleDateString('ar-EG'), 'وضع العرض:', '📱 متوافق مع الهاتف والطباعة'],
+      [''],
+      ['👤 أولاً: البيانات الأساسية للطالب', '', '', ''],
+      ['اسم الطالب:', student.name, 'كود الطالب:', student.studentId],
+      ['الصف الدراسي:', student.grade, 'المسار / الفصل:', `${student.track || 'عام'} - ${student.term || 'الفصل الأول'}`],
+      ['المادة الدراسية:', student.subject || 'عام', 'المجموعة:', student.group || '-'],
+      ['حالة ملف الطالب:', statusLabel, 'ملاحظة الحالة:', statusNote || 'منتظم'],
+      [''],
+      ['📐 ثانياً: ملخص مؤشرات الهياكل للطالب', '', '', ''],
+      ['عدد الهياكل المسجلة:', `${totalStructuresCount} هيكل`, 'إجمالي الأسئلة المحلولة:', `${totalSolvedSum} / ${totalQuestionsSum} سؤال`],
+      ['متوسط نسبة الإنجاز:', `${avgCompletionPct}%`, 'متوسط الصحة العامة:', `${avgAccuracyPct}%`],
+      ['التقييم العام للهياكل:', overallRating, 'مستوى السيطرة:', buildVisualScoreBar(avgAccuracyPct, true)],
+      [''],
+    ];
+
+    if (includeChart) {
+      sheetRows.push(...buildStructureChartRows(structures, sortedRecords, true, prefs.chartType));
+    }
+
+    sheetRows.push(['📝 تفاصيل الهياكل ونسبة صحة كل سؤال', '', '', '']);
+
+    if (sortedRecords.length === 0) {
+      sheetRows.push(['لا توجد هياكل مرصودة لهذا الطالب حتى الآن', '-', '-', '-']);
+    } else {
+      sortedRecords.forEach((rec, idx) => {
+        const structMeta = structMap.get(rec.structureId);
+        sheetRows.push([
+          `══════ [ ${idx + 1}. الهيكل: ${rec.structureTitle} ] ══════`,
+          `${rec.grade} • ${rec.term}`,
+          `${rec.track} • ${rec.academicYear}`,
+          `المحلول: ${rec.solvedCount}/${rec.totalQuestions} (${rec.overallAccuracyPercentage}%)`,
+        ]);
+        sheetRows.push([
+          'السؤال وعنوانه',
+          'حالة الحل',
+          'المؤشر البصري لصحة السؤال',
+          'نسبة الصحة والملاحظات',
+        ]);
+
+        const qCount = Math.max(1, rec.totalQuestions || rec.questionScores?.length || 1);
+        for (let q = 1; q <= qCount; q++) {
+          const qs = (rec.questionScores || []).find((item) => item.questionNumber === q);
+          const qItem = structMeta?.questions?.find((item) => item.questionNumber === q);
+          const qTitle = qItem?.title ? `س${q}: ${qItem.title}` : `السؤال ${q}`;
+          const solved = Boolean(qs && qs.solved);
+          const pct = solved ? Number(qs?.accuracyPercentage) || 0 : 0;
+          sheetRows.push([
+            qTitle,
+            solved ? 'تم الحل ✔' : 'لم يُحل ✖',
+            solved ? buildVisualScoreBar(pct, true) : '⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%',
+            solved ? `${pct}% (${getStructureAccuracyRating(pct)})` : 'غير محلول بعد',
+          ]);
+        }
+        sheetRows.push(['ملاحظات الهيكل:', rec.notes || getStructurePerformanceNote(rec.solvedCount, rec.totalQuestions, rec.overallAccuracyPercentage), '', '']);
+        sheetRows.push(['']);
+      });
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(sheetRows);
+    applyWorksheetFormatting(
+      ws,
+      sheetRows.length,
+      [30, 22, 30, 32],
+      [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+        { s: { r: 3, c: 0 }, e: { r: 3, c: 3 } },
+        { s: { r: 9, c: 0 }, e: { r: 9, c: 3 } },
+      ],
+      true
+    );
+    XLSX.utils.book_append_sheet(wb, ws, 'تقرير الهياكل');
+  } else {
+    // ═══════════════════════════════════════════════════════════════════
+    // الوضع المكتبي الواسع (8 أعمدة مفصلة للشاشات الكبيرة والطباعة)
+    // ═══════════════════════════════════════════════════════════════════
+    const mainDesktopTitle =
+      prefs.includeLogoHeader !== false
+        ? 'تقرير الأداء الشامل للطالب في قسم الهياكل - سجلات مستر محمد هشام (شعار الهوية المعتمد)'
+        : 'تقرير الأداء الشامل للطالب في قسم الهياكل';
+
+    const headerData: any[][] = [
+      [mainDesktopTitle, '', '', '', '', '', '', ''],
+      ['تاريخ الاستخراج:', new Date().toLocaleDateString('ar-EG'), 'حالة ملف الطالب:', statusLabel, 'كود الطالب:', student.studentId, '', ''],
+      [''],
+      ['بيانات الطالب الأساسية', '', '', '', '', '', '', ''],
+      ['اسم الطالب:', student.name, 'الصف الدراسي:', student.grade, 'المادة:', student.subject || 'عام', 'المجموعة:', student.group || '-'],
+      [''],
+      ['ملخص مؤشرات قسم الهياكل', '', '', '', '', '', '', ''],
+      ['عدد الهياكل:', totalStructuresCount, 'الأسئلة المحلولة:', `${totalSolvedSum}/${totalQuestionsSum}`, 'متوسط الإنجاز:', `${avgCompletionPct}%`, 'متوسط الصحة:', `${avgAccuracyPct}%`],
+      ['التقييم العام:', overallRating, 'ملاحظة الملف:', statusNote || '-', '', '', '', ''],
+      [''],
+    ];
+
+    if (includeChart) {
+      headerData.push(...buildStructureChartRows(structures, sortedRecords, false, prefs.chartType));
+    }
+
+    headerData.push(['تفاصيل الهياكل ونسبة صحة كل سؤال على حدة', '', '', '', '', '', '', '']);
+    const tableHeader = [
+      'اسم الهيكل',
+      'الصف / الفصل / المسار',
+      'السنة / المادة',
+      'السؤال',
+      'حالة الحل',
+      'الرسم البياني لنسبة الصحة',
+      'نسبة الصحة % والتقدير',
+      'ملاحظات الهيكل',
+    ];
+
+    const detailRows: any[][] = [];
+    sortedRecords.forEach((rec) => {
+      const structMeta = structMap.get(rec.structureId);
+      const qCount = Math.max(1, rec.totalQuestions || rec.questionScores?.length || 1);
+      for (let q = 1; q <= qCount; q++) {
+        const qs = (rec.questionScores || []).find((item) => item.questionNumber === q);
+        const qItem = structMeta?.questions?.find((item) => item.questionNumber === q);
+        const solved = Boolean(qs && qs.solved);
+        const pct = solved ? Number(qs?.accuracyPercentage) || 0 : 0;
+        detailRows.push([
+          rec.structureTitle,
+          `${rec.grade} • ${rec.term} • ${rec.track}`,
+          `${rec.academicYear} • ${rec.subject}`,
+          qItem?.title ? `س${q} (${qItem.title})` : `سؤال ${q}`,
+          solved ? 'تم الحل ✔' : 'لم يُحل ✖',
+          solved ? buildVisualScoreBar(pct, false) : '⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%',
+          solved ? `${pct}% (${getStructureAccuracyRating(pct)})` : '0% - غير محلول',
+          q === 1 ? rec.notes || '-' : '-',
         ]);
       }
     });
 
-    const wsChart = XLSX.utils.aoa_to_sheet(chartRows);
-    applyWorksheetFormatting(wsChart, chartRows.length, [28, 28, 18, 34], [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }], isMobile);
-    XLSX.utils.book_append_sheet(wb, wsChart, 'التحليل البياني للأسئلة');
+    const allRows = [...headerData, tableHeader, ...detailRows];
+    const wsReport = XLSX.utils.aoa_to_sheet(allRows);
+    applyWorksheetFormatting(
+      wsReport,
+      allRows.length,
+      [28, 22, 18, 20, 14, 28, 22, 30],
+      [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }],
+      false
+    );
+    XLSX.utils.book_append_sheet(wb, wsReport, 'التقرير الأكاديمي للهياكل');
   }
+
+  // إضافة شيت مستقل للرسم البياني التفصيلي عند تفعيل خيار الرسم البياني
+  if (includeChart && sortedRecords.length > 0) {
+    const chartSheetRows = [
+      [`📊 لوحة الرسم البياني للهياكل ونسب الأسئلة - الطالب: ${student.name}`, '', '', ''],
+      [`الصف: ${student.grade} | متوسط الصحة: ${avgAccuracyPct}% | إجمالي المحلول: ${totalSolvedSum}/${totalQuestionsSum}`, '', '', ''],
+      [''],
+      ...buildStructureChartRows(structures, sortedRecords, isMobile, prefs.chartType || 'bars_and_columns'),
+    ];
+    const wsChart = XLSX.utils.aoa_to_sheet(chartSheetRows);
+    applyWorksheetFormatting(
+      wsChart,
+      chartSheetRows.length,
+      [28, 18, 32, 28],
+      [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
+      ],
+      isMobile
+    );
+    XLSX.utils.book_append_sheet(wb, wsChart, 'الرسم البياني للهياكل');
+  }
+
+  const safeName = student.name.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_');
+  XLSX.writeFile(wb, `تقرير_الهياكل_${safeName}_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+export interface StructuresExportFilterOptions extends ExportFilterOptions {
+  track?: string;
+  academicYear?: string;
+  structureId?: string;
+  filterLabel?: string;
+}
+
+/**
+ * تصدير تقرير قسم الهياكل وسجلات حل الطلاب ونسب صحة كل سؤال إلى Excel
+ * بنفس تكنيك exportCustomAcademicExcel (توزيع الشيتات، وضع الهاتف والكمبيوتر، الفلاتر، التقارير المفصلة، والرسوم البيانية)
+ */
+export function exportStructuresReportExcel(
+  structures: ExamStructure[],
+  progressRecords: StudentStructureProgress[],
+  students: Student[],
+  customOptions: StructuresExportFilterOptions = {}
+) {
+  const prefs = { ...getSavedExcelPreferences(), ...customOptions };
+  const isMobile = prefs.layoutMode === 'mobile';
+  const includeChart = prefs.includeChart !== false;
+  const studentMap = new Map(students.map((s) => [s.id, s]));
+
+  // 1. تطبيق فلاتر الهياكل وسجلات الطلاب بنفس منطق exportCustomAcademicExcel
+  let filteredStructures = [...structures];
+  if (customOptions.structureId && customOptions.structureId !== 'الكل') {
+    filteredStructures = filteredStructures.filter((s) => s.id === customOptions.structureId);
+  }
+  if (customOptions.grade && customOptions.grade !== 'الكل') {
+    filteredStructures = filteredStructures.filter((s) => s.grade === customOptions.grade);
+  }
+  if (customOptions.term && customOptions.term !== 'الكل') {
+    filteredStructures = filteredStructures.filter((s) => s.term === customOptions.term);
+  }
+  if (customOptions.track && customOptions.track !== 'الكل') {
+    filteredStructures = filteredStructures.filter((s) => s.track === customOptions.track);
+  }
+  if (customOptions.academicYear && customOptions.academicYear !== 'الكل') {
+    filteredStructures = filteredStructures.filter((s) => s.academicYear === customOptions.academicYear);
+  }
+  if (customOptions.subject && customOptions.subject !== 'الكل') {
+    filteredStructures = filteredStructures.filter((s) => s.subject === customOptions.subject);
+  }
+
+  let filteredProgress = [...progressRecords].filter((rec) => {
+    if (customOptions.structureId && customOptions.structureId !== 'الكل' && rec.structureId !== customOptions.structureId) {
+      return false;
+    }
+    if (customOptions.grade && customOptions.grade !== 'الكل' && rec.grade !== customOptions.grade) {
+      return false;
+    }
+    if (customOptions.term && customOptions.term !== 'الكل' && rec.term !== customOptions.term) {
+      return false;
+    }
+    if (customOptions.track && customOptions.track !== 'الكل' && rec.track !== customOptions.track) {
+      return false;
+    }
+    if (customOptions.academicYear && customOptions.academicYear !== 'الكل' && rec.academicYear !== customOptions.academicYear) {
+      return false;
+    }
+    if (customOptions.subject && customOptions.subject !== 'الكل' && rec.subject !== customOptions.subject) {
+      return false;
+    }
+
+    const recDate = rec.date || (rec.updatedAt ? rec.updatedAt.split('T')[0] : '');
+    if (customOptions.startDate && recDate && recDate < customOptions.startDate) return false;
+    if (customOptions.endDate && recDate && recDate > customOptions.endDate) return false;
+
+    const st = studentMap.get(rec.studentDocId);
+    if (st) {
+      if (customOptions.group && customOptions.group !== 'الكل' && st.group !== customOptions.group) {
+        return false;
+      }
+      const effStatus = getEffectiveEnrollmentStatus(st);
+      if (customOptions.enrollmentStatus && customOptions.enrollmentStatus !== 'الكل') {
+        if (customOptions.enrollmentStatus === 'exclude_completed' && effStatus === 'completed') {
+          return false;
+        }
+        if (customOptions.enrollmentStatus !== 'exclude_completed' && effStatus !== customOptions.enrollmentStatus) {
+          return false;
+        }
+      }
+      if (customOptions.excludeCompletedFiles && effStatus === 'completed') {
+        return false;
+      }
+    } else if (customOptions.group && customOptions.group !== 'الكل' && rec.group !== customOptions.group) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const periodLabel =
+    customOptions.startDate || customOptions.endDate
+      ? `الفترة: ${customOptions.startDate || 'البداية'} إلى ${customOptions.endDate || 'الآن'}`
+      : 'كافة الفترات';
+  const termLabel = customOptions.term && customOptions.term !== 'الكل' ? customOptions.term : 'كافة الفصول';
+  const trackLabel = customOptions.track && customOptions.track !== 'الكل' ? customOptions.track : 'كافة المسارات';
+  const statusLabel =
+    customOptions.enrollmentStatus === 'exclude_completed' || customOptions.excludeCompletedFiles
+      ? 'الطلاب الفعالين (استبعاد منتهي الكورس)'
+      : customOptions.enrollmentStatus && customOptions.enrollmentStatus !== 'الكل'
+      ? ENROLLMENT_STATUS_META[customOptions.enrollmentStatus as any]?.label || customOptions.enrollmentStatus
+      : 'كافة الحالات';
+
+  const wb = XLSX.utils.book_new();
+  const titleHeader =
+    prefs.includeLogoHeader !== false
+      ? '📐 تقرير قسم الهياكل ومتابعة حل الأسئلة ونسب الصحة - Mr Mohammed Hesham (شعار الهوية المعتمد)'
+      : '📐 تقرير قسم الهياكل ومتابعة حل الأسئلة ونسب الصحة';
+
+  const targetStructures = filteredStructures.filter((st) =>
+    filteredProgress.some((p) => p.structureId === st.id)
+  );
+  const structuresForSheet = targetStructures.length > 0 ? targetStructures : filteredStructures;
+  const structMap = new Map(structures.map((s) => [s.id, s]));
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SHEET 1: ملخص أداء الهياكل والطلاب (نفس تقسيم "ملخص أداء الطلاب")
+  // ═══════════════════════════════════════════════════════════════════
+  const filterSummary: any[][] = [
+    [titleHeader, '', '', '', '', ''],
+    ['تاريخ الاستخراج:', new Date().toLocaleDateString('ar-EG'), 'نطاق التقرير:', customOptions.filterLabel || periodLabel, 'وضع التنسيق:', isMobile ? '📱 وضع الهاتف المدمج' : '💻 الوضع المكتبي'],
+    ['الصف / المسار:', `${customOptions.grade || 'كافة الصفوف'} (${trackLabel})`, 'المادة / السنة:', `${customOptions.subject || 'كافة المواد'} • ${customOptions.academicYear || 'كل السنوات'}`, 'الفصل الدراسي (الترم):', termLabel],
+    ['حالة ملفات الطلاب:', statusLabel, 'الهياكل المشمولة:', `${structuresForSheet.length} هيكل`, 'سجلات الطلاب:', `${filteredProgress.length} سجل`],
+    [''],
+  ];
+
+  const summaryHeader = isMobile
+    ? [
+        'م',
+        'اسم الطالب والصف/المسار',
+        'حالة الملف',
+        'الهيكل والمحلول %',
+        'الرسم البياني لنسبة الصحة',
+        'التقييم وملاحظات الهيكل',
+      ]
+    : [
+        'م',
+        'اسم الطالب',
+        'الصف / المسار',
+        'حالة الملف بالكورس',
+        'اسم الهيكل',
+        'الفصل / السنة / المادة',
+        'الأسئلة المحلولة والإنجاز %',
+        'متوسط نسبة الصحة %',
+        'الرسم البياني للصحة',
+        'التقييم وملاحظات الأداء',
+      ];
+
+  const summaryRows: any[][] =
+    filteredProgress.length === 0
+      ? [
+          isMobile
+            ? ['-', 'لا توجد سجلات طلاب مرصودة ضمن الفلاتر المحددة', '-', '-', '⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%', 'يرجى رصد حلول الطلاب في قسم الهياكل']
+            : ['-', 'لا توجد سجلات طلاب مرصودة ضمن الفلاتر المحددة', '-', '-', '-', '-', '0 / 0', '0%', '⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%', '-'],
+        ]
+      : filteredProgress.map((rec, idx) => {
+          const st = studentMap.get(rec.studentDocId);
+          const stStatus = st
+            ? ENROLLMENT_STATUS_META[getEffectiveEnrollmentStatus(st)]?.shortLabel || 'فعال'
+            : 'فعال';
+          const rating = getStructureAccuracyRating(rec.overallAccuracyPercentage);
+          const perfNote = getStructurePerformanceNote(
+            rec.solvedCount,
+            rec.totalQuestions,
+            rec.overallAccuracyPercentage,
+            rec.notes
+          );
+
+          if (isMobile) {
+            return [
+              idx + 1,
+              `${rec.studentName} (${rec.grade} • ${rec.track})`,
+              stStatus,
+              `${rec.structureTitle} | ${rec.solvedCount}/${rec.totalQuestions} (${rec.completionPercentage}%)`,
+              buildVisualScoreBar(rec.overallAccuracyPercentage, true),
+              `${rating} - ${perfNote}`,
+            ];
+          }
+
+          return [
+            idx + 1,
+            rec.studentName,
+            `${rec.grade} (${rec.track})`,
+            stStatus,
+            rec.structureTitle,
+            `${rec.term} • ${rec.academicYear} • ${rec.subject}`,
+            `${rec.solvedCount} / ${rec.totalQuestions} (${rec.completionPercentage}%)`,
+            `${rec.overallAccuracyPercentage}%`,
+            buildVisualScoreBar(rec.overallAccuracyPercentage, false),
+            `${rating} - ${perfNote}`,
+          ];
+        });
+
+  const allSummaryRows = [...filterSummary, summaryHeader, ...summaryRows];
+  const wsSummary = XLSX.utils.aoa_to_sheet(allSummaryRows);
+  applyWorksheetFormatting(
+    wsSummary,
+    allSummaryRows.length,
+    isMobile ? [5, 26, 14, 24, 26, 36] : [6, 24, 20, 16, 24, 24, 18, 16, 28, 40],
+    [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }],
+    isMobile
+  );
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'ملخص أداء الهياكل');
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SHEET 2: تقارير الهياكل المفصلة لكل طالب وسؤال (نفس تقسيم "تقارير الطلاب المفصلة")
+  // ═══════════════════════════════════════════════════════════════════
+  const detailedReportRows: any[][] = [
+    ['📐 التقارير التفصيلية للهياكل ونسب صحة كل سؤال للطلاب', '', '', ''],
+    ['(مصممة بمساحات مريحة للقراءة على الهاتف والكمبيوتر شاملة الرسم البياني لنسبة صحة كل سؤال)', '', '', ''],
+    [''],
+  ];
+
+  if (filteredProgress.length === 0) {
+    detailedReportRows.push(['لا توجد سجلات حل طلاب مطابقة للفلاتر المختارة', '-', '-', '-']);
+  } else {
+    filteredProgress.forEach((rec, idx) => {
+      const st = studentMap.get(rec.studentDocId);
+      const stStatus = st
+        ? ENROLLMENT_STATUS_META[getEffectiveEnrollmentStatus(st)]?.label || 'ملف فعال'
+        : 'ملف فعال';
+      const structMeta = structMap.get(rec.structureId);
+      const rating = getStructureAccuracyRating(rec.overallAccuracyPercentage);
+      const perfNote = getStructurePerformanceNote(
+        rec.solvedCount,
+        rec.totalQuestions,
+        rec.overallAccuracyPercentage,
+        rec.notes
+      );
+
+      detailedReportRows.push([
+        `══════ [ ${idx + 1}. الطالب: ${rec.studentName} ] ══════`,
+        `الهيكل: ${rec.structureTitle}`,
+        `حالة الملف: ${stStatus}`,
+        `متوسط الصحة: ${rec.overallAccuracyPercentage}%`,
+      ]);
+      detailedReportRows.push([
+        `الصف: ${rec.grade} | المسار: ${rec.track}`,
+        `الفصل: ${rec.term} | السنة: ${rec.academicYear}`,
+        `المادة: ${rec.subject}`,
+        `المحلول: ${rec.solvedCount}/${rec.totalQuestions} (${rec.completionPercentage}%)`,
+      ]);
+      detailedReportRows.push([
+        'ملاحظات الأداء والتقدم:',
+        perfNote,
+        `التقييم: ${rating}`,
+        `التاريخ: ${rec.date || (rec.updatedAt ? rec.updatedAt.split('T')[0] : '-')}`,
+      ]);
+
+      const qCount = Math.max(1, rec.totalQuestions || rec.questionScores?.length || 1);
+
+      if (includeChart) {
+        detailedReportRows.push([
+          'السؤال وعنوانه',
+          'حالة الحل',
+          'الرسم البياني لصحة السؤال (0% ⟵ 100%)',
+          'نسبة الصحة والتقدير',
+        ]);
+        for (let q = 1; q <= qCount; q++) {
+          const qs = (rec.questionScores || []).find((item) => item.questionNumber === q);
+          const qItem = structMeta?.questions?.find((item) => item.questionNumber === q);
+          const qTitle = qItem?.title ? `س${q} - ${qItem.title}` : `السؤال ${q}`;
+          const solved = Boolean(qs && qs.solved);
+          const pct = solved ? Number(qs?.accuracyPercentage) || 0 : 0;
+          detailedReportRows.push([
+            qTitle,
+            solved ? 'تم الحل ✔' : 'لم يُحل ✖',
+            solved ? buildVisualScoreBar(pct, isMobile) : '⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%',
+            solved ? `${pct}% (${getStructureAccuracyRating(pct)})` : '0% - لم يُحل بعد',
+          ]);
+        }
+      } else {
+        detailedReportRows.push(['السؤال وعنوانه', 'حالة الحل', 'نسبة الصحة %', 'التقدير والملاحظات']);
+        for (let q = 1; q <= qCount; q++) {
+          const qs = (rec.questionScores || []).find((item) => item.questionNumber === q);
+          const qItem = structMeta?.questions?.find((item) => item.questionNumber === q);
+          const qTitle = qItem?.title ? `س${q} - ${qItem.title}` : `السؤال ${q}`;
+          const solved = Boolean(qs && qs.solved);
+          const pct = solved ? Number(qs?.accuracyPercentage) || 0 : 0;
+          detailedReportRows.push([
+            qTitle,
+            solved ? 'تم الحل ✔' : 'لم يُحل ✖',
+            `${pct}%`,
+            solved ? getStructureAccuracyRating(pct) : 'غير محلول',
+          ]);
+        }
+      }
+
+      detailedReportRows.push(['']);
+    });
+  }
+
+  const wsDetailed = XLSX.utils.aoa_to_sheet(detailedReportRows);
+  applyWorksheetFormatting(
+    wsDetailed,
+    detailedReportRows.length,
+    [30, 22, 30, 32],
+    [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
+    ],
+    isMobile
+  );
+  XLSX.utils.book_append_sheet(wb, wsDetailed, 'تقارير الهياكل المفصلة');
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SHEET 3: مصفوفة تفصيل نسبة صحة كل سؤال حسب الهيكل والطالب
+  // ═══════════════════════════════════════════════════════════════════
+  if (structuresForSheet.length > 0) {
+    const detailMatrixRows: any[][] = [
+      ['📊 مصفوفة تفصيل نسبة صحة كل سؤال حسب الهيكل والطالب', '', '', ''],
+      [''],
+    ];
+
+    let maxColsCount = 7;
+
+    structuresForSheet.forEach((struct) => {
+      const structProgress = filteredProgress.filter((p) => p.structureId === struct.id);
+      const qCount = Math.max(1, struct.totalQuestions || struct.questions?.length || 1);
+      maxColsCount = Math.max(maxColsCount, 7 + qCount);
+
+      detailMatrixRows.push([
+        `الهيكل: ${struct.title}`,
+        `الصف: ${struct.grade}`,
+        `الفصل: ${struct.term}`,
+        `المسار: ${struct.track}`,
+        `السنة: ${struct.academicYear}`,
+        `المادة: ${struct.subject}`,
+        `إجمالي الأسئلة: ${qCount}`,
+      ]);
+
+      const qHeaders: string[] = [];
+      for (let q = 1; q <= qCount; q++) {
+        const qItem = struct.questions?.find((item) => item.questionNumber === q);
+        qHeaders.push(qItem?.title ? `س${q} (${qItem.title}) %` : `س${q} %`);
+      }
+
+      detailMatrixRows.push([
+        'اسم الطالب',
+        'كود الطالب',
+        'الصف / المسار',
+        'الفصل / السنة',
+        'المحلول من الهيكل',
+        'نسبة الإنجاز %',
+        'متوسط الصحة %',
+        ...qHeaders,
+      ]);
+
+      if (structProgress.length === 0) {
+        detailMatrixRows.push(['لا توجد سجلات طلاب مسجلة لهذا الهيكل ضمن الفلاتر الحالية']);
+      } else {
+        structProgress.forEach((p) => {
+          const scoreMap = new Map((p.questionScores || []).map((qs) => [qs.questionNumber, qs]));
+          const qCells: string[] = [];
+          for (let q = 1; q <= qCount; q++) {
+            const qs = scoreMap.get(q);
+            if (!qs || !qs.solved) {
+              qCells.push('لم يُحل');
+            } else {
+              qCells.push(`${qs.accuracyPercentage}%`);
+            }
+          }
+          detailMatrixRows.push([
+            p.studentName,
+            p.studentId || '-',
+            `${p.grade} (${p.track})`,
+            `${p.term} • ${p.academicYear}`,
+            `${p.solvedCount} / ${p.totalQuestions}`,
+            `${p.completionPercentage}%`,
+            `${p.overallAccuracyPercentage}%`,
+            ...qCells,
+          ]);
+        });
+
+        const qAverages: string[] = [];
+        for (let q = 1; q <= qCount; q++) {
+          const solvedEntries = structProgress
+            .map((p) => (p.questionScores || []).find((qs) => qs.questionNumber === q))
+            .filter((qs): qs is NonNullable<typeof qs> => Boolean(qs && qs.solved));
+          if (solvedEntries.length === 0) {
+            qAverages.push('-');
+          } else {
+            const avg = Math.round(
+              solvedEntries.reduce((acc, item) => acc + (Number(item.accuracyPercentage) || 0), 0) /
+                solvedEntries.length
+            );
+            qAverages.push(`${avg}% (${solvedEntries.length} ط)`);
+          }
+        }
+        detailMatrixRows.push([
+          'متوسط صحة كل سؤال للدفعة',
+          '-',
+          '-',
+          '-',
+          '-',
+          '-',
+          '-',
+          ...qAverages,
+        ]);
+      }
+
+      detailMatrixRows.push(['']);
+    });
+
+    const wsDetails = XLSX.utils.aoa_to_sheet(detailMatrixRows);
+    const colWidths = [24, 14, 22, 20, 16, 14, 15, ...Array(Math.max(1, maxColsCount - 7)).fill(14)];
+    applyWorksheetFormatting(
+      wsDetails,
+      detailMatrixRows.length,
+      colWidths,
+      [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }],
+      isMobile
+    );
+    XLSX.utils.book_append_sheet(wb, wsDetails, 'نسب صحة كل سؤال');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SHEET 4: لوحة الرسم البياني للهياكل (مستقل - نفس "الرسم البياني للدرجات")
+  // ═══════════════════════════════════════════════════════════════════
+  if (includeChart && structuresForSheet.length > 0 && filteredProgress.length > 0) {
+    const overallAvgAcc = Math.round(
+      filteredProgress.reduce((a, b) => a + (b.overallAccuracyPercentage || 0), 0) / filteredProgress.length
+    );
+    const chartSheetRows = [
+      [`📊 لوحة الرسم البياني للهياكل ونسب الأسئلة (${structuresForSheet.length} هيكل)`, '', '', ''],
+      [`سجلات الطلاب: ${filteredProgress.length} | متوسط الصحة العام: ${overallAvgAcc}% | الفصل: ${termLabel}`, '', '', ''],
+      [''],
+      ...buildStructureChartRows(structuresForSheet, filteredProgress, isMobile, prefs.chartType),
+    ];
+
+    const wsChart = XLSX.utils.aoa_to_sheet(chartSheetRows);
+    applyWorksheetFormatting(
+      wsChart,
+      chartSheetRows.length,
+      [28, 18, 32, 28],
+      [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
+      ],
+      isMobile
+    );
+    XLSX.utils.book_append_sheet(wb, wsChart, 'الرسم البياني للهياكل');
+  }
+
+  const gradeTag = customOptions.grade && customOptions.grade !== 'الكل' ? `_${customOptions.grade.replace(/\s+/g, '_')}` : '';
+  const termTag = customOptions.term && customOptions.term !== 'الكل' ? `_${customOptions.term.replace(/\s+/g, '_')}` : '';
+  const trackTag = customOptions.track && customOptions.track !== 'الكل' ? `_${customOptions.track.replace(/\s+/g, '_')}` : '';
+  const subjTag = customOptions.subject && customOptions.subject !== 'الكل' ? `_${customOptions.subject.replace(/\s+/g, '_')}` : '';
+  const statusTag =
+    customOptions.enrollmentStatus === 'exclude_completed' || customOptions.excludeCompletedFiles
+      ? '_الطلبة_الفعالين'
+      : customOptions.enrollmentStatus === 'completed'
+      ? '_منتهي_الكورس'
+      : '';
+  const dateTag =
+    customOptions.startDate || customOptions.endDate
+      ? `_من_${customOptions.startDate || 'البداية'}_إلى_${customOptions.endDate || 'الآن'}`
+      : '';
 
   XLSX.writeFile(
     wb,
-    `تقرير_الهياكل_ونسب_الأسئلة_${new Date().toISOString().split('T')[0]}.xlsx`
+    `تقارير_الهياكل_ونسب_الأسئلة${termTag}${statusTag}${gradeTag}${trackTag}${subjTag}${dateTag}.xlsx`
   );
 }
+
 

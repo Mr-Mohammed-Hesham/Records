@@ -45,6 +45,7 @@ import {
   ENROLLMENT_STATUS_META,
 } from '../utils/studentStatus';
 import { exportStructuresReportExcel, loadExcelPreferences } from '../utils/excel';
+import { ExcelExportModal } from './ExcelExportModal';
 
 interface StructuresViewProps {
   structures: ExamStructure[];
@@ -91,6 +92,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
   // Create/Edit Structure Modal
   const [isStructureModalOpen, setIsStructureModalOpen] = useState(false);
   const [editingStructure, setEditingStructure] = useState<ExamStructure | null>(null);
+  const [isExcelExportModalOpen, setIsExcelExportModalOpen] = useState(false);
 
   // Student Question Scoring Modal
   const [scoringModalState, setScoringModalState] = useState<{
@@ -340,22 +342,15 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
 
   const handleExportCurrentStructuresExcel = () => {
     const prefs = loadExcelPreferences();
-    const targetStructs = selectedStructure ? [selectedStructure] : filteredStructures;
-    const targetProgress = (selectedStructure ? selectedStructureProgress : structureProgress).filter(
-      (p) => {
-        const st = studentMap.get(p.studentDocId);
-        if (!st) return true;
-        const eff = getEffectiveEnrollmentStatus(st);
-        if (filterStatus === 'exclude_completed' && eff === 'completed') return false;
-        if (filterStatus !== 'الكل' && filterStatus !== 'exclude_completed' && eff !== filterStatus) {
-          return false;
-        }
-        return true;
-      }
-    );
-
-    exportStructuresReportExcel(targetStructs, targetProgress, students, {
+    exportStructuresReportExcel(structures, structureProgress, students, {
       ...prefs,
+      structureId: selectedStructure ? selectedStructure.id : 'الكل',
+      grade: filterGrade,
+      term: filterTerm,
+      track: filterTrack,
+      academicYear: filterYear,
+      subject: filterSubject,
+      enrollmentStatus: filterStatus,
       filterLabel: selectedStructure
         ? `${selectedStructure.title} (${selectedStructure.grade} - ${selectedStructure.term} - ${selectedStructure.track})`
         : `الصف: ${filterGrade} | الفصل: ${filterTerm} | المسار: ${filterTrack}`,
@@ -379,12 +374,23 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
+            onClick={() => setIsExcelExportModalOpen(true)}
+            disabled={structures.length === 0}
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
+            title="فتح مركز تصدير Excel المخصص للهياكل (وضع الهاتف / الكمبيوتر / الرسوم البيانية / اللوجو / الفلاتر)"
+          >
+            <Sliders className="w-4 h-4 text-amber-500" />
+            <span>تصدير Excel مخصص للهياكل</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleExportCurrentStructuresExcel}
             disabled={structures.length === 0}
             className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span>تصدير Excel للهياكل</span>
+            <span>تصدير شيت الهياكل</span>
           </button>
 
           <button
@@ -1120,6 +1126,26 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
           }}
         />
       )}
+
+      {/* Modal 3: Custom Structures Excel Export Modal (exact Academic Report export engine) */}
+      <ExcelExportModal
+        isOpen={isExcelExportModalOpen}
+        onClose={() => setIsExcelExportModalOpen(false)}
+        students={students}
+        exams={[]}
+        allResults={[]}
+        settings={settings}
+        structures={structures}
+        structureProgress={structureProgress}
+        defaultExportMode="structures_reports"
+        defaultGrade={filterGrade}
+        defaultTerm={filterTerm}
+        defaultTrack={filterTrack}
+        defaultYear={filterYear}
+        defaultSubject={filterSubject}
+        defaultStatus={filterStatus}
+        defaultStructureId={selectedStructure?.id || 'الكل'}
+      />
     </div>
   );
 };

@@ -43,6 +43,7 @@ import {
   exportExamResultsExcel,
   exportCompletedStudentsExcel,
   exportStructuresReportExcel,
+  exportSingleStudentStructuresReport,
   loadExcelPreferences,
   saveExcelPreferences,
 } from '../utils/excel';
@@ -1111,10 +1112,27 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           {/* Student Structures (الهياكل) Progress inside Single Student Report */}
           {currentStudentStructures.length > 0 && (
             <div className="space-y-3 pt-2">
-              <h4 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
-                <Layers className="w-4 h-4 text-amber-500" />
-                <span>سجل الطالب في قسم الهياكل ({currentStudentStructures.length} هيكل)</span>
-              </h4>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-amber-500" />
+                  <span>سجل الطالب في قسم الهياكل ({currentStudentStructures.length} هيكل)</span>
+                </h4>
+                <button
+                  type="button"
+                  onClick={() =>
+                    exportSingleStudentStructuresReport(
+                      currentStudent,
+                      currentStudentStructures,
+                      structures,
+                      getExportOptions()
+                    )
+                  }
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>تصدير هياكل الطالب (Excel بنفس تنسيق التقرير)</span>
+                </button>
+              </div>
               <div className="overflow-x-auto border border-slate-200 dark:border-slate-700/80 rounded-2xl">
                 <table className="w-full text-right text-xs">
                   <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
@@ -1688,27 +1706,43 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() =>
-                exportStructuresReportExcel(
-                  selectedStructureFilterId === 'الكل'
-                    ? filteredStructuresForReport
-                    : filteredStructuresForReport.filter((s) => s.id === selectedStructureFilterId),
-                  filteredStructureProgressForReport,
-                  students,
-                  {
-                    ...getExportOptions(),
-                    filterLabel: `الفصل: ${selectedTerm} | الحالة: ${selectedEnrollmentStatus} | المسار: ${selectedStructureTrack} | الصف: ${selectedStructureGrade}`,
-                  }
-                )
-              }
-              disabled={filteredStructureProgressForReport.length === 0 && filteredStructuresForReport.length === 0}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition cursor-pointer disabled:opacity-50"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>تصدير تقرير الهياكل إلى Excel</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowExportModal(true)}
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition cursor-pointer"
+              >
+                <Filter className="w-3.5 h-3.5 text-amber-500" />
+                <span>مركز تصدير Excel المخصص للهياكل</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  exportStructuresReportExcel(
+                    structures,
+                    structureProgress,
+                    students,
+                    {
+                      ...getExportOptions(),
+                      structureId: selectedStructureFilterId,
+                      grade: selectedStructureGrade,
+                      track: selectedStructureTrack,
+                      academicYear: selectedStructureYear,
+                      subject: selectedStructureSubject,
+                      startDate: startDate || undefined,
+                      endDate: endDate || undefined,
+                      filterLabel: `الفصل: ${selectedTerm} | الحالة: ${selectedEnrollmentStatus} | المسار: ${selectedStructureTrack} | الصف: ${selectedStructureGrade}`,
+                    }
+                  )
+                }
+                disabled={filteredStructureProgressForReport.length === 0 && filteredStructuresForReport.length === 0}
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition cursor-pointer disabled:opacity-50"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span>تصدير تقرير الهياكل إلى Excel</span>
+              </button>
+            </div>
           </div>
 
           {/* Sub-filters for Structures Report */}
@@ -1968,8 +2002,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         exams={exams}
         allResults={allResults}
         settings={settings}
-        defaultGrade={selectedGrade}
+        structures={structures}
+        structureProgress={structureProgress}
+        defaultExportMode={reportType === 'structures' ? 'structures_reports' : 'academic_reports'}
+        defaultGrade={reportType === 'structures' ? selectedStructureGrade : selectedGrade}
         defaultTerm={selectedTerm}
+        defaultTrack={selectedStructureTrack}
+        defaultYear={selectedStructureYear}
+        defaultSubject={selectedStructureSubject}
+        defaultStructureId={selectedStructureFilterId}
         defaultStatus={selectedEnrollmentStatus}
       />
 
@@ -1979,6 +2020,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           student={academicModalStudent}
           results={dateFilteredResults.filter(r => r.studentDocId === academicModalStudent.id)}
           settings={settings}
+          structures={structures}
+          structureProgress={structureProgress.filter(sp => sp.studentDocId === academicModalStudent.id)}
           onClose={() => setAcademicModalStudent(null)}
         />
       )}

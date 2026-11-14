@@ -10,9 +10,20 @@ import {
   Monitor,
   BarChart3,
 } from 'lucide-react';
-import { Student, ExamResult, TeacherSettings } from '../types';
+import {
+  Student,
+  ExamResult,
+  TeacherSettings,
+  ExamStructure,
+  StudentStructureProgress,
+} from '../types';
 import { calculateStudentStats } from '../utils/grading';
-import { exportSingleStudentAcademicReport, getSavedExcelPreferences, saveExcelPreferences } from '../utils/excel';
+import {
+  exportSingleStudentAcademicReport,
+  exportSingleStudentStructuresReport,
+  getSavedExcelPreferences,
+  saveExcelPreferences,
+} from '../utils/excel';
 import { getEffectiveEnrollmentStatus, ENROLLMENT_STATUS_META } from '../utils/studentStatus';
 import { DynamicGradesChart } from './DynamicGradesChart';
 import { AttachmentModal } from './AttachmentModal';
@@ -22,6 +33,8 @@ interface StudentAcademicReportModalProps {
   student: Student;
   results: ExamResult[];
   settings: TeacherSettings;
+  structures?: ExamStructure[];
+  structureProgress?: StudentStructureProgress[];
   onClose: () => void;
 }
 
@@ -29,6 +42,8 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
   student,
   results,
   settings,
+  structures = [],
+  structureProgress = [],
   onClose,
 }) => {
   const printRef = useRef<HTMLDivElement>(null);
@@ -79,10 +94,25 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
     saveExcelPreferences({
       layoutMode: excelLayoutMode,
       includeChart: excelIncludeChart,
+      includeLogoHeader: showLogo,
     });
     exportSingleStudentAcademicReport(student, sortedResults, stats, {
       layoutMode: excelLayoutMode,
       includeChart: excelIncludeChart,
+      includeLogoHeader: showLogo,
+    });
+  };
+
+  const handleExportStructuresExcel = () => {
+    saveExcelPreferences({
+      layoutMode: excelLayoutMode,
+      includeChart: excelIncludeChart,
+      includeLogoHeader: showLogo,
+    });
+    exportSingleStudentStructuresReport(student, structureProgress, structures, {
+      layoutMode: excelLayoutMode,
+      includeChart: excelIncludeChart,
+      includeLogoHeader: showLogo,
     });
   };
 
@@ -348,6 +378,17 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
               <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               تصدير التقرير لـ Excel (مع الرسم البياني)
             </button>
+
+            {structureProgress.length > 0 && (
+              <button
+                type="button"
+                onClick={handleExportStructuresExcel}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-indigo-800 dark:text-indigo-200 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800 rounded-xl transition-all cursor-pointer shadow-xs"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                تصدير الهياكل (Excel)
+              </button>
+            )}
 
             {/* Quick Excel Mobile / Desktop & Chart Toggles */}
             <div className="inline-flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px]">
