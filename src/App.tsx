@@ -19,6 +19,7 @@ import {
   RotateCcw,
   History,
   Sparkles,
+  Layers,
 } from 'lucide-react';
 
 import {
@@ -28,6 +29,8 @@ import {
   TeacherSettings,
   ResultAttachment,
   StudentEnrollmentStatus,
+  ExamStructure,
+  StudentStructureProgress,
 } from './types';
 
 import {
@@ -61,6 +64,11 @@ import {
   saveBatchResults,
   deleteResult,
   updateSingleResult,
+  addStructure,
+  updateStructure,
+  deleteStructure,
+  saveStudentStructureProgress,
+  deleteStudentStructureProgress,
   seedSampleData,
   clearAllData,
   DEFAULT_SETTINGS,
@@ -85,6 +93,7 @@ import { DashboardView } from './components/DashboardView';
 import { StudentsView } from './components/StudentsView';
 import { StudentProfileView } from './components/StudentProfileView';
 import { ExamsView } from './components/ExamsView';
+import { StructuresView } from './components/StructuresView';
 import { ReportsView } from './components/ReportsView';
 import { SettingsView } from './components/SettingsView';
 import HeshamExamApp from './hesham-exam/App';
@@ -121,6 +130,7 @@ type ViewMode =
   | 'students'
   | 'profile'
   | 'exams'
+  | 'structures'
   | 'exam-generator'
   | 'scoring'
   | 'reports'
@@ -166,6 +176,12 @@ export default function App() {
 
   const [results, setResults] =
     useState<ExamResult[]>([]);
+
+  const [structures, setStructures] =
+    useState<ExamStructure[]>([]);
+
+  const [structureProgress, setStructureProgress] =
+    useState<StudentStructureProgress[]>([]);
 
   const [loading, setLoading] =
     useState(true);
@@ -621,17 +637,27 @@ export default function App() {
           setExams(data.exams);
           setResults(data.results);
           setSettings(data.settings);
+          setStructures(data.structures || []);
+          setStructureProgress(data.structureProgress || []);
           setLoading(false);
         });
 
         // Direct concurrent cloud fetch to guarantee all documents are loaded
         syncAllDataFromFirestore()
           .then((fresh) => {
-            if (fresh.students.length > 0 || fresh.exams.length > 0 || fresh.results.length > 0) {
+            if (
+              fresh.students.length > 0 ||
+              fresh.exams.length > 0 ||
+              fresh.results.length > 0 ||
+              (fresh.structures && fresh.structures.length > 0) ||
+              (fresh.structureProgress && fresh.structureProgress.length > 0)
+            ) {
               setStudents(fresh.students);
               setExams(fresh.exams);
               setResults(fresh.results);
               setSettings(fresh.settings);
+              setStructures(fresh.structures || []);
+              setStructureProgress(fresh.structureProgress || []);
             }
           })
           .catch((err) => {
@@ -854,6 +880,13 @@ export default function App() {
             await deleteResult(
               result.id
             );
+          }
+
+          const studentStructures = structureProgress.filter(
+            (sp) => sp.studentDocId === student.id
+          );
+          for (const sp of studentStructures) {
+            await deleteStudentStructureProgress(sp.id);
           }
 
           await deleteStudent(
@@ -1383,6 +1416,88 @@ export default function App() {
   };
 
   /* =======================================================
+     STRUCTURES (قسم الهياكل وسجلات حل الطلاب)
+     ======================================================= */
+
+  const handleAddStructure = async (
+    structureData: Omit<ExamStructure, 'id'>
+  ): Promise<string> => {
+    try {
+      const id = await addStructure(structureData);
+      addToast(`تم إضافة وحفظ الهيكل "${structureData.title}" بنجاح`);
+      return id;
+    } catch (err) {
+      console.error('Add structure error:', err);
+      addToast('حدث خطأ أثناء حفظ الهيكل', 'error');
+      throw err;
+    }
+  };
+
+  const handleUpdateStructure = async (
+    structureId: string,
+    structureData: Partial<ExamStructure>
+  ): Promise<void> => {
+    try {
+      await updateStructure(structureId, structureData);
+      addToast(`تم تحديث بيانات الهيكل "${structureData.title || ''}" بنجاح`);
+    } catch (err) {
+      console.error('Update structure error:', err);
+      addToast('حدث خطأ أثناء تحديث الهيكل', 'error');
+      throw err;
+    }
+  };
+
+  const handleDeleteStructure = (structure: ExamStructure) => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title: 'حذف الهيكل وسجلاته',
+      message: `هل أنت متأكد من حذف الهيكل "${structure.title}"؟ سيتم حذف كافة سجلات حل الطلاب المرتبطة بهذا الهيكل.`,
+      onConfirm: async () => {
+        try {
+          await deleteStructure(structure.id);
+          addToast(`تم حذف الهيكل "${structure.title}" وجميع سجلاته بنجاح`);
+        } catch (err) {
+          console.error('Delete structure error:', err);
+          addToast('تعذر حذف الهيكل', 'error');
+        }
+      },
+    });
+  };
+
+  const handleSaveStructureProgress = async (
+    record: Omit<StudentStructureProgress, 'id'> & { id?: string }
+  ): Promise<StudentStructureProgress> => {
+    try {
+      const saved = await saveStudentStructureProgress(record);
+      addToast(
+        `تم حفظ حل الطالب "${record.studentName}" (${record.solvedCount}/${record.totalQuestions} سؤال - صحة ${record.overallAccuracyPercentage}%)`
+      );
+      return saved;
+    } catch (err) {
+      console.error('Save structure progress error:', err);
+      addToast('حدث خطأ أثناء حفظ رصد الهيكل للطالب', 'error');
+      throw err;
+    }
+  };
+
+  const handleDeleteStructureProgress = (progress: StudentStructureProgress) => {
+    setConfirmModalConfig({
+      isOpen: true,
+      title: 'حذف سجل الطالب في الهيكل',
+      message: `هل تريد حذف سجل الطالب "${progress.studentName}" من هيكل "${progress.structureTitle}"؟`,
+      onConfirm: async () => {
+        try {
+          await deleteStudentStructureProgress(progress.id);
+          addToast('تم حذف سجل الطالب من الهيكل بنجاح');
+        } catch (err) {
+          console.error('Delete structure progress error:', err);
+          addToast('تعذر حذف سجل الهيكل', 'error');
+        }
+      },
+    });
+  };
+
+  /* =======================================================
      SETTINGS
      ======================================================= */
 
@@ -1444,6 +1559,8 @@ export default function App() {
         setStudents([]);
         setExams([]);
         setResults([]);
+        setStructures([]);
+        setStructureProgress([]);
         setSelectedStudent(null);
         setActiveScoringExam(null);
         setCurrentView(
@@ -1706,6 +1823,8 @@ export default function App() {
       setExams(freshData.exams);
       setResults(freshData.results);
       setSettings(freshData.settings);
+      setStructures(freshData.structures || []);
+      setStructureProgress(freshData.structureProgress || []);
 
       // Also refresh service worker caches if present
       if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
@@ -1745,6 +1864,7 @@ export default function App() {
       dashboard: 'لوحة التحكم الرئيسية',
       students: 'إدارة ملفات الطلاب وقائمة الكورس',
       exams: 'سجلات الامتحانات',
+      structures: 'قسم الهياكل ومتابعة حل الأسئلة ونسب الصحة',
       'exam-generator': 'منصة صناعة وتوليد الامتحانات الذكية (Hesham-Exam)',
       reports: 'التقارير الأكاديمية والرسوم البيانية',
       settings: 'إعدادات المنصة',
@@ -1787,6 +1907,12 @@ export default function App() {
       label: 'إدارة الامتحانات',
       icon: FileSpreadsheet,
       badge: exams.length,
+    },
+    {
+      id: 'structures',
+      label: 'قسم الهياكل',
+      icon: Layers,
+      badge: structures.length,
     },
     {
       id: 'exam-generator',
@@ -2521,6 +2647,7 @@ export default function App() {
               settings={
                 settings
               }
+              structuresCount={structures.length}
               onNavigate={(
                 view
               ) => {
@@ -2614,6 +2741,9 @@ export default function App() {
                     result.studentDocId ===
                     selectedStudent.id
                 )}
+                structureProgress={structureProgress.filter(
+                  (sp) => sp.studentDocId === selectedStudent.id
+                )}
                 settings={
                   settings
                 }
@@ -2640,6 +2770,7 @@ export default function App() {
                 onUpdateResultAttachment={
                   handleUpdateResultAttachment
                 }
+                onOpenStructures={() => navigateTo('structures')}
               />
             )}
 
@@ -2677,6 +2808,21 @@ export default function App() {
             />
           )}
 
+          {currentView === 'structures' && (
+            <StructuresView
+              structures={structures}
+              structureProgress={structureProgress}
+              students={students}
+              settings={settings}
+              onAddStructure={handleAddStructure}
+              onUpdateStructure={handleUpdateStructure}
+              onDeleteStructure={handleDeleteStructure}
+              onSaveProgress={handleSaveStructureProgress}
+              onDeleteProgress={handleDeleteStructureProgress}
+              onOpenStudentProfile={handleOpenStudentProfile}
+            />
+          )}
+
           {currentView ===
             'reports' && (
             <ReportsView
@@ -2690,6 +2836,8 @@ export default function App() {
               settings={
                 settings
               }
+              structures={structures}
+              structureProgress={structureProgress}
               onOpenStudentProfile={
                 handleOpenStudentProfile
               }
@@ -2923,14 +3071,14 @@ export default function App() {
       {/* Mobile Bottom Navigation Bar (lg:hidden) */}
       <nav
         id="mobile-bottom-nav"
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-1 py-1.5 pb-safe flex items-center justify-around shadow-lg"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-1 py-1.5 pb-safe flex items-center justify-around overflow-x-auto shadow-lg"
       >
         {[
           { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard },
           { id: 'students', label: 'الطلاب', icon: Users, badge: students.length },
           { id: 'exams', label: 'الامتحانات', icon: FileSpreadsheet, badge: exams.length },
+          { id: 'structures', label: 'الهياكل', icon: Layers, badge: structures.length },
           { id: 'exam-generator', label: 'مولد امتحان', icon: Sparkles },
-          { id: 'scoring', label: 'الدرجات', icon: CheckSquare },
           { id: 'reports', label: 'التقارير', icon: BarChart3 },
           { id: 'settings', label: 'الإعدادات', icon: SettingsIcon },
         ].map((item) => {

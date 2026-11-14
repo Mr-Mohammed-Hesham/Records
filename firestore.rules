@@ -23,6 +23,16 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Structures - الهياكل
+    match /structures/{structureId} {
+      allow read, write: if true;
+    }
+
+    // Student Structure Progress - سجل حل الطلاب للهياكل
+    match /structureProgress/{progressId} {
+      allow read, write: if true;
+    }
+
     // Connection Test
     match /test/{testId} {
       allow read, write: if true;
@@ -34,3 +44,4 @@ service cloud.firestore {
     }
   }
 }
+

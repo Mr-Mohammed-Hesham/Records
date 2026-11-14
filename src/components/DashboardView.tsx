@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   RefreshCw,
   GraduationCap,
+  Layers,
 } from 'lucide-react';
 import { Student, Exam, ExamResult, TeacherSettings } from '../types';
 import { calculateStudentStats } from '../utils/grading';
@@ -36,7 +37,8 @@ interface DashboardViewProps {
   exams?: Exam[];
   allResults?: ExamResult[];
   settings?: TeacherSettings;
-  onNavigate: (tab: 'dashboard' | 'students' | 'exams' | 'scoring' | 'reports' | 'settings') => void;
+  structuresCount?: number;
+  onNavigate: (tab: 'dashboard' | 'students' | 'exams' | 'structures' | 'scoring' | 'reports' | 'settings') => void;
   onOpenStudentProfile: (student: Student) => void;
   onAddStudent: () => void;
   onAddExam: () => void;
@@ -52,6 +54,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   exams = [],
   allResults = [],
   settings = DEFAULT_SETTINGS,
+  structuresCount = 0,
   onNavigate,
   onOpenStudentProfile,
   onAddStudent,
@@ -252,6 +255,16 @@ className="w-full h-full object-cover rounded-[14px]"
             >
               <CheckSquare className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
               <span>رصد النتائج</span>
+            </button>
+
+            <button
+              id="dash-structures-btn"
+              onClick={() => onNavigate('structures')}
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer"
+              title="فتح قسم الهياكل ومتابعة حل الأسئلة ونسب صحتها"
+            >
+              <Layers className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <span>قسم الهياكل ({structuresCount})</span>
             </button>
 
             {onRefreshPlatform && (

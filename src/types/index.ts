@@ -161,3 +161,65 @@ export interface ExamStats {
   failCount: number;
   passRate: number;
 }
+
+/* =========================================================
+   STRUCTURES (قسم الهياكل ومتابعة حل الأسئلة ونسب صحتها)
+   ========================================================= */
+
+export interface StructureQuestionItem {
+  questionNumber: number; // رقم السؤال (1, 2, 3...)
+  title?: string; // عنوان السؤال / الدرس / الناتج التعليمي
+  topic?: string; // المهارة أو الوحدة
+  maxScore?: number; // الوزن أو الدرجة المرجعية الاختيارية
+  notes?: string;
+}
+
+export interface ExamStructure {
+  id: string;
+  title: string; // اسم / عنوان الهيكل
+  code?: string; // كود اختياري للهيكل (مثل STR-001)
+  grade: string; // الصف الدراسي
+  term: string; // الفصل الدراسي (الفصل الأول / الثاني / الثالث)
+  track: string; // المسار (عام / متقدم / إلخ)
+  academicYear: string; // السنة الدراسية
+  subject: string; // المادة
+  group?: string; // الشعبة / المجموعة أو الكل
+  date?: string; // تاريخ اعتماد أو إضافة الهيكل
+  totalQuestions: number; // إجمالي عدد الأسئلة في الهيكل
+  questions: StructureQuestionItem[]; // تفاصيل أسئلة الهيكل (س1 .. سN)
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface StructureQuestionScore {
+  questionNumber: number;
+  solved: boolean; // هل قام الطالب بحل السؤال؟
+  accuracyPercentage: number; // نسبة صحة السؤال (0 إلى 100)
+  notes?: string;
+}
+
+export interface StudentStructureProgress {
+  id: string; // `${structureId}__${studentDocId}` أو Firestore doc ID
+  structureId: string;
+  structureTitle: string;
+  studentDocId: string; // Firestore doc ID للطالب
+  studentId: string; // كود الطالب مثل STU-101
+  studentName: string;
+  grade: string;
+  term: string;
+  track: string;
+  academicYear: string;
+  subject: string;
+  group?: string;
+  date?: string; // تاريخ التقييم أو الرصد
+  totalQuestions: number;
+  solvedCount: number; // عدد الأسئلة التي قام الطالب بحلها من الهيكل
+  completionPercentage: number; // نسبة إتمام الحل من الهيكل %
+  overallAccuracyPercentage: number; // متوسط نسبة صحة الأسئلة المحلولة %
+  questionScores: StructureQuestionScore[]; // نسبة صحة وحل كل سؤال على حدة
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+

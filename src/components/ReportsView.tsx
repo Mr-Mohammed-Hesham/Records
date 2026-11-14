@@ -19,6 +19,7 @@ import {
   RotateCcw,
   Smartphone,
   Monitor,
+  Layers,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -33,7 +34,7 @@ import {
   Pie,
   Legend
 } from 'recharts';
-import { Student, Exam, ExamResult, TeacherSettings } from '../types';
+import { Student, Exam, ExamResult, TeacherSettings, ExamStructure, StudentStructureProgress } from '../types';
 import { calculateStudentStats } from '../utils/grading';
 import {
   exportSingleStudentAcademicReport,
@@ -41,6 +42,7 @@ import {
   exportAllDataExcel,
   exportExamResultsExcel,
   exportCompletedStudentsExcel,
+  exportStructuresReportExcel,
   loadExcelPreferences,
   saveExcelPreferences,
 } from '../utils/excel';
@@ -59,6 +61,8 @@ interface ReportsViewProps {
   exams: Exam[];
   allResults: ExamResult[];
   settings: TeacherSettings;
+  structures?: ExamStructure[];
+  structureProgress?: StudentStructureProgress[];
   onOpenStudentProfile: (student: Student) => void;
 }
 
@@ -67,6 +71,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   exams,
   allResults,
   settings,
+  structures = [],
+  structureProgress = [],
   onOpenStudentProfile,
 }) => {
   const savedReportState = useMemo(
@@ -79,7 +85,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           | 'by_grade'
           | 'by_group'
           | 'completed_course'
-          | 'exam_comparison',
+          | 'exam_comparison'
+          | 'structures',
         selectedStudentId: students?.[0]?.id || '',
         selectedExamId: exams?.[0]?.id || '',
         selectedGrade: settings?.grades?.[0] || 'الأول الثانوي',
@@ -94,7 +101,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   );
 
   const [reportType, setReportType] = useState<
-    'all_students' | 'single_student' | 'single_exam' | 'by_grade' | 'by_group' | 'completed_course' | 'exam_comparison'
+    'all_students' | 'single_student' | 'single_exam' | 'by_grade' | 'by_group' | 'completed_course' | 'exam_comparison' | 'structures'
   >(savedReportState.reportType);
 
   // Excel Preferences
@@ -376,6 +383,142 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     );
   };
 
+  // Structures filters & analytics inside Reports
+  const [selectedStructureFilterId, setSelectedStructureFilterId] = useState<string>('الكل');
+  const [selectedStructureTrack, setSelectedStructureTrack] = useState<string>('الكل');
+  const [selectedStructureGrade, setSelectedStructureGrade] = useState<string>('الكل');
+  const [selectedStructureSubject, setSelectedStructureSubject] = useState<string>('الكل');
+  const [selectedStructureYear, setSelectedStructureYear] = useState<string>('الكل');
+
+  const studentByIdMap = useMemo(() => new Map(students.map((s) => [s.id, s])), [students]);
+
+  const filteredStructuresForReport = useMemo(() => {
+    return structures.filter((st) => {
+      if (selectedTerm !== 'الكل' && st.term !== selectedTerm) return false;
+      if (selectedStructureTrack !== 'الكل' && st.track !== selectedStructureTrack) return false;
+      if (selectedStructureGrade !== 'الكل' && st.grade !== selectedStructureGrade) return false;
+      if (selectedStructureSubject !== 'الكل' && st.subject !== selectedStructureSubject) return false;
+      if (selectedStructureYear !== 'الكل' && st.academicYear !== selectedStructureYear) return false;
+      return true;
+    });
+  }, [
+    structures,
+    selectedTerm,
+    selectedStructureTrack,
+    selectedStructureGrade,
+    selectedStructureSubject,
+    selectedStructureYear,
+  ]);
+
+  const filteredStructureProgressForReport = useMemo(() => {
+    return structureProgress.filter((rec) => {
+      if (selectedTerm !== 'الكل' && rec.term !== selectedTerm) return false;
+      if (selectedStructureFilterId !== 'الكل' && rec.structureId !== selectedStructureFilterId) {
+        return false;
+      }
+      if (selectedStructureTrack !== 'الكل' && rec.track !== selectedStructureTrack) return false;
+      if (selectedStructureGrade !== 'الكل' && rec.grade !== selectedStructureGrade) return false;
+      if (selectedStructureSubject !== 'الكل' && rec.subject !== selectedStructureSubject) return false;
+      if (selectedStructureYear !== 'الكل' && rec.academicYear !== selectedStructureYear) return false;
+
+      const recDate = rec.date || (rec.updatedAt ? rec.updatedAt.split('T')[0] : '');
+      if (startDate && recDate && recDate < startDate) return false;
+      if (endDate && recDate && recDate > endDate) return false;
+
+      const st = studentByIdMap.get(rec.studentDocId);
+      if (st) {
+        const eff = getEffectiveEnrollmentStatus(st);
+        if (selectedEnrollmentStatus === 'exclude_completed' && eff === 'completed') return false;
+        if (selectedEnrollmentStatus === 'active' && eff !== 'active') return false;
+        if (
+          selectedEnrollmentStatus !== 'الكل' &&
+          selectedEnrollmentStatus !== 'exclude_completed' &&
+          eff !== selectedEnrollmentStatus
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [
+    structureProgress,
+    selectedTerm,
+    selectedStructureFilterId,
+    selectedStructureTrack,
+    selectedStructureGrade,
+    selectedStructureSubject,
+    selectedStructureYear,
+    startDate,
+    endDate,
+    studentByIdMap,
+    selectedEnrollmentStatus,
+  ]);
+
+  // Chart data: Per-question accuracy for selected structure (or first matching structure with data)
+  const activeChartStructure = useMemo(() => {
+    if (selectedStructureFilterId !== 'الكل') {
+      return structures.find((s) => s.id === selectedStructureFilterId) || null;
+    }
+    return (
+      filteredStructuresForReport.find((st) =>
+        filteredStructureProgressForReport.some((p) => p.structureId === st.id)
+      ) ||
+      filteredStructuresForReport[0] ||
+      null
+    );
+  }, [
+    selectedStructureFilterId,
+    structures,
+    filteredStructuresForReport,
+    filteredStructureProgressForReport,
+  ]);
+
+  const structureQuestionChartData = useMemo(() => {
+    if (!activeChartStructure) return [];
+    const relRecords = filteredStructureProgressForReport.filter(
+      (p) => p.structureId === activeChartStructure.id
+    );
+    const totalQ = Math.max(
+      1,
+      activeChartStructure.totalQuestions || activeChartStructure.questions?.length || 1
+    );
+    const rows: Array<{
+      name: string;
+      avgAccuracy: number;
+      solvedCount: number;
+      fill: string;
+    }> = [];
+    for (let q = 1; q <= totalQ; q++) {
+      const solvedEntries = relRecords
+        .map((p) => (p.questionScores || []).find((qs) => qs.questionNumber === q))
+        .filter((qs): qs is NonNullable<typeof qs> => Boolean(qs && qs.solved));
+      const avg =
+        solvedEntries.length > 0
+          ? Math.round(
+              solvedEntries.reduce((acc, item) => acc + (Number(item.accuracyPercentage) || 0), 0) /
+                solvedEntries.length
+            )
+          : 0;
+      const fill = avg >= 80 ? '#10b981' : avg >= 60 ? '#f59e0b' : '#ef4444';
+      rows.push({
+        name: `س${q}`,
+        avgAccuracy: avg,
+        solvedCount: solvedEntries.length,
+        fill,
+      });
+    }
+    return rows;
+  }, [activeChartStructure, filteredStructureProgressForReport]);
+
+  const currentStudentStructures = useMemo(() => {
+    if (!currentStudent) return [];
+    return structureProgress.filter((rec) => {
+      if (rec.studentDocId !== currentStudent.id) return false;
+      if (selectedTerm !== 'الكل' && rec.term && rec.term !== selectedTerm) return false;
+      return true;
+    });
+  }, [structureProgress, currentStudent, selectedTerm]);
+
   return (
     <div id="reports-view" className="space-y-6 text-right">
       {/* Header */}
@@ -572,6 +715,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             }`}
           >
             مقارنة امتحانات
+          </button>
+          <button
+            id="btn-report-tab-structures"
+            onClick={() => setReportType('structures')}
+            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              reportType === 'structures'
+                ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
+                : 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900/40'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>تقرير قسم الهياكل ({structures.length})</span>
           </button>
         </div>
 
@@ -952,6 +1107,67 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </div>
             )}
           </div>
+
+          {/* Student Structures (الهياكل) Progress inside Single Student Report */}
+          {currentStudentStructures.length > 0 && (
+            <div className="space-y-3 pt-2">
+              <h4 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+                <Layers className="w-4 h-4 text-amber-500" />
+                <span>سجل الطالب في قسم الهياكل ({currentStudentStructures.length} هيكل)</span>
+              </h4>
+              <div className="overflow-x-auto border border-slate-200 dark:border-slate-700/80 rounded-2xl">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
+                    <tr>
+                      <th className="py-2.5 px-3">الهيكل</th>
+                      <th className="py-2.5 px-3">الصف / الفصل / المسار / السنة / المادة</th>
+                      <th className="py-2.5 px-3 text-center">الأسئلة المحلولة</th>
+                      <th className="py-2.5 px-3 text-center">متوسط الصحة %</th>
+                      <th className="py-2.5 px-3">نسبة صحة كل سؤال</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                    {currentStudentStructures.map((rec) => (
+                      <tr key={rec.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <td className="py-2.5 px-3 font-extrabold text-slate-900 dark:text-white">
+                          {rec.structureTitle}
+                        </td>
+                        <td className="py-2.5 px-3 text-[11px] text-slate-600 dark:text-slate-300">
+                          {rec.grade} • {rec.term} • {rec.track} • {rec.academicYear} • {rec.subject}
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-900 dark:text-white">
+                          {rec.solvedCount} / {rec.totalQuestions} ({rec.completionPercentage}%)
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono font-black text-emerald-600 dark:text-emerald-400">
+                          {rec.overallAccuracyPercentage}%
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex flex-wrap gap-1 font-mono tabular-nums">
+                            {(rec.questionScores || []).map((qs) => (
+                              <span
+                                key={qs.questionNumber}
+                                className={`px-1.5 py-0.5 rounded text-[10px] border ${
+                                  !qs.solved
+                                    ? 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                                    : qs.accuracyPercentage >= 80
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                    : qs.accuracyPercentage >= 50
+                                    ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                                    : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                                }`}
+                              >
+                                س{qs.questionNumber}: {qs.solved ? `${qs.accuracyPercentage}%` : '—'}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1453,6 +1669,292 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 6. Structures (قسم الهياكل) Comprehensive Report */}
+      {reportType === 'structures' && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-7 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h3 className="font-black text-slate-900 dark:text-white text-base sm:text-lg flex items-center gap-2">
+                <Layers className="w-5 h-5 text-amber-500" />
+                <span>تقرير قسم الهياكل وإنجاز الطلاب ونسب صحة الأسئلة</span>
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                تحليل متكامل لعدد الأسئلة المحلولة ونسبة صحة كل سؤال مصنفاً بالصف والفصل والمسار والسنة والمادة وحالة الملف
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                exportStructuresReportExcel(
+                  selectedStructureFilterId === 'الكل'
+                    ? filteredStructuresForReport
+                    : filteredStructuresForReport.filter((s) => s.id === selectedStructureFilterId),
+                  filteredStructureProgressForReport,
+                  students,
+                  {
+                    ...getExportOptions(),
+                    filterLabel: `الفصل: ${selectedTerm} | الحالة: ${selectedEnrollmentStatus} | المسار: ${selectedStructureTrack} | الصف: ${selectedStructureGrade}`,
+                  }
+                )
+              }
+              disabled={filteredStructureProgressForReport.length === 0 && filteredStructuresForReport.length === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition cursor-pointer disabled:opacity-50"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>تصدير تقرير الهياكل إلى Excel</span>
+            </button>
+          </div>
+
+          {/* Sub-filters for Structures Report */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-800 text-xs">
+            <select
+              value={selectedStructureFilterId}
+              onChange={(e) => setSelectedStructureFilterId(e.target.value)}
+              className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
+              title="تصفية حسب الهيكل"
+            >
+              <option value="الكل">كل الهياكل ({filteredStructuresForReport.length})</option>
+              {filteredStructuresForReport.map((st) => (
+                <option key={st.id} value={st.id}>
+                  {st.title} ({st.grade})
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={selectedStructureGrade}
+              onChange={(e) => setSelectedStructureGrade(e.target.value)}
+              className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
+            >
+              <option value="الكل">كل الصفوف</option>
+              {Array.from(new Set(structures.map((s) => s.grade).filter(Boolean))).map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+
+            <select
+              value={selectedStructureTrack}
+              onChange={(e) => setSelectedStructureTrack(e.target.value)}
+              className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
+            >
+              <option value="الكل">كل المسارات</option>
+              {Array.from(new Set(structures.map((s) => s.track).filter(Boolean))).map((tr) => (
+                <option key={tr} value={tr}>{tr}</option>
+              ))}
+            </select>
+
+            <select
+              value={selectedStructureYear}
+              onChange={(e) => setSelectedStructureYear(e.target.value)}
+              className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-mono font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
+            >
+              <option value="الكل">كل السنوات</option>
+              {Array.from(new Set(structures.map((s) => s.academicYear).filter(Boolean))).map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+
+            <select
+              value={selectedStructureSubject}
+              onChange={(e) => setSelectedStructureSubject(e.target.value)}
+              className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
+            >
+              <option value="الكل">كل المواد</option>
+              {Array.from(new Set(structures.map((s) => s.subject).filter(Boolean))).map((sb) => (
+                <option key={sb} value={sb}>{sb}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Summary KPIs */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 text-center">
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-1">
+                عدد الهياكل المطابقة
+              </span>
+              <span className="text-2xl font-black text-slate-900 dark:text-white font-mono tabular-nums">
+                {filteredStructuresForReport.length}
+              </span>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 text-center">
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-1">
+                سجلات الطلاب المرصودة
+              </span>
+              <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono tabular-nums">
+                {filteredStructureProgressForReport.length}
+              </span>
+            </div>
+
+            <div className="p-3.5 bg-amber-500/10 dark:bg-amber-500/15 rounded-2xl border border-amber-500/20 text-center">
+              <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 block mb-1">
+                متوسط الإنجاز (الأسئلة المحلولة)
+              </span>
+              <span className="text-2xl font-black text-amber-600 dark:text-amber-400 font-mono tabular-nums">
+                {filteredStructureProgressForReport.length > 0
+                  ? `${Math.round(
+                      filteredStructureProgressForReport.reduce(
+                        (a, b) => a + (b.completionPercentage || 0),
+                        0
+                      ) / filteredStructureProgressForReport.length
+                    )}%`
+                  : '0%'}
+              </span>
+            </div>
+
+            <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800/60 text-center">
+              <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 block mb-1">
+                متوسط نسبة الصحة العامة
+              </span>
+              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">
+                {filteredStructureProgressForReport.length > 0
+                  ? `${Math.round(
+                      filteredStructureProgressForReport.reduce(
+                        (a, b) => a + (b.overallAccuracyPercentage || 0),
+                        0
+                      ) / filteredStructureProgressForReport.length
+                    )}%`
+                  : '0%'}
+              </span>
+            </div>
+          </div>
+
+          {/* Per-Question Accuracy BarChart */}
+          {activeChartStructure && structureQuestionChartData.length > 0 && (
+            <div className="p-4 bg-slate-50/80 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-bold text-slate-800 dark:text-slate-200">
+                  مخطط متوسط نسبة صحة كل سؤال لهيكل: {activeChartStructure.title}
+                </span>
+                <span className="text-[11px] text-slate-400 font-mono">
+                  ({activeChartStructure.grade} • {activeChartStructure.term} • {activeChartStructure.track})
+                </span>
+              </div>
+              <div className="h-56 w-full" dir="ltr">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={structureQuestionChartData}
+                    margin={{ top: 10, right: 10, left: -20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" opacity={0.4} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#0f172a',
+                        borderRadius: '10px',
+                        border: 'none',
+                        color: '#fff',
+                        fontSize: '12px',
+                        direction: 'rtl',
+                        textAlign: 'right',
+                      }}
+                      formatter={(value: any, _name: any, props: any) => [
+                        `${value}% (${props?.payload?.solvedCount || 0} طالب)`,
+                        'متوسط الصحة',
+                      ]}
+                    />
+                    <Bar dataKey="avgAccuracy" radius={[6, 6, 0, 0]}>
+                      {structureQuestionChartData.map((entry, idx) => (
+                        <Cell key={`struct-q-${idx}`} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Detailed Structures Student Records Table */}
+          {filteredStructureProgressForReport.length === 0 ? (
+            <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 text-slate-400 text-xs">
+              لا توجد سجلات طلاب مسجلة في قسم الهياكل ضمن الفلاتر الحالية. يمكنك رصد حلول الطلاب من تبويب «قسم الهياكل».
+            </div>
+          ) : (
+            <div className="overflow-x-auto border border-slate-200 dark:border-slate-700/80 rounded-2xl">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
+                  <tr>
+                    <th className="py-2.5 px-3 w-10 text-center">#</th>
+                    <th className="py-2.5 px-3">اسم الطالب</th>
+                    <th className="py-2.5 px-3">الهيكل والمادة</th>
+                    <th className="py-2.5 px-3">الصف / الفصل / المسار / السنة</th>
+                    <th className="py-2.5 px-3 text-center">حالة الملف</th>
+                    <th className="py-2.5 px-3 text-center">الأسئلة المحلولة</th>
+                    <th className="py-2.5 px-3 text-center">متوسط الصحة %</th>
+                    <th className="py-2.5 px-3">نسبة صحة كل سؤال</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                  {filteredStructureProgressForReport.map((rec, idx) => {
+                    const studentObj = studentByIdMap.get(rec.studentDocId);
+                    const statusMeta = studentObj
+                      ? ENROLLMENT_STATUS_META[getEffectiveEnrollmentStatus(studentObj)]
+                      : ENROLLMENT_STATUS_META['active'];
+                    return (
+                      <tr
+                        key={rec.id}
+                        onClick={() => studentObj && onOpenStudentProfile(studentObj)}
+                        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
+                      >
+                        <td className="py-2.5 px-3 text-center font-mono text-slate-400">{idx + 1}</td>
+                        <td className="py-2.5 px-3 font-extrabold text-slate-900 dark:text-white">
+                          {rec.studentName}
+                          <div className="text-[10px] font-mono text-slate-400">{rec.studentId}</div>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-bold text-slate-900 dark:text-slate-100">{rec.structureTitle}</div>
+                          <div className="text-[11px] text-amber-600 dark:text-amber-400">{rec.subject}</div>
+                        </td>
+                        <td className="py-2.5 px-3 text-[11px] text-slate-600 dark:text-slate-300">
+                          <div>{rec.grade} • {rec.track}</div>
+                          <div className="text-slate-400">{rec.term} • {rec.academicYear}</div>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border ${statusMeta?.badgeBg} ${statusMeta?.badgeText} ${statusMeta?.badgeBorder}`}
+                          >
+                            {statusMeta?.shortLabel || 'فعال'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono tabular-nums font-bold text-slate-900 dark:text-white">
+                          {rec.solvedCount} / {rec.totalQuestions}
+                          <div className="text-[10px] text-slate-400">{rec.completionPercentage}%</div>
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono tabular-nums font-black text-emerald-600 dark:text-emerald-400">
+                          {rec.overallAccuracyPercentage}%
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex flex-wrap gap-1 font-mono tabular-nums max-w-[300px]">
+                            {(rec.questionScores || []).map((qs) => (
+                              <span
+                                key={qs.questionNumber}
+                                className={`px-1.5 py-0.5 rounded text-[10px] border ${
+                                  !qs.solved
+                                    ? 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                                    : qs.accuracyPercentage >= 80
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                    : qs.accuracyPercentage >= 50
+                                    ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                                    : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                                }`}
+                              >
+                                س{qs.questionNumber}:{qs.solved ? `${qs.accuracyPercentage}%` : '—'}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

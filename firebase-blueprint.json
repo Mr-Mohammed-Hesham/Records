@@ -70,6 +70,55 @@
         "groups": { "type": "array" },
         "subjects": { "type": "array" }
       }
+    },
+    "structures": {
+      "title": "Exam Structures (الهياكل)",
+      "description": "Exam blueprints/structures tagged by grade, term, track, academic year, and subject",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "code": { "type": "string" },
+        "grade": { "type": "string" },
+        "term": { "type": "string" },
+        "track": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "subject": { "type": "string" },
+        "group": { "type": "string" },
+        "date": { "type": "string" },
+        "totalQuestions": { "type": "number" },
+        "questions": { "type": "array" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "structureProgress": {
+      "title": "Student Structure Progress (سجل حل الطالب للهيكل)",
+      "description": "Per-student solved questions count and per-question accuracy percentages for each exam structure",
+      "properties": {
+        "id": { "type": "string" },
+        "structureId": { "type": "string" },
+        "structureTitle": { "type": "string" },
+        "studentDocId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "grade": { "type": "string" },
+        "term": { "type": "string" },
+        "track": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "subject": { "type": "string" },
+        "group": { "type": "string" },
+        "date": { "type": "string" },
+        "totalQuestions": { "type": "number" },
+        "solvedCount": { "type": "number" },
+        "completionPercentage": { "type": "number" },
+        "overallAccuracyPercentage": { "type": "number" },
+        "questionScores": { "type": "array" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
     }
   }
 }
+

@@ -30,8 +30,9 @@ import {
   Monitor,
   BarChart3,
   Check,
+  Layers,
 } from 'lucide-react';
-import { Student, Exam, ExamResult, TeacherSettings, ResultAttachment, StudentEnrollmentStatus } from '../types';
+import { Student, Exam, ExamResult, TeacherSettings, ResultAttachment, StudentEnrollmentStatus, StudentStructureProgress } from '../types';
 import { calculateStudentStats, getGradeRating } from '../utils/grading';
 import { exportSingleStudentAcademicReport, getSavedExcelPreferences, saveExcelPreferences } from '../utils/excel';
 import {
@@ -50,6 +51,7 @@ interface StudentProfileViewProps {
   student: Student;
   exams: Exam[];
   results: ExamResult[];
+  structureProgress?: StudentStructureProgress[];
   settings: TeacherSettings;
   onBack: () => void;
   onEditStudent: (student: Student) => void;
@@ -58,12 +60,14 @@ interface StudentProfileViewProps {
   onUpdateResult: (resultId: string, updatedScore: number, notes: string) => Promise<void>;
   onUpdateResultAttachment?: (resultId: string, attachment: ResultAttachment | null) => Promise<void>;
   onAddScoreForStudent: (student: Student, specificExam?: Exam) => void;
+  onOpenStructures?: () => void;
 }
 
 export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   student,
   exams,
   results,
+  structureProgress = [],
   settings,
   onBack,
   onEditStudent,
@@ -72,6 +76,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   onUpdateResult,
   onUpdateResultAttachment,
   onAddScoreForStudent,
+  onOpenStructures,
 }) => {
   const [editingResultId, setEditingResultId] = useState<string | null>(null);
   const [editScoreVal, setEditScoreVal] = useState<string>('');
@@ -1047,6 +1052,89 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Student Structures (قسم الهياكل) Progress Section */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
+              <Layers className="w-5 h-5 text-amber-500" />
+              <span>سجل الطالب في قسم الهياكل ونسب صحة كل سؤال ({structureProgress.length})</span>
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              متابعة الهياكل المسجلة للطالب وعدد الأسئلة المحلولة ونسبة صحة كل سؤال
+            </p>
+          </div>
+          {onOpenStructures && (
+            <button
+              type="button"
+              onClick={onOpenStructures}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-800 rounded-xl transition cursor-pointer"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>إدارة ورصد في قسم الهياكل</span>
+            </button>
+          )}
+        </div>
+
+        {structureProgress.length === 0 ? (
+          <div className="py-6 text-center text-xs text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+            لا توجد هياكل مرصودة لهذا الطالب حتى الآن.
+          </div>
+        ) : (
+          <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+            <table className="w-full text-right text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
+                <tr>
+                  <th className="py-2.5 px-3">الهيكل</th>
+                  <th className="py-2.5 px-3">الصف / الفصل / المسار / السنة / المادة</th>
+                  <th className="py-2.5 px-3 text-center">الأسئلة المحلولة</th>
+                  <th className="py-2.5 px-3 text-center">متوسط الصحة %</th>
+                  <th className="py-2.5 px-3">نسبة صحة كل سؤال</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {structureProgress.map((rec) => (
+                  <tr key={rec.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+                    <td className="py-2.5 px-3 font-extrabold text-slate-900 dark:text-white">
+                      {rec.structureTitle}
+                    </td>
+                    <td className="py-2.5 px-3 text-[11px] text-slate-600 dark:text-slate-300">
+                      {rec.grade} • {rec.term} • {rec.track} • {rec.academicYear} • {rec.subject}
+                    </td>
+                    <td className="py-2.5 px-3 text-center font-mono tabular-nums font-bold text-slate-900 dark:text-white">
+                      {rec.solvedCount} / {rec.totalQuestions} ({rec.completionPercentage}%)
+                    </td>
+                    <td className="py-2.5 px-3 text-center font-mono tabular-nums font-black text-emerald-600 dark:text-emerald-400">
+                      {rec.overallAccuracyPercentage}%
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <div className="flex flex-wrap gap-1 font-mono tabular-nums">
+                        {(rec.questionScores || []).map((qs) => (
+                          <span
+                            key={qs.questionNumber}
+                            className={`px-1.5 py-0.5 rounded text-[10px] border ${
+                              !qs.solved
+                                ? 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                                : qs.accuracyPercentage >= 80
+                                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                : qs.accuracyPercentage >= 50
+                                ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                                : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                            }`}
+                          >
+                            س{qs.questionNumber}:{qs.solved ? `${qs.accuracyPercentage}%` : '—'}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {showAcademicReportModal && (

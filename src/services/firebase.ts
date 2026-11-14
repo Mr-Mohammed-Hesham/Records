@@ -35,6 +35,8 @@ import {
   ExamResult,
   TeacherSettings,
   ExamType,
+  ExamStructure,
+  StudentStructureProgress,
 } from '../types';
 
 import { DEFAULT_GRADING_SCALE } from '../utils/grading';
@@ -401,6 +403,8 @@ export const CACHE_KEYS = {
   STUDENTS: 'mmh_cached_students',
   RESULTS: 'mmh_cached_results',
   SETTINGS: 'mmh_cached_settings',
+  STRUCTURES: 'mmh_cached_structures',
+  STRUCTURE_PROGRESS: 'mmh_cached_structure_progress',
 };
 
 export function getCachedData<T>(key: string, fallback: T): T {
@@ -453,12 +457,16 @@ export function notifySubscribers(): void {
   const currentExams = getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []);
   const currentResults = getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []);
   const currentSettings = getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS);
+  const currentStructures = getCachedData<ExamStructure[]>(CACHE_KEYS.STRUCTURES, []);
+  const currentStructureProgress = getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []);
 
   const data: RealtimeData = {
     students: currentStudents,
     exams: currentExams,
     results: currentResults,
     settings: currentSettings,
+    structures: currentStructures,
+    structureProgress: currentStructureProgress,
   };
 
   realtimeSubscribers.forEach((cb) => {
@@ -1168,6 +1176,178 @@ export function subscribeToTeacherSettings(
 }
 
 /* =========================================================
+   STRUCTURES (قسم الهياكل وسجلات حل الطلاب)
+   ========================================================= */
+
+export async function getStructures(): Promise<ExamStructure[]> {
+  try {
+    const fetchPromise = getDocs(collection(db, 'structures'));
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 12000)
+    );
+    const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (snapshot) {
+      const items = snapshot.docs.map((item) => ({
+        id: item.id,
+        ...item.data(),
+      })) as ExamStructure[];
+
+      setCachedData(CACHE_KEYS.STRUCTURES, items);
+      return items;
+    }
+  } catch (err) {
+    console.warn('getStructures from Firestore error, fallback to cache:', err);
+  }
+  return getCachedData<ExamStructure[]>(CACHE_KEYS.STRUCTURES, []);
+}
+
+export async function addStructure(
+  structure: Omit<ExamStructure, 'id'>
+): Promise<string> {
+  const docRef = doc(collection(db, 'structures'));
+  const id = docRef.id;
+  const newStructure: ExamStructure = { id, ...structure };
+
+  const current = getCachedData<ExamStructure[]>(CACHE_KEYS.STRUCTURES, []);
+  setCachedData(CACHE_KEYS.STRUCTURES, [newStructure, ...current.filter(s => s.id !== id)]);
+  notifySubscribers();
+
+  try {
+    const cleanData = sanitizeForFirestore(structure);
+    await setDoc(docRef, cleanData, { merge: true });
+  } catch (err) {
+    console.error('Firestore addStructure error (preserved locally):', err);
+  }
+
+  return id;
+}
+
+export async function updateStructure(
+  structureId: string,
+  data: Partial<ExamStructure>
+): Promise<void> {
+  const current = getCachedData<ExamStructure[]>(CACHE_KEYS.STRUCTURES, []);
+  setCachedData(
+    CACHE_KEYS.STRUCTURES,
+    current.map(s => (s.id === structureId ? { ...s, ...data } : s))
+  );
+  notifySubscribers();
+
+  try {
+    const cleanData = sanitizeForFirestore(data);
+    await setDoc(doc(db, 'structures', structureId), cleanData, { merge: true });
+  } catch (err) {
+    console.error('Firestore updateStructure error (updated locally):', err);
+  }
+}
+
+export async function deleteStructure(structureId: string): Promise<void> {
+  const current = getCachedData<ExamStructure[]>(CACHE_KEYS.STRUCTURES, []);
+  setCachedData(
+    CACHE_KEYS.STRUCTURES,
+    current.filter(s => s.id !== structureId)
+  );
+
+  // Also remove associated local progress cache cleanly
+  const currentProgress = getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []);
+  const linkedProgress = currentProgress.filter(p => p.structureId === structureId);
+  setCachedData(
+    CACHE_KEYS.STRUCTURE_PROGRESS,
+    currentProgress.filter(p => p.structureId !== structureId)
+  );
+  notifySubscribers();
+
+  try {
+    const batch = writeBatch(db);
+    linkedProgress.forEach((p) => {
+      batch.delete(doc(db, 'structureProgress', p.id));
+    });
+    batch.delete(doc(db, 'structures', structureId));
+    await batch.commit();
+  } catch (err) {
+    console.error('Firestore deleteStructure error (deleted locally):', err);
+  }
+}
+
+export async function getStructureProgressList(): Promise<StudentStructureProgress[]> {
+  try {
+    const fetchPromise = getDocs(collection(db, 'structureProgress'));
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 12000)
+    );
+    const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (snapshot) {
+      const items = snapshot.docs.map((item) => ({
+        id: item.id,
+        ...item.data(),
+      })) as StudentStructureProgress[];
+
+      setCachedData(CACHE_KEYS.STRUCTURE_PROGRESS, items);
+      return items;
+    }
+  } catch (err) {
+    console.warn('getStructureProgressList from Firestore error, fallback to cache:', err);
+  }
+  return getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []);
+}
+
+export async function saveStudentStructureProgress(
+  progress: Omit<StudentStructureProgress, 'id'> & { id?: string }
+): Promise<StudentStructureProgress> {
+  const docId =
+    progress.id && progress.id.trim() !== ''
+      ? progress.id
+      : `${progress.structureId}__${progress.studentDocId}`;
+
+  const now = new Date().toISOString();
+  const fullRecord: StudentStructureProgress = {
+    ...progress,
+    id: docId,
+    createdAt: progress.createdAt || now,
+    updatedAt: now,
+  };
+
+  const current = getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []);
+  const updated = [
+    fullRecord,
+    ...current.filter(
+      (p) =>
+        p.id !== docId &&
+        !(p.structureId === fullRecord.structureId && p.studentDocId === fullRecord.studentDocId)
+    ),
+  ];
+  setCachedData(CACHE_KEYS.STRUCTURE_PROGRESS, updated);
+  notifySubscribers();
+
+  try {
+    const { id: _ignoreId, ...payload } = fullRecord;
+    const cleanData = sanitizeForFirestore(payload);
+    await setDoc(doc(db, 'structureProgress', docId), cleanData, { merge: true });
+  } catch (err) {
+    console.error('Firestore saveStudentStructureProgress error (preserved locally):', err);
+  }
+
+  return fullRecord;
+}
+
+export async function deleteStudentStructureProgress(progressId: string): Promise<void> {
+  const current = getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []);
+  setCachedData(
+    CACHE_KEYS.STRUCTURE_PROGRESS,
+    current.filter(p => p.id !== progressId)
+  );
+  notifySubscribers();
+
+  try {
+    await deleteDoc(doc(db, 'structureProgress', progressId));
+  } catch (err) {
+    console.error('Firestore deleteStudentStructureProgress error (deleted locally):', err);
+  }
+}
+
+/* =========================================================
    ALL DATA REALTIME
    ========================================================= */
 
@@ -1176,19 +1356,23 @@ export interface RealtimeData {
   exams: Exam[];
   results: ExamResult[];
   settings: TeacherSettings;
+  structures: ExamStructure[];
+  structureProgress: StudentStructureProgress[];
 }
 
 /**
  * مزامنة مباشرة وشاملة مع قاعدة بيانات Firestore
- * تجلب أحدث السجلات (طلاب، امتحانات، نتائج، إعدادات) وتحدث الكاش والمشتركين
+ * تجلب أحدث السجلات (طلاب، امتحانات، نتائج، هياكل، إعدادات) وتحدث الكاش والمشتركين
  */
 export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
   try {
-    const [studentsSnap, examsSnap, resultsSnap, settingsSnap] = await Promise.allSettled([
+    const [studentsSnap, examsSnap, resultsSnap, settingsSnap, structuresSnap, progressSnap] = await Promise.allSettled([
       getDocs(collection(db, 'students')),
       getDocs(collection(db, 'exams')),
       getDocs(collection(db, 'results')),
       getDoc(doc(db, 'settings', SETTINGS_ID)),
+      getDocs(collection(db, 'structures')),
+      getDocs(collection(db, 'structureProgress')),
     ]);
 
     let students = getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
@@ -1237,6 +1421,30 @@ export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
       setCachedData(CACHE_KEYS.SETTINGS, settings);
     }
 
+    let structures = getCachedData<ExamStructure[]>(CACHE_KEYS.STRUCTURES, []);
+    if (structuresSnap.status === 'fulfilled') {
+      const items = structuresSnap.value.docs.map((item) => ({
+        id: item.id,
+        ...item.data(),
+      })) as ExamStructure[];
+      if (items.length > 0 || structures.length === 0) {
+        structures = items;
+        setCachedData(CACHE_KEYS.STRUCTURES, structures);
+      }
+    }
+
+    let structureProgress = getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []);
+    if (progressSnap.status === 'fulfilled') {
+      const items = progressSnap.value.docs.map((item) => ({
+        id: item.id,
+        ...item.data(),
+      })) as StudentStructureProgress[];
+      if (items.length > 0 || structureProgress.length === 0) {
+        structureProgress = items;
+        setCachedData(CACHE_KEYS.STRUCTURE_PROGRESS, structureProgress);
+      }
+    }
+
     notifySubscribers();
 
     return {
@@ -1244,6 +1452,8 @@ export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
       exams,
       results,
       settings,
+      structures,
+      structureProgress,
     };
   } catch (err) {
     console.warn('syncAllDataFromFirestore fallback to cache:', err);
@@ -1252,6 +1462,8 @@ export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
       exams: getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []),
       results: getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []),
       settings: getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS),
+      structures: getCachedData<ExamStructure[]>(CACHE_KEYS.STRUCTURES, []),
+      structureProgress: getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []),
     };
   }
 }
@@ -1269,6 +1481,8 @@ export function subscribeToRealtimeData(
       exams: getCachedData<Exam[]>(CACHE_KEYS.EXAMS, []),
       results: getCachedData<ExamResult[]>(CACHE_KEYS.RESULTS, []),
       settings: getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS),
+      structures: getCachedData<ExamStructure[]>(CACHE_KEYS.STRUCTURES, []),
+      structureProgress: getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []),
     });
   };
   emitCurrent();
@@ -1400,6 +1614,61 @@ export function subscribeToRealtimeData(
     } catch (e) {
       console.warn('Error setting up settings listener:', e);
     }
+    // مستمع الهياكل Structures Listener
+    try {
+      const unsubStructures = onSnapshot(
+        collection(db, 'structures'),
+        (snapshot) => {
+          const firestoreStructures = snapshot.docs.map((item) => ({
+            id: item.id,
+            ...item.data(),
+          })) as ExamStructure[];
+          setCachedData(CACHE_KEYS.STRUCTURES, firestoreStructures);
+          notifySubscribers();
+        },
+        (err) => {
+          console.warn('Realtime structures listener warning:', err.message);
+          if (isSubscribed) {
+            syncAllDataFromFirestore().catch(() => {});
+            const timer = setTimeout(() => {
+              if (isSubscribed) setupRealtimeListeners();
+            }, 5000);
+            retryTimers.push(timer);
+          }
+        }
+      );
+      activeUnsubscribers.push(unsubStructures);
+    } catch (e) {
+      console.warn('Error setting up structures listener:', e);
+    }
+
+    // مستمع تقدم الطلاب بالهياكل StructureProgress Listener
+    try {
+      const unsubStructureProgress = onSnapshot(
+        collection(db, 'structureProgress'),
+        (snapshot) => {
+          const firestoreProgress = snapshot.docs.map((item) => ({
+            id: item.id,
+            ...item.data(),
+          })) as StudentStructureProgress[];
+          setCachedData(CACHE_KEYS.STRUCTURE_PROGRESS, firestoreProgress);
+          notifySubscribers();
+        },
+        (err) => {
+          console.warn('Realtime structureProgress listener warning:', err.message);
+          if (isSubscribed) {
+            syncAllDataFromFirestore().catch(() => {});
+            const timer = setTimeout(() => {
+              if (isSubscribed) setupRealtimeListeners();
+            }, 5000);
+            retryTimers.push(timer);
+          }
+        }
+      );
+      activeUnsubscribers.push(unsubStructureProgress);
+    } catch (e) {
+      console.warn('Error setting up structureProgress listener:', e);
+    }
   };
 
   setupRealtimeListeners();
@@ -1428,6 +1697,8 @@ export async function clearAllData(): Promise<void> {
     'exams',
     'results',
     'settings',
+    'structures',
+    'structureProgress',
   ];
 
   for (const collectionName of collectionNames) {

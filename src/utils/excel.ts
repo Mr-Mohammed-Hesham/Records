@@ -1,5 +1,13 @@
 import * as XLSX from 'xlsx';
-import { Student, Exam, ExamResult, StudentStats, TeacherSettings } from '../types';
+import {
+  Student,
+  Exam,
+  ExamResult,
+  StudentStats,
+  TeacherSettings,
+  ExamStructure,
+  StudentStructureProgress,
+} from '../types';
 import { calculateStudentStats } from './grading';
 import { getEffectiveEnrollmentStatus, ENROLLMENT_STATUS_META, getEffectiveEnrollmentNote } from './studentStatus';
 
@@ -976,3 +984,268 @@ export function exportExamResultsExcel(
   const safeTitle = exam.title.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_');
   XLSX.writeFile(wb, `نتائج_امتحان_${safeTitle}_${exam.date}.xlsx`);
 }
+
+/**
+ * تصدير تقرير قسم الهياكل وسجلات حل الطلاب ونسب صحة كل سؤال إلى Excel
+ */
+export function exportStructuresReportExcel(
+  structures: ExamStructure[],
+  progressRecords: StudentStructureProgress[],
+  students: Student[],
+  customOptions?: ExcelLayoutAndChartOptions & { filterLabel?: string }
+) {
+  const prefs = { ...getSavedExcelPreferences(), ...customOptions };
+  const isMobile = prefs.layoutMode === 'mobile';
+  const includeChart = prefs.includeChart !== false;
+  const studentMap = new Map(students.map((s) => [s.id, s]));
+
+  const wb = XLSX.utils.book_new();
+  const titleHeader =
+    prefs.includeLogoHeader !== false
+      ? '📐 تقرير قسم الهياكل ومتابعة حل الأسئلة ونسب الصحة - سجلات مستر محمد هشام (شعار الهوية المعتمد)'
+      : '📐 تقرير قسم الهياكل ومتابعة حل الأسئلة ونسب الصحة';
+
+  // Sheet 1: ملخص سجلات الطلاب في الهياكل
+  const summaryMeta: any[][] = [
+    [titleHeader, '', '', '', '', ''],
+    [
+      'تاريخ التصدير:',
+      new Date().toLocaleDateString('ar-EG'),
+      'نطاق الفلترة:',
+      customOptions?.filterLabel || 'كافة الهياكل والطلاب المشمولين',
+      'عدد السجلات:',
+      `${progressRecords.length} سجل`,
+    ],
+    [''],
+  ];
+
+  const summaryHeader = isMobile
+    ? [
+        'م',
+        'اسم الطالب',
+        'الهيكل (الصف/الفصل/المسار/المادة)',
+        'المحلول من الهيكل',
+        'متوسط الصحة %',
+      ]
+    : [
+        'م',
+        'اسم الطالب',
+        'كود الطالب',
+        'حالة الملف',
+        'اسم الهيكل',
+        'الصف الدراسي',
+        'الفصل',
+        'المسار',
+        'السنة الدراسية',
+        'المادة',
+        'الشعبة',
+        'الأسئلة المحلولة',
+        'نسبة الإنجاز %',
+        'متوسط نسبة الصحة %',
+        'المؤشر البياني للصحة',
+        'تاريخ الرصد',
+        'ملاحظات',
+      ];
+
+  const summaryRows = progressRecords.map((rec, idx) => {
+    const st = studentMap.get(rec.studentDocId);
+    const statusLabel = st
+      ? ENROLLMENT_STATUS_META[getEffectiveEnrollmentStatus(st)]?.shortLabel || 'فعال'
+      : 'فعال';
+
+    if (isMobile) {
+      return [
+        idx + 1,
+        rec.studentName,
+        `${rec.structureTitle} (${rec.grade} • ${rec.term} • ${rec.track} • ${rec.subject})`,
+        `${rec.solvedCount} / ${rec.totalQuestions} (${rec.completionPercentage}%)`,
+        `${buildVisualScoreBar(rec.overallAccuracyPercentage, true)}`,
+      ];
+    }
+
+    return [
+      idx + 1,
+      rec.studentName,
+      rec.studentId || st?.studentId || '-',
+      statusLabel,
+      rec.structureTitle,
+      rec.grade,
+      rec.term,
+      rec.track,
+      rec.academicYear,
+      rec.subject,
+      rec.group || st?.group || '-',
+      `${rec.solvedCount} / ${rec.totalQuestions}`,
+      `${rec.completionPercentage}%`,
+      `${rec.overallAccuracyPercentage}%`,
+      buildVisualScoreBar(rec.overallAccuracyPercentage, false),
+      rec.date || (rec.updatedAt ? rec.updatedAt.split('T')[0] : '-'),
+      rec.notes || '',
+    ];
+  });
+
+  const wsSummaryRows = [...summaryMeta, summaryHeader, ...summaryRows];
+  const wsSummary = XLSX.utils.aoa_to_sheet(wsSummaryRows);
+  applyWorksheetFormatting(
+    wsSummary,
+    wsSummaryRows.length,
+    isMobile
+      ? [6, 24, 34, 20, 26]
+      : [6, 24, 14, 14, 26, 18, 14, 12, 14, 16, 14, 16, 14, 16, 28, 14, 28],
+    [{ s: { r: 0, c: 0 }, e: { r: 0, c: isMobile ? 4 : 7 } }],
+    isMobile
+  );
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'ملخص الهياكل والطلاب');
+
+  // Sheet 2: تفصيل نسبة صحة كل سؤال (لكل هيكل)
+  const targetStructures = structures.filter((st) =>
+    progressRecords.some((p) => p.structureId === st.id)
+  );
+  const structuresForSheet = targetStructures.length > 0 ? targetStructures : structures;
+
+  if (structuresForSheet.length > 0) {
+    const detailRows: any[][] = [
+      ['📊 تفصيل نسبة صحة كل سؤال حسب الهيكل والطالب', '', '', ''],
+      [''],
+    ];
+
+    let maxColsCount = 7;
+
+    structuresForSheet.forEach((struct) => {
+      const structProgress = progressRecords.filter((p) => p.structureId === struct.id);
+      const qCount = Math.max(1, struct.totalQuestions || struct.questions?.length || 1);
+      maxColsCount = Math.max(maxColsCount, 7 + qCount);
+
+      detailRows.push([
+        `الهيكل: ${struct.title}`,
+        `الصف: ${struct.grade}`,
+        `الفصل: ${struct.term}`,
+        `المسار: ${struct.track}`,
+        `السنة: ${struct.academicYear}`,
+        `المادة: ${struct.subject}`,
+        `إجمالي الأسئلة: ${qCount}`,
+      ]);
+
+      const qHeaders: string[] = [];
+      for (let q = 1; q <= qCount; q++) {
+        const qItem = struct.questions?.find((item) => item.questionNumber === q);
+        qHeaders.push(qItem?.title ? `س${q} (${qItem.title}) %` : `س${q} %`);
+      }
+
+      detailRows.push([
+        'اسم الطالب',
+        'كود الطالب',
+        'الصف / المسار',
+        'الفصل / السنة',
+        'المحلول من الهيكل',
+        'نسبة الإنجاز %',
+        'متوسط الصحة %',
+        ...qHeaders,
+      ]);
+
+      if (structProgress.length === 0) {
+        detailRows.push(['لا توجد سجلات طلاب مسجلة لهذا الهيكل ضمن الفلاتر الحالية']);
+      } else {
+        structProgress.forEach((p) => {
+          const scoreMap = new Map((p.questionScores || []).map((qs) => [qs.questionNumber, qs]));
+          const qCells: string[] = [];
+          for (let q = 1; q <= qCount; q++) {
+            const qs = scoreMap.get(q);
+            if (!qs || !qs.solved) {
+              qCells.push('لم يُحل');
+            } else {
+              qCells.push(`${qs.accuracyPercentage}%`);
+            }
+          }
+          detailRows.push([
+            p.studentName,
+            p.studentId || '-',
+            `${p.grade} (${p.track})`,
+            `${p.term} • ${p.academicYear}`,
+            `${p.solvedCount} / ${p.totalQuestions}`,
+            `${p.completionPercentage}%`,
+            `${p.overallAccuracyPercentage}%`,
+            ...qCells,
+          ]);
+        });
+
+        // Row: Average accuracy per question across students
+        const qAverages: string[] = [];
+        for (let q = 1; q <= qCount; q++) {
+          const solvedEntries = structProgress
+            .map((p) => (p.questionScores || []).find((qs) => qs.questionNumber === q))
+            .filter((qs): qs is NonNullable<typeof qs> => Boolean(qs && qs.solved));
+          if (solvedEntries.length === 0) {
+            qAverages.push('-');
+          } else {
+            const avg = Math.round(
+              solvedEntries.reduce((acc, item) => acc + (Number(item.accuracyPercentage) || 0), 0) /
+                solvedEntries.length
+            );
+            qAverages.push(`${avg}% (${solvedEntries.length} ط)`);
+          }
+        }
+        detailRows.push([
+          'متوسط صحة كل سؤال للدفعة',
+          '-',
+          '-',
+          '-',
+          '-',
+          '-',
+          '-',
+          ...qAverages,
+        ]);
+      }
+
+      detailRows.push(['']);
+    });
+
+    const wsDetails = XLSX.utils.aoa_to_sheet(detailRows);
+    const colWidths = [24, 14, 22, 20, 16, 14, 15, ...Array(Math.max(1, maxColsCount - 7)).fill(14)];
+    applyWorksheetFormatting(wsDetails, detailRows.length, colWidths, [], isMobile);
+    XLSX.utils.book_append_sheet(wb, wsDetails, 'نسب صحة كل سؤال');
+  }
+
+  // Sheet 3: تحليل بصري للأسئلة (إذا كان خيار الرسم البياني مفعلاً)
+  if (includeChart && structuresForSheet.length > 0 && progressRecords.length > 0) {
+    const chartRows: any[][] = [
+      ['📈 المؤشر البياني لنسبة صحة أسئلة الهياكل عبر الطلاب', '', '', ''],
+      ['الهيكل', 'السؤال', 'عدد الطلاب الحالّين', 'متوسط نسبة الصحة والتمثيل البياني'],
+    ];
+
+    structuresForSheet.forEach((struct) => {
+      const structProgress = progressRecords.filter((p) => p.structureId === struct.id);
+      if (structProgress.length === 0) return;
+      const qCount = Math.max(1, struct.totalQuestions || struct.questions?.length || 1);
+      for (let q = 1; q <= qCount; q++) {
+        const qItem = struct.questions?.find((item) => item.questionNumber === q);
+        const solvedEntries = structProgress
+          .map((p) => (p.questionScores || []).find((qs) => qs.questionNumber === q))
+          .filter((qs): qs is NonNullable<typeof qs> => Boolean(qs && qs.solved));
+        const avg =
+          solvedEntries.length > 0
+            ? Math.round(
+                solvedEntries.reduce((acc, item) => acc + (Number(item.accuracyPercentage) || 0), 0) /
+                  solvedEntries.length
+              )
+            : 0;
+        chartRows.push([
+          struct.title,
+          qItem?.title ? `س${q}: ${qItem.title}` : `سؤال ${q}`,
+          `${solvedEntries.length} / ${structProgress.length}`,
+          solvedEntries.length > 0 ? buildVisualScoreBar(avg, isMobile) : 'لم يُحل بعد',
+        ]);
+      }
+    });
+
+    const wsChart = XLSX.utils.aoa_to_sheet(chartRows);
+    applyWorksheetFormatting(wsChart, chartRows.length, [28, 28, 18, 34], [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }], isMobile);
+    XLSX.utils.book_append_sheet(wb, wsChart, 'التحليل البياني للأسئلة');
+  }
+
+  XLSX.writeFile(
+    wb,
+    `تقرير_الهياكل_ونسب_الأسئلة_${new Date().toISOString().split('T')[0]}.xlsx`
+  );
+}
+
