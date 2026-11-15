@@ -24,7 +24,7 @@ import {
   GraduationCap,
   Layers,
 } from 'lucide-react';
-import { Student, Exam, ExamResult, TeacherSettings } from '../types';
+import { Student, Exam, ExamResult, TeacherSettings, ExamStructure, StudentStructureProgress } from '../types';
 import { calculateStudentStats } from '../utils/grading';
 import { DEFAULT_SETTINGS } from '../services/firebase';
 import { getEffectiveEnrollmentStatus, ENROLLMENT_STATUS_META } from '../utils/studentStatus';
@@ -38,6 +38,8 @@ interface DashboardViewProps {
   allResults?: ExamResult[];
   settings?: TeacherSettings;
   structuresCount?: number;
+  structures?: ExamStructure[];
+  structureProgress?: StudentStructureProgress[];
   onNavigate: (tab: 'dashboard' | 'students' | 'exams' | 'structures' | 'scoring' | 'reports' | 'settings') => void;
   onOpenStudentProfile: (student: Student) => void;
   onAddStudent: () => void;
@@ -55,6 +57,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   allResults = [],
   settings = DEFAULT_SETTINGS,
   structuresCount = 0,
+  structures = [],
+  structureProgress = [],
   onNavigate,
   onOpenStudentProfile,
   onAddStudent,
@@ -744,6 +748,8 @@ className="w-full h-full object-cover rounded-[14px]"
         exams={safeExams}
         allResults={safeResults}
         settings={safeSettings}
+        structures={structures}
+        structureProgress={structureProgress}
       />
     </div>
   );

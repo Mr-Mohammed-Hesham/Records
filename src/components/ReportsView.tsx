@@ -1709,6 +1709,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
+                onClick={() => setShowHonorBoardModal(true)}
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-black text-slate-950 bg-gradient-to-r from-amber-300 via-amber-400 to-orange-400 hover:from-amber-200 hover:to-orange-300 rounded-xl transition cursor-pointer shadow-md shadow-amber-500/20"
+                title="تصميم وتصدير لوحة شرف لقسم الهياكل بنفس اللوجو والشعار والتقسيمات"
+              >
+                <Award className="w-4 h-4 text-slate-950" />
+                <span>لوحة شرف الهياكل 📸</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setShowExportModal(true)}
                 className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition cursor-pointer"
               >
@@ -2046,6 +2056,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         exams={exams}
         allResults={allResults}
         settings={settings}
+        structures={structures}
+        structureProgress={structureProgress}
+        initialDataSource={reportType === 'structures' ? 'structures' : 'academic'}
+        initialStructureId={
+          reportType === 'structures' && selectedStructureFilterId !== 'الكل'
+            ? selectedStructureFilterId
+            : undefined
+        }
+        initialGrade={reportType === 'structures' ? selectedStructureGrade : selectedGrade}
+        initialTrack={selectedStructureTrack}
+        initialTerm={selectedTerm}
+        initialSubject={selectedStructureSubject}
+        initialYear={selectedStructureYear}
         initialStartDate={startDate}
         initialEndDate={endDate}
       />

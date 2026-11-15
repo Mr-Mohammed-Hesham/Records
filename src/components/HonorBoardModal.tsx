@@ -31,10 +31,26 @@ import {
   Target
 } from 'lucide-react';
 import { toPng, toBlob } from 'html-to-image';
-import { Student, Exam, ExamResult, TeacherSettings } from '../types';
+import {
+  Student,
+  Exam,
+  ExamResult,
+  TeacherSettings,
+  ExamStructure,
+  StudentStructureProgress,
+} from '../types';
 import { calculateStudentStats } from '../utils/grading';
-import { DEFAULT_SETTINGS } from '../services/firebase';
+import {
+  DEFAULT_SETTINGS,
+  ACADEMIC_TERMS,
+  ACADEMIC_TRACKS,
+  ACADEMIC_YEARS,
+} from '../services/firebase';
+import { getEffectiveEnrollmentStatus } from '../utils/studentStatus';
 import { loadViewState, saveViewState, clearViewState } from '../utils/activityTracker';
+
+export type HonorBoardDataSource = 'academic' | 'structures';
+export type HonorBoardType = 'overall' | 'most_active' | 'combined' | 'exam';
 
 interface HonorBoardModalProps {
   isOpen: boolean;
@@ -43,8 +59,16 @@ interface HonorBoardModalProps {
   exams: Exam[];
   allResults: ExamResult[];
   settings?: TeacherSettings;
+  structures?: ExamStructure[];
+  structureProgress?: StudentStructureProgress[];
+  initialDataSource?: HonorBoardDataSource;
   initialGrade?: string;
   initialExamId?: string;
+  initialStructureId?: string;
+  initialTrack?: string;
+  initialTerm?: string;
+  initialSubject?: string;
+  initialYear?: string;
   initialStartDate?: string;
   initialEndDate?: string;
 }
@@ -56,6 +80,9 @@ interface RankedStudent {
   percentage: number;
   totalExams?: number;
   examTitle?: string;
+  solvedCount?: number;
+  totalQuestions?: number;
+  completionPercentage?: number;
   gradeLabel: string;
 }
 
@@ -94,12 +121,25 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   exams = [],
   allResults = [],
   settings = DEFAULT_SETTINGS,
+  structures = [],
+  structureProgress = [],
+  initialDataSource,
   initialGrade,
   initialExamId,
+  initialStructureId,
+  initialTrack,
+  initialTerm,
+  initialSubject,
+  initialYear,
   initialStartDate,
   initialEndDate,
 }) => {
   const boardRef = useRef<HTMLDivElement>(null);
+
+  const normalizeAllFilter = (val?: string) => {
+    if (!val || val === 'الكل' || val === 'all') return 'all';
+    return val;
+  };
 
   const defaultSignatureName = useMemo(() => {
     if (settings.teacherName?.includes('Mohamed') || settings.teacherName?.includes('محمد')) {
@@ -111,11 +151,13 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   const savedConfig = useMemo(
     () =>
       loadViewState('HONOR_BOARD_CONFIG', {
-        boardType: (initialExamId ? 'exam' : 'overall') as 'overall' | 'most_active' | 'combined' | 'exam',
+        dataSource: (initialDataSource || 'academic') as HonorBoardDataSource,
+        boardType: (initialExamId ? 'exam' : 'overall') as HonorBoardType,
         includeMostActiveSection: true,
         mostActiveLimit: 3,
-        selectedGrade: initialGrade || 'all',
-        selectedTrack: 'all',
+        selectedGrade: normalizeAllFilter(initialGrade),
+        selectedTrack: normalizeAllFilter(initialTrack),
+        excludeCompleted: false,
         limitCount: 5,
         minPercentage: 85,
         boardTheme: 'dark-gold' as 'dark-gold' | 'classic-ivory' | 'royal-blue',
@@ -142,21 +184,85 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     []
   );
 
+  const savedStructuresConfig = useMemo(
+    () =>
+      loadViewState('HONOR_BOARD_STRUCTURES_CONFIG', {
+        boardType: (initialStructureId && initialStructureId !== 'الكل' ? 'exam' : 'overall') as HonorBoardType,
+        includeMostActiveSection: true,
+        mostActiveLimit: 3,
+        selectedStructureId: (initialStructureId && initialStructureId !== 'الكل' ? initialStructureId : structures[0]?.id || ''),
+        selectedGrade: normalizeAllFilter(initialGrade),
+        selectedTrack: normalizeAllFilter(initialTrack),
+        selectedTerm: normalizeAllFilter(initialTerm),
+        selectedYear: normalizeAllFilter(initialYear),
+        selectedSubject: normalizeAllFilter(initialSubject),
+        excludeCompleted: false,
+        limitCount: 5,
+        minPercentage: 85,
+        title: 'لوحة شرف أوائل قسم الهياكل',
+        customSubtitle: '',
+        congratsMessage:
+          'يسرنا تهنئة طلبتنا المتميزين وأولياء أمورهم الكرام على تفوقهم وإتقانهم لحل أسئلة الهياكل بنسب صحة مشرفة، متمنين لهم دوام التألق والريادة الأكاديمية.',
+      }),
+    []
+  );
+
+  const initialSourceResolved: HonorBoardDataSource = initialDataSource || savedConfig.dataSource || 'academic';
+  const [dataSource, setDataSource] = useState<HonorBoardDataSource>(initialSourceResolved);
+
   // Configuration States (Initialized from last saved settings so user continues where they left off)
-  const [boardType, setBoardType] = useState<'overall' | 'most_active' | 'combined' | 'exam'>(
-    initialExamId ? 'exam' : savedConfig.boardType
+  const [boardType, setBoardType] = useState<HonorBoardType>(
+    initialSourceResolved === 'structures'
+      ? (initialStructureId && initialStructureId !== 'الكل' ? 'exam' : savedStructuresConfig.boardType)
+      : (initialExamId ? 'exam' : savedConfig.boardType)
   );
   const [includeMostActiveSection, setIncludeMostActiveSection] = useState<boolean>(
-    savedConfig.includeMostActiveSection
+    initialSourceResolved === 'structures'
+      ? savedStructuresConfig.includeMostActiveSection
+      : savedConfig.includeMostActiveSection
   );
-  const [mostActiveLimit, setMostActiveLimit] = useState<number>(savedConfig.mostActiveLimit);
+  const [mostActiveLimit, setMostActiveLimit] = useState<number>(
+    initialSourceResolved === 'structures'
+      ? savedStructuresConfig.mostActiveLimit
+      : savedConfig.mostActiveLimit
+  );
   const [selectedExamId, setSelectedExamId] = useState<string>(initialExamId || (exams[0]?.id || ''));
-  const [selectedGrade, setSelectedGrade] = useState<string>(initialGrade || savedConfig.selectedGrade || 'all');
-  const [selectedTrack, setSelectedTrack] = useState<string>(savedConfig.selectedTrack || 'all');
+  const [selectedStructureId, setSelectedStructureId] = useState<string>(
+    (initialStructureId && initialStructureId !== 'الكل' ? initialStructureId : savedStructuresConfig.selectedStructureId) ||
+      (structures[0]?.id || '')
+  );
+  const [selectedGrade, setSelectedGrade] = useState<string>(
+    initialGrade !== undefined
+      ? normalizeAllFilter(initialGrade)
+      : (initialSourceResolved === 'structures' ? savedStructuresConfig.selectedGrade : savedConfig.selectedGrade) || 'all'
+  );
+  const [selectedTrack, setSelectedTrack] = useState<string>(
+    initialTrack !== undefined
+      ? normalizeAllFilter(initialTrack)
+      : (initialSourceResolved === 'structures' ? savedStructuresConfig.selectedTrack : savedConfig.selectedTrack) || 'all'
+  );
+  const [selectedTerm, setSelectedTerm] = useState<string>(
+    initialTerm !== undefined ? normalizeAllFilter(initialTerm) : savedStructuresConfig.selectedTerm || 'all'
+  );
+  const [selectedYear, setSelectedYear] = useState<string>(
+    initialYear !== undefined ? normalizeAllFilter(initialYear) : savedStructuresConfig.selectedYear || 'all'
+  );
+  const [selectedSubject, setSelectedSubject] = useState<string>(
+    initialSubject !== undefined ? normalizeAllFilter(initialSubject) : savedStructuresConfig.selectedSubject || 'all'
+  );
+  const [excludeCompleted, setExcludeCompleted] = useState<boolean>(
+    initialSourceResolved === 'structures'
+      ? Boolean(savedStructuresConfig.excludeCompleted)
+      : Boolean(savedConfig.excludeCompleted)
+  );
   const [startDate, setStartDate] = useState<string>(initialStartDate || '');
   const [endDate, setEndDate] = useState<string>(initialEndDate || '');
-  const [limitCount, setLimitCount] = useState<number>(savedConfig.limitCount);
-  const [minPercentage, setMinPercentage] = useState<number>(savedConfig.minPercentage);
+  const [limitCount, setLimitCount] = useState<number>(
+    initialSourceResolved === 'structures' ? savedStructuresConfig.limitCount : savedConfig.limitCount
+  );
+  const [minPercentage, setMinPercentage] = useState<number>(
+    initialSourceResolved === 'structures' ? savedStructuresConfig.minPercentage : savedConfig.minPercentage
+  );
   const [boardTheme, setBoardTheme] = useState<'dark-gold' | 'classic-ivory' | 'royal-blue'>(
     savedConfig.boardTheme
   );
@@ -200,8 +306,12 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   };
 
   // Text & Signature Customization
-  const [title, setTitle] = useState<string>(savedConfig.title);
-  const [customSubtitle, setCustomSubtitle] = useState<string>(savedConfig.customSubtitle);
+  const [title, setTitle] = useState<string>(
+    initialSourceResolved === 'structures' ? savedStructuresConfig.title : savedConfig.title
+  );
+  const [customSubtitle, setCustomSubtitle] = useState<string>(
+    initialSourceResolved === 'structures' ? savedStructuresConfig.customSubtitle : savedConfig.customSubtitle
+  );
   const [teacherName, setTeacherName] = useState<string>(savedConfig.teacherName);
   const [signatureText, setSignatureText] = useState<string>(savedConfig.signatureText);
   const [signatureStyle, setSignatureStyle] = useState<'arabic_calligraphy' | 'cursive_script' | 'official_badge'>(
@@ -209,37 +319,210 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   );
   const [teacherRole, setTeacherRole] = useState<string>(savedConfig.teacherRole);
   const [schoolName, setSchoolName] = useState<string>(savedConfig.schoolName);
-  const [congratsMessage, setCongratsMessage] = useState<string>(savedConfig.congratsMessage);
+  const [congratsMessage, setCongratsMessage] = useState<string>(
+    initialSourceResolved === 'structures' ? savedStructuresConfig.congratsMessage : savedConfig.congratsMessage
+  );
   const [showSignature, setShowSignature] = useState<boolean>(savedConfig.showSignature);
   const [showStamp, setShowStamp] = useState<boolean>(savedConfig.showStamp);
   const [showDate, setShowDate] = useState<boolean>(savedConfig.showDate);
   const [showLogo, setShowLogo] = useState<boolean>(savedConfig.showLogo !== undefined ? savedConfig.showLogo : true);
   const [logoChoice, setLogoChoice] = useState<'institute' | 'teacher'>(savedConfig.logoChoice || 'institute');
 
-  // Auto-save all Honor Board / Knights Board settings whenever changed
+  // Helper to get default title & congrats message by source and board type
+  const getDefaultCopy = (src: HonorBoardDataSource, type: HonorBoardType, targetTitle?: string) => {
+    if (src === 'structures') {
+      if (type === 'most_active') {
+        return {
+          title: 'لوحة شرف فرسان حل أسئلة الهياكل',
+          congrats:
+            'نبارك لأبطال المثابرة وفرسان الالتزام على اجتهادهم المتميز وحل أكبر عدد من أسئلة الهياكل بدقة عالية واستمرارية مشرفة.',
+        };
+      }
+      if (type === 'combined') {
+        return {
+          title: 'لوحة الشرف الشاملة لقسم الهياكل',
+          congrats:
+            'نحتفي بصفوة طلبتنا المتميزين في قسم الهياكل: أوائل نسب الصحة العالية وفرسان الالتزام الأكثر حلاً للأسئلة، فخورون بجهودكم وتفانيكم المستمر.',
+        };
+      }
+      if (type === 'exam') {
+        return {
+          title: targetTitle ? `لوحة شرف أوائل هيكل: ${targetTitle}` : 'لوحة شرف أوائل الهيكل',
+          congrats:
+            'يسرنا تهنئة طلبتنا المتميزين وأولياء أمورهم الكرام على تفوقهم وإتقانهم لحل أسئلة الهياكل بنسب صحة مشرفة، متمنين لهم دوام التألق والريادة الأكاديمية.',
+        };
+      }
+      return {
+        title: 'لوحة شرف أوائل قسم الهياكل',
+        congrats:
+          'يسرنا تهنئة طلبتنا المتميزين وأولياء أمورهم الكرام على تفوقهم وإتقانهم لحل أسئلة الهياكل بنسب صحة مشرفة، متمنين لهم دوام التألق والريادة الأكاديمية.',
+      };
+    }
+
+    if (type === 'most_active') {
+      return {
+        title: 'لوحة شرف فرسان الالتزام والمثابرة',
+        congrats:
+          'نبارك لأبطال المثابرة وفرسان الالتزام على حرصهم الدؤوب ومشاركتهم الفعالة في حل وإنجاز كافة الاختبارات والتقييمات المدرسية باجتهاد وتميز.',
+      };
+    }
+    if (type === 'combined') {
+      return {
+        title: 'لوحة الشرف والتميز الأكاديمي الشاملة',
+        congrats:
+          'نحتفي بصفوة طلبتنا المتميزين: أوائل التفوق العلمي وفرسان الالتزام الأكثر حلاً ومشاركة في الامتحانات، فخورون بجهودكم وتفانيكم المستمر.',
+      };
+    }
+    if (type === 'exam') {
+      return {
+        title: targetTitle ? `لوحة شرف أوائل: ${targetTitle}` : 'لوحة شرف أوائل الامتحان',
+        congrats:
+          'يسرنا تهنئة طلبتنا المتميزين وأولياء أمورهم الكرام على هذا الإنجاز المشرف والتفوق المستحق، متمنين لهم دوام التألق والريادة الأكاديمية.',
+      };
+    }
+    return {
+      title: 'لوحة شرف أوائل الطلبة والمتفوقين',
+      congrats:
+        'يسرنا تهنئة طلبتنا المتميزين وأولياء أمورهم الكرام على هذا الإنجاز المشرف والتفوق المستحق، متمنين لهم دوام التألق والريادة الأكاديمية.',
+    };
+  };
+
+  // Switch between Academic and Structures data sources cleanly while preserving each mode's saved progress
+  const handleDataSourceChange = (nextSource: HonorBoardDataSource) => {
+    if (nextSource === dataSource) return;
+    setDataSource(nextSource);
+    if (nextSource === 'structures') {
+      const latestStruct = loadViewState('HONOR_BOARD_STRUCTURES_CONFIG', savedStructuresConfig);
+      setBoardType(latestStruct.boardType || 'overall');
+      setIncludeMostActiveSection(
+        latestStruct.includeMostActiveSection !== undefined ? latestStruct.includeMostActiveSection : true
+      );
+      setMostActiveLimit(latestStruct.mostActiveLimit || 3);
+      setSelectedStructureId(latestStruct.selectedStructureId || structures[0]?.id || '');
+      setSelectedGrade(latestStruct.selectedGrade || 'all');
+      setSelectedTrack(latestStruct.selectedTrack || 'all');
+      setSelectedTerm(latestStruct.selectedTerm || 'all');
+      setSelectedYear(latestStruct.selectedYear || 'all');
+      setSelectedSubject(latestStruct.selectedSubject || 'all');
+      setExcludeCompleted(Boolean(latestStruct.excludeCompleted));
+      setLimitCount(latestStruct.limitCount !== undefined ? latestStruct.limitCount : 5);
+      setMinPercentage(latestStruct.minPercentage !== undefined ? latestStruct.minPercentage : 85);
+      const defCopy = getDefaultCopy('structures', latestStruct.boardType || 'overall');
+      setTitle(latestStruct.title || defCopy.title);
+      setCustomSubtitle(latestStruct.customSubtitle || '');
+      setCongratsMessage(latestStruct.congratsMessage || defCopy.congrats);
+    } else {
+      const latestAcad = loadViewState('HONOR_BOARD_CONFIG', savedConfig);
+      setBoardType(latestAcad.boardType || 'overall');
+      setIncludeMostActiveSection(
+        latestAcad.includeMostActiveSection !== undefined ? latestAcad.includeMostActiveSection : true
+      );
+      setMostActiveLimit(latestAcad.mostActiveLimit || 3);
+      setSelectedGrade(latestAcad.selectedGrade || 'all');
+      setSelectedTrack(latestAcad.selectedTrack || 'all');
+      setExcludeCompleted(Boolean(latestAcad.excludeCompleted));
+      setLimitCount(latestAcad.limitCount !== undefined ? latestAcad.limitCount : 5);
+      setMinPercentage(latestAcad.minPercentage !== undefined ? latestAcad.minPercentage : 85);
+      const defCopy = getDefaultCopy('academic', latestAcad.boardType || 'overall');
+      setTitle(latestAcad.title || defCopy.title);
+      setCustomSubtitle(latestAcad.customSubtitle || '');
+      setCongratsMessage(latestAcad.congratsMessage || defCopy.congrats);
+    }
+  };
+
+  // Sync context when modal opens from a specific view while always preserving saved progress
   useEffect(() => {
+    if (!isOpen) return;
+    if (initialDataSource) {
+      setDataSource(initialDataSource);
+      if (initialDataSource === 'structures') {
+        const latestStruct = loadViewState('HONOR_BOARD_STRUCTURES_CONFIG', savedStructuresConfig);
+        const nextType: HonorBoardType =
+          latestStruct.boardType || (initialStructureId && initialStructureId !== 'الكل' ? 'exam' : 'overall');
+        setBoardType(nextType);
+        setIncludeMostActiveSection(
+          latestStruct.includeMostActiveSection !== undefined ? latestStruct.includeMostActiveSection : true
+        );
+        setMostActiveLimit(latestStruct.mostActiveLimit || 3);
+        const targetStructId =
+          latestStruct.selectedStructureId ||
+          (initialStructureId && initialStructureId !== 'الكل' ? initialStructureId : structures[0]?.id || '');
+        setSelectedStructureId(targetStructId);
+
+        const normGrade = normalizeAllFilter(initialGrade);
+        const normTrack = normalizeAllFilter(initialTrack);
+        const normTerm = normalizeAllFilter(initialTerm);
+        const normYear = normalizeAllFilter(initialYear);
+        const normSubject = normalizeAllFilter(initialSubject);
+
+        setSelectedGrade(normGrade !== 'all' ? normGrade : latestStruct.selectedGrade || 'all');
+        setSelectedTrack(normTrack !== 'all' ? normTrack : latestStruct.selectedTrack || 'all');
+        setSelectedTerm(normTerm !== 'all' ? normTerm : latestStruct.selectedTerm || 'all');
+        setSelectedYear(normYear !== 'all' ? normYear : latestStruct.selectedYear || 'all');
+        setSelectedSubject(normSubject !== 'all' ? normSubject : latestStruct.selectedSubject || 'all');
+        setExcludeCompleted(Boolean(latestStruct.excludeCompleted));
+        setLimitCount(latestStruct.limitCount !== undefined ? latestStruct.limitCount : 5);
+        setMinPercentage(latestStruct.minPercentage !== undefined ? latestStruct.minPercentage : 85);
+        const targetStructObj = structures.find((s) => s.id === targetStructId);
+        const defCopy = getDefaultCopy('structures', nextType, targetStructObj?.title);
+        setTitle(latestStruct.title || defCopy.title);
+        setCustomSubtitle(latestStruct.customSubtitle || '');
+        setCongratsMessage(latestStruct.congratsMessage || defCopy.congrats);
+      } else {
+        const latestAcad = loadViewState('HONOR_BOARD_CONFIG', savedConfig);
+        const nextType: HonorBoardType = initialExamId ? 'exam' : latestAcad.boardType || 'overall';
+        setBoardType(nextType);
+        if (initialExamId) setSelectedExamId(initialExamId);
+        const normGrade = normalizeAllFilter(initialGrade);
+        const normTrack = normalizeAllFilter(initialTrack);
+        setSelectedGrade(normGrade !== 'all' ? normGrade : latestAcad.selectedGrade || 'all');
+        setSelectedTrack(normTrack !== 'all' ? normTrack : latestAcad.selectedTrack || 'all');
+        setExcludeCompleted(Boolean(latestAcad.excludeCompleted));
+        setLimitCount(latestAcad.limitCount !== undefined ? latestAcad.limitCount : 5);
+        setMinPercentage(latestAcad.minPercentage !== undefined ? latestAcad.minPercentage : 85);
+        const targetExam = exams.find((e) => e.id === initialExamId);
+        const defCopy = getDefaultCopy('academic', nextType, targetExam?.title);
+        setTitle(initialExamId && targetExam ? `لوحة شرف أوائل: ${targetExam.title}` : latestAcad.title || defCopy.title);
+        setCustomSubtitle(latestAcad.customSubtitle || '');
+        setCongratsMessage(latestAcad.congratsMessage || defCopy.congrats);
+      }
+    }
+    if (initialStartDate !== undefined) setStartDate(initialStartDate);
+    if (initialEndDate !== undefined) setEndDate(initialEndDate);
+  }, [isOpen, initialDataSource, initialStructureId, initialExamId, initialGrade, initialTrack, initialTerm, initialYear, initialSubject, initialStartDate, initialEndDate]);
+
+  // Auto-save shared appearance, identity, logo & Academic settings
+  useEffect(() => {
+    const prevAcad = loadViewState('HONOR_BOARD_CONFIG', savedConfig);
     saveViewState('HONOR_BOARD_CONFIG', {
-      boardType,
-      includeMostActiveSection,
-      mostActiveLimit,
-      selectedGrade,
-      selectedTrack,
-      limitCount,
-      minPercentage,
+      ...prevAcad,
+      dataSource,
+      ...(dataSource === 'academic'
+        ? {
+            boardType,
+            includeMostActiveSection,
+            mostActiveLimit,
+            selectedGrade,
+            selectedTrack,
+            excludeCompleted,
+            limitCount,
+            minPercentage,
+            title,
+            customSubtitle,
+            congratsMessage,
+          }
+        : {}),
       boardTheme,
       fontFamily,
       fontSizeScale,
       bgColor,
       textColor,
       accentColor,
-      title,
-      customSubtitle,
       teacherName,
       signatureText,
       signatureStyle,
       teacherRole,
       schoolName,
-      congratsMessage,
       showSignature,
       showStamp,
       showDate,
@@ -247,11 +530,13 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
       logoChoice,
     });
   }, [
+    dataSource,
     boardType,
     includeMostActiveSection,
     mostActiveLimit,
     selectedGrade,
     selectedTrack,
+    excludeCompleted,
     limitCount,
     minPercentage,
     boardTheme,
@@ -275,9 +560,49 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     logoChoice,
   ]);
 
+  // Auto-save Structures-specific Honor Board progress & filters independently
+  useEffect(() => {
+    if (dataSource !== 'structures') return;
+    saveViewState('HONOR_BOARD_STRUCTURES_CONFIG', {
+      boardType,
+      includeMostActiveSection,
+      mostActiveLimit,
+      selectedStructureId,
+      selectedGrade,
+      selectedTrack,
+      selectedTerm,
+      selectedYear,
+      selectedSubject,
+      excludeCompleted,
+      limitCount,
+      minPercentage,
+      title,
+      customSubtitle,
+      congratsMessage,
+    });
+  }, [
+    dataSource,
+    boardType,
+    includeMostActiveSection,
+    mostActiveLimit,
+    selectedStructureId,
+    selectedGrade,
+    selectedTrack,
+    selectedTerm,
+    selectedYear,
+    selectedSubject,
+    excludeCompleted,
+    limitCount,
+    minPercentage,
+    title,
+    customSubtitle,
+    congratsMessage,
+  ]);
+
   // Complete reset to start a brand new board design from scratch
   const handleStartFreshNewDesign = () => {
     clearViewState('HONOR_BOARD_CONFIG');
+    clearViewState('HONOR_BOARD_STRUCTURES_CONFIG');
     setBoardType('overall');
     setIncludeMostActiveSection(true);
     setMostActiveLimit(3);
@@ -285,6 +610,10 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     setLogoChoice('institute');
     setSelectedGrade('all');
     setSelectedTrack('all');
+    setSelectedTerm('all');
+    setSelectedYear('all');
+    setSelectedSubject('all');
+    setExcludeCompleted(false);
     setStartDate('');
     setEndDate('');
     setLimitCount(5);
@@ -295,16 +624,15 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     setBgColor('#070b14');
     setTextColor('#ffffff');
     setAccentColor('#f59e0b');
-    setTitle('لوحة شرف أوائل الطلبة والمتفوقين');
+    const defCopy = getDefaultCopy(dataSource, 'overall');
+    setTitle(defCopy.title);
     setCustomSubtitle('');
     setTeacherName(settings.teacherName || 'Mr. Mohamed Hesham');
     setSignatureText(defaultSignatureName);
     setSignatureStyle('arabic_calligraphy');
     setTeacherRole('معلم المادة');
     setSchoolName('');
-    setCongratsMessage(
-      'يسرنا تهنئة طلبتنا المتميزين وأولياء أمورهم الكرام على هذا الإنجاز المشرف والتفوق المستحق، متمنين لهم دوام التألق والريادة الأكاديمية.'
-    );
+    setCongratsMessage(defCopy.congrats);
     setShowSignature(true);
     setShowStamp(true);
     setShowDate(true);
@@ -321,15 +649,37 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Grade list from settings & students
+  // Grade list from settings, students & structures
   const availableGrades = useMemo(() => {
     const set = new Set<string>();
     settings.grades?.forEach(g => set.add(g));
     students.forEach(s => { if (s.grade) set.add(s.grade); });
+    structures.forEach(s => { if (s.grade) set.add(s.grade); });
     return Array.from(set);
-  }, [settings.grades, students]);
+  }, [settings.grades, students, structures]);
 
-  // Date Filtered Results
+  const availableTracks = useMemo(() => {
+    const set = new Set<string>(ACADEMIC_TRACKS);
+    students.forEach(s => { if (s.track) set.add(s.track); });
+    structures.forEach(s => { if (s.track) set.add(s.track); });
+    return Array.from(set);
+  }, [students, structures]);
+
+  const availableYears = useMemo(() => {
+    const set = new Set<string>(ACADEMIC_YEARS);
+    structures.forEach(s => { if (s.academicYear) set.add(s.academicYear); });
+    structureProgress.forEach(sp => { if (sp.academicYear) set.add(sp.academicYear); });
+    return Array.from(set);
+  }, [structures, structureProgress]);
+
+  const availableSubjects = useMemo(() => {
+    const set = new Set<string>(settings.subjects || []);
+    structures.forEach(s => { if (s.subject) set.add(s.subject); });
+    structureProgress.forEach(sp => { if (sp.subject) set.add(sp.subject); });
+    return Array.from(set);
+  }, [settings.subjects, structures, structureProgress]);
+
+  // Date Filtered Results (Academic)
   const dateFilteredResults = useMemo(() => {
     return allResults.filter(r => {
       const rDate = r.examDate || exams.find(e => e.id === r.examId)?.date || '';
@@ -339,7 +689,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     });
   }, [allResults, exams, startDate, endDate]);
 
-  // Date Filtered Exams
+  // Date Filtered Exams (Academic)
   const filteredExams = useMemo(() => {
     return exams.filter(ex => {
       if (startDate && ex.date && ex.date < startDate) return false;
@@ -347,6 +697,35 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
       return true;
     });
   }, [exams, startDate, endDate]);
+
+  // Filtered Structures & Structure Progress Records
+  const filteredStructuresList = useMemo(() => {
+    return structures.filter(st => {
+      const sDate = st.date || st.createdAt?.split('T')[0] || '';
+      if (startDate && sDate && sDate < startDate) return false;
+      if (endDate && sDate && sDate > endDate) return false;
+      if (selectedGrade !== 'all' && st.grade !== selectedGrade) return false;
+      if (selectedTrack !== 'all' && st.track && st.track !== selectedTrack) return false;
+      if (selectedTerm !== 'all' && st.term && st.term !== selectedTerm) return false;
+      if (selectedYear !== 'all' && st.academicYear && st.academicYear !== selectedYear) return false;
+      if (selectedSubject !== 'all' && st.subject && st.subject !== selectedSubject) return false;
+      return true;
+    });
+  }, [structures, startDate, endDate, selectedGrade, selectedTrack, selectedTerm, selectedYear, selectedSubject]);
+
+  const filteredStructureProgress = useMemo(() => {
+    return structureProgress.filter(rec => {
+      const recDate = rec.date || rec.updatedAt?.split('T')[0] || '';
+      if (startDate && recDate && recDate < startDate) return false;
+      if (endDate && recDate && recDate > endDate) return false;
+      if (selectedGrade !== 'all' && rec.grade !== selectedGrade) return false;
+      if (selectedTrack !== 'all' && rec.track && rec.track !== selectedTrack) return false;
+      if (selectedTerm !== 'all' && rec.term && rec.term !== selectedTerm) return false;
+      if (selectedYear !== 'all' && rec.academicYear && rec.academicYear !== selectedYear) return false;
+      if (selectedSubject !== 'all' && rec.subject && rec.subject !== selectedSubject) return false;
+      return true;
+    });
+  }, [structureProgress, startDate, endDate, selectedGrade, selectedTrack, selectedTerm, selectedYear, selectedSubject]);
 
   // Period label for display on the board
   const periodLabel = useMemo(() => {
@@ -386,7 +765,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     }
   };
 
-  // Selected Exam (if exam mode)
+  // Selected Exam (if academic exam mode)
   const currentExam = useMemo(() => {
     if (filteredExams.length > 0) {
       const match = filteredExams.find(e => e.id === selectedExamId);
@@ -396,38 +775,194 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     return exams.find(e => e.id === selectedExamId) || exams[0] || null;
   }, [filteredExams, exams, selectedExamId]);
 
-  // Handle changing board type with dynamic titles and messages
-  const handleBoardTypeChange = (newType: 'overall' | 'most_active' | 'combined' | 'exam') => {
-    setBoardType(newType);
-    if (newType === 'most_active') {
-      setTitle('لوحة شرف فرسان الالتزام والمثابرة');
-      setCongratsMessage('نبارك لأبطال المثابرة وفرسان الالتزام على حرصهم الدؤوب ومشاركتهم الفعالة في حل وإنجاز كافة الاختبارات والتقييمات المدرسية باجتهاد وتميز.');
-    } else if (newType === 'combined') {
-      setTitle('لوحة الشرف والتميز الأكاديمي الشاملة');
-      setCongratsMessage('نحتفي بصفوة طلبتنا المتميزين: أوائل التفوق العلمي وفرسان الالتزام الأكثر حلاً ومشاركة في الامتحانات، فخورون بجهودكم وتفانيكم المستمر.');
-    } else if (newType === 'overall') {
-      setTitle('لوحة شرف أوائل الطلبة والمتفوقين');
-      setCongratsMessage('يسرنا تهنئة طلبتنا المتميزين وأولياء أمورهم الكرام على هذا الإنجاز المشرف والتفوق المستحق، متمنين لهم دوام التألق والريادة الأكاديمية.');
-    } else if (newType === 'exam') {
-      if (currentExam) {
-        setTitle(`لوحة شرف أوائل: ${currentExam.title}`);
-      } else {
-        setTitle('لوحة شرف أوائل الامتحان');
-      }
+  // Selected Structure (if structures specific-structure mode)
+  const currentStructure = useMemo(() => {
+    if (filteredStructuresList.length > 0) {
+      const match = filteredStructuresList.find(s => s.id === selectedStructureId);
+      if (match) return match;
+      return filteredStructuresList[0];
     }
+    return structures.find(s => s.id === selectedStructureId) || structures[0] || null;
+  }, [filteredStructuresList, structures, selectedStructureId]);
+
+  // Handle changing board type with dynamic titles and messages
+  const handleBoardTypeChange = (newType: HonorBoardType) => {
+    setBoardType(newType);
+    const targetTitle = dataSource === 'structures' ? currentStructure?.title : currentExam?.title;
+    const defCopy = getDefaultCopy(dataSource, newType, targetTitle);
+    setTitle(defCopy.title);
+    setCongratsMessage(defCopy.congrats);
   };
 
-  // Compute Ranked Students
+  // Compute Ranked Students (supports both Academic & Structures modes across all 4 divisions)
   const rankedStudents = useMemo<RankedStudent[]>(() => {
-    if (boardType === 'overall' || boardType === 'combined') {
-      // Overall GPA across date-filtered exams
-      let list = students.filter(st => {
-        if (selectedGrade !== 'all' && st.grade !== selectedGrade) return false;
-        if (selectedTrack !== 'all' && st.track && st.track !== selectedTrack) return false;
+    const baseStudents = students.filter(st => {
+      if (excludeCompleted && getEffectiveEnrollmentStatus(st) === 'completed') return false;
+      if (selectedGrade !== 'all' && st.grade !== selectedGrade) return false;
+      if (selectedTrack !== 'all' && st.track && st.track !== selectedTrack) return false;
+      return true;
+    });
+
+    if (dataSource === 'structures') {
+      if (boardType === 'overall' || boardType === 'combined') {
+        const withStats = baseStudents.map(st => {
+          const recs = filteredStructureProgress.filter(sp => sp.studentDocId === st.id);
+          const count = recs.length;
+          const totalSolved = recs.reduce((acc, r) => acc + (r.solvedCount || 0), 0);
+          const totalQs = recs.reduce((acc, r) => acc + (r.totalQuestions || 0), 0);
+          const avgAccuracy =
+            count > 0
+              ? Math.round((recs.reduce((acc, r) => acc + (r.overallAccuracyPercentage || 0), 0) / count) * 10) / 10
+              : 0;
+          const avgCompletion =
+            totalQs > 0
+              ? Math.round((totalSolved / totalQs) * 1000) / 10
+              : count > 0
+              ? Math.round((recs.reduce((acc, r) => acc + (r.completionPercentage || 0), 0) / count) * 10) / 10
+              : 0;
+
+          return {
+            student: st,
+            percentage: avgAccuracy,
+            score: totalSolved,
+            totalExams: count,
+            solvedCount: totalSolved,
+            totalQuestions: totalQs,
+            completionPercentage: avgCompletion,
+          };
+        });
+
+        const filtered = withStats.filter(item => item.totalExams > 0 && item.percentage >= minPercentage);
+
+        filtered.sort((a, b) => {
+          if (b.percentage !== a.percentage) return b.percentage - a.percentage;
+          if (b.solvedCount !== a.solvedCount) return b.solvedCount - a.solvedCount;
+          return b.totalExams - a.totalExams;
+        });
+
+        const sliced = limitCount > 0 ? filtered.slice(0, limitCount) : filtered;
+
+        return sliced.map((item, idx) => ({
+          rank: idx + 1,
+          student: item.student,
+          score: item.score,
+          percentage: item.percentage,
+          totalExams: item.totalExams,
+          solvedCount: item.solvedCount,
+          totalQuestions: item.totalQuestions,
+          completionPercentage: item.completionPercentage,
+          gradeLabel:
+            item.percentage >= 95
+              ? 'إتقان مع مرتبة الشرف'
+              : item.percentage >= 90
+              ? 'ممتاز مرتفع في الهياكل'
+              : 'متفوق متميز بالهياكل',
+        }));
+      }
+
+      if (boardType === 'most_active') {
+        const withStats = baseStudents.map(st => {
+          const recs = filteredStructureProgress.filter(sp => sp.studentDocId === st.id);
+          const count = recs.length;
+          const totalSolved = recs.reduce((acc, r) => acc + (r.solvedCount || 0), 0);
+          const totalQs = recs.reduce((acc, r) => acc + (r.totalQuestions || 0), 0);
+          const avgAccuracy =
+            count > 0
+              ? Math.round((recs.reduce((acc, r) => acc + (r.overallAccuracyPercentage || 0), 0) / count) * 10) / 10
+              : 0;
+          return {
+            student: st,
+            percentage: avgAccuracy,
+            score: totalSolved,
+            totalExams: count,
+            solvedCount: totalSolved,
+            totalQuestions: totalQs,
+          };
+        });
+
+        const filtered = withStats.filter(item => item.totalExams > 0 && item.solvedCount > 0);
+
+        filtered.sort((a, b) => {
+          if (b.solvedCount !== a.solvedCount) return b.solvedCount - a.solvedCount;
+          if (b.totalExams !== a.totalExams) return b.totalExams - a.totalExams;
+          return b.percentage - a.percentage;
+        });
+
+        const sliced = limitCount > 0 ? filtered.slice(0, limitCount) : filtered;
+
+        return sliced.map((item, idx) => {
+          let roleLabel = 'عضو متميز بحل الهياكل';
+          if (idx === 0) roleLabel = 'بطل الالتزام الأول ⚡';
+          else if (idx === 1) roleLabel = 'فارس المثابرة الثاني 🎯';
+          else if (idx === 2) roleLabel = 'رائد المتابعة الثالث 🌟';
+          else roleLabel = `المركز ${idx + 1} في حل الهياكل`;
+
+          return {
+            rank: idx + 1,
+            student: item.student,
+            score: item.score,
+            percentage: item.percentage,
+            totalExams: item.totalExams,
+            solvedCount: item.solvedCount,
+            totalQuestions: item.totalQuestions,
+            gradeLabel: roleLabel,
+          };
+        });
+      }
+
+      // Specific Structure Top Students
+      if (!currentStructure) return [];
+      const structProgress = structureProgress.filter(sp => {
+        if (sp.structureId !== currentStructure.id) return false;
+        const recDate = sp.date || sp.updatedAt?.split('T')[0] || '';
+        if (startDate && recDate && recDate < startDate) return false;
+        if (endDate && recDate && recDate > endDate) return false;
         return true;
       });
+      const studentMap = new Map<string, Student>();
+      students.forEach(s => studentMap.set(s.id, s));
 
-      const withStats = list.map(st => {
+      const validList: { student: Student; rec: StudentStructureProgress }[] = [];
+      structProgress.forEach(rec => {
+        const st = studentMap.get(rec.studentDocId);
+        if (!st) return;
+        if (excludeCompleted && getEffectiveEnrollmentStatus(st) === 'completed') return;
+        if (selectedGrade !== 'all' && st.grade !== selectedGrade) return;
+        if (selectedTrack !== 'all' && st.track && st.track !== selectedTrack) return;
+        if (rec.overallAccuracyPercentage < minPercentage) return;
+        validList.push({ student: st, rec });
+      });
+
+      validList.sort((a, b) => {
+        if (b.rec.overallAccuracyPercentage !== a.rec.overallAccuracyPercentage) {
+          return b.rec.overallAccuracyPercentage - a.rec.overallAccuracyPercentage;
+        }
+        return (b.rec.solvedCount || 0) - (a.rec.solvedCount || 0);
+      });
+
+      const sliced = limitCount > 0 ? validList.slice(0, limitCount) : validList;
+
+      return sliced.map((item, idx) => ({
+        rank: idx + 1,
+        student: item.student,
+        score: item.rec.solvedCount || 0,
+        percentage: item.rec.overallAccuracyPercentage || 0,
+        solvedCount: item.rec.solvedCount || 0,
+        totalQuestions: item.rec.totalQuestions || currentStructure.totalQuestions,
+        completionPercentage: item.rec.completionPercentage || 0,
+        examTitle: currentStructure.title,
+        gradeLabel:
+          item.rec.overallAccuracyPercentage >= 95
+            ? 'إتقان كامل / امتياز'
+            : item.rec.overallAccuracyPercentage >= 90
+            ? 'ممتاز مرتفع'
+            : 'متفوق متميز',
+      }));
+    }
+
+    // ACADEMIC MODE (القسم العادي)
+    if (boardType === 'overall' || boardType === 'combined') {
+      const withStats = baseStudents.map(st => {
         const studentResults = dateFilteredResults.filter(r => r.studentDocId === st.id);
         const stats = calculateStudentStats(studentResults, settings.gradingScale);
         return {
@@ -438,10 +973,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         };
       });
 
-      // Filter by min percentage and at least 1 exam in the period
       const filtered = withStats.filter(item => item.totalExams > 0 && item.percentage >= minPercentage);
 
-      // Sort by highest percentage, then highest total exams
       filtered.sort((a, b) => {
         if (b.percentage !== a.percentage) return b.percentage - a.percentage;
         return b.totalExams - a.totalExams;
@@ -458,14 +991,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         gradeLabel: item.percentage >= 95 ? 'امتياز مع مرتبة الشرف' : item.percentage >= 90 ? 'ممتاز مرتفع' : 'متفوق متميز',
       }));
     } else if (boardType === 'most_active') {
-      // Most active students ranked by total exams solved
-      let list = students.filter(st => {
-        if (selectedGrade !== 'all' && st.grade !== selectedGrade) return false;
-        if (selectedTrack !== 'all' && st.track && st.track !== selectedTrack) return false;
-        return true;
-      });
-
-      const withStats = list.map(st => {
+      const withStats = baseStudents.map(st => {
         const studentResults = dateFilteredResults.filter(r => r.studentDocId === st.id);
         const stats = calculateStudentStats(studentResults, settings.gradingScale);
         return {
@@ -514,6 +1040,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
       examResults.forEach(r => {
         const st = studentMap.get(r.studentDocId);
         if (!st) return;
+        if (excludeCompleted && getEffectiveEnrollmentStatus(st) === 'completed') return;
         if (selectedGrade !== 'all' && st.grade !== selectedGrade) return;
         if (selectedTrack !== 'all' && st.track && st.track !== selectedTrack) return;
         if (r.percentage < minPercentage) return;
@@ -534,24 +1061,83 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
       }));
     }
   }, [
+    dataSource,
     boardType,
     students,
     dateFilteredResults,
+    filteredStructureProgress,
+    structureProgress,
     selectedGrade,
     selectedTrack,
+    excludeCompleted,
     minPercentage,
     limitCount,
     settings.gradingScale,
     currentExam,
+    currentStructure,
+    startDate,
+    endDate,
   ]);
 
-  // Compute Most Active Students (Solved the Most Exams in the filtered period)
+  // Compute Most Active Students (Solved Most Exams OR Most Structure Questions)
   const mostActiveStudents = useMemo<RankedStudent[]>(() => {
-    let list = students.filter(st => {
+    const list = students.filter(st => {
+      if (excludeCompleted && getEffectiveEnrollmentStatus(st) === 'completed') return false;
       if (selectedGrade !== 'all' && st.grade !== selectedGrade) return false;
       if (selectedTrack !== 'all' && st.track && st.track !== selectedTrack) return false;
       return true;
     });
+
+    if (dataSource === 'structures') {
+      const withStats = list.map(st => {
+        const recs = filteredStructureProgress.filter(sp => sp.studentDocId === st.id);
+        const count = recs.length;
+        const totalSolved = recs.reduce((acc, r) => acc + (r.solvedCount || 0), 0);
+        const totalQs = recs.reduce((acc, r) => acc + (r.totalQuestions || 0), 0);
+        const avgAccuracy =
+          count > 0
+            ? Math.round((recs.reduce((acc, r) => acc + (r.overallAccuracyPercentage || 0), 0) / count) * 10) / 10
+            : 0;
+        return {
+          student: st,
+          percentage: avgAccuracy,
+          score: totalSolved,
+          totalExams: count,
+          solvedCount: totalSolved,
+          totalQuestions: totalQs,
+        };
+      });
+
+      const filtered = withStats.filter(item => item.totalExams > 0 && item.solvedCount > 0);
+
+      filtered.sort((a, b) => {
+        if (b.solvedCount !== a.solvedCount) return b.solvedCount - a.solvedCount;
+        if (b.totalExams !== a.totalExams) return b.totalExams - a.totalExams;
+        return b.percentage - a.percentage;
+      });
+
+      const countToTake = boardType === 'most_active' ? limitCount : mostActiveLimit;
+      const sliced = countToTake > 0 ? filtered.slice(0, countToTake) : filtered;
+
+      return sliced.map((item, idx) => {
+        let roleLabel = 'عضو متميز بالمثابرة';
+        if (idx === 0) roleLabel = 'بطل الالتزام الأول ⚡';
+        else if (idx === 1) roleLabel = 'فارس المثابرة الثاني 🎯';
+        else if (idx === 2) roleLabel = 'رائد المتابعة الثالث 🌟';
+        else roleLabel = `المركز ${idx + 1} في الحل والمثابرة`;
+
+        return {
+          rank: idx + 1,
+          student: item.student,
+          score: item.score,
+          percentage: item.percentage,
+          totalExams: item.totalExams,
+          solvedCount: item.solvedCount,
+          totalQuestions: item.totalQuestions,
+          gradeLabel: roleLabel,
+        };
+      });
+    }
 
     const withStats = list.map(st => {
       const studentResults = dateFilteredResults.filter(r => r.studentDocId === st.id);
@@ -564,10 +1150,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
       };
     });
 
-    // Filter students with at least 1 exam
     const filtered = withStats.filter(item => item.totalExams > 0);
 
-    // Sort primarily by highest total exams solved, then by percentage
     filtered.sort((a, b) => {
       if (b.totalExams !== a.totalExams) return b.totalExams - a.totalExams;
       return b.percentage - a.percentage;
@@ -593,8 +1177,11 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
       };
     });
   }, [
+    dataSource,
     students,
+    excludeCompleted,
     dateFilteredResults,
+    filteredStructureProgress,
     selectedGrade,
     selectedTrack,
     limitCount,
@@ -606,9 +1193,16 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   if (!isOpen) return null;
 
   // Active Subject display
-  const displaySubject = boardType === 'exam' && currentExam
-    ? currentExam.subject
-    : (settings.defaultSubject || 'الرياضيات');
+  const displaySubject =
+    dataSource === 'structures'
+      ? boardType === 'exam' && currentStructure
+        ? currentStructure.subject
+        : selectedSubject !== 'all'
+        ? selectedSubject
+        : settings.defaultSubject || 'الرياضيات'
+      : boardType === 'exam' && currentExam
+      ? currentExam.subject
+      : settings.defaultSubject || 'الرياضيات';
 
   const displayGrade = selectedGrade === 'all'
     ? 'جميع الصفوف'
@@ -617,6 +1211,9 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   const displayTrack = selectedTrack === 'all'
     ? ''
     : `• مسار ${selectedTrack}`;
+
+  const displayTermTag = dataSource === 'structures' && selectedTerm !== 'all' ? ` • ${selectedTerm}` : '';
+  const displayYearTag = dataSource === 'structures' && selectedYear !== 'all' ? ` (${selectedYear})` : '';
 
   const displayDate = new Date().toLocaleDateString('ar-AE', {
     year: 'numeric',
@@ -640,7 +1237,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
       const cleanTitle = title.replace(/\s+/g, '_');
       const cleanGrade = selectedGrade === 'all' ? 'عام' : selectedGrade.replace(/\s+/g, '_');
-      const filename = `لوحة_شرف_${cleanGrade}_${new Date().toISOString().split('T')[0]}.png`;
+      const srcPrefix = dataSource === 'structures' ? 'الهياكل_' : '';
+      const filename = `لوحة_شرف_${srcPrefix}${cleanGrade}_${new Date().toISOString().split('T')[0]}.png`;
 
       const link = document.createElement('a');
       link.download = filename;
@@ -767,33 +1365,53 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     const subjectText = displaySubject;
     const gradeText = selectedGrade === 'all' ? 'أبنائنا وبناتنا' : `طلبة ${selectedGrade}`;
     const periodMsg = periodLabel ? `\n📅 *${periodLabel}*` : '';
+    const sectionLabel = dataSource === 'structures' ? `قسم الهياكل (مادة *${subjectText}*)` : `مادة *${subjectText}*`;
 
     let studentsMsg = '';
     if (boardType === 'most_active') {
-      studentsMsg = `⚡ *فرسان الالتزام والأكثر حلاً للامتحانات:*\n` +
-        rankedStudents
-          .slice(0, 5)
-          .map(s => `🏅 المركز ${s.rank}: ${s.student.name} (${s.totalExams} اختبارات منجزة • معدل ${s.percentage}%)`)
-          .join('\n');
+      if (dataSource === 'structures') {
+        studentsMsg = `⚡ *فرسان الالتزام والأكثر حلاً لأسئلة الهياكل:*\n` +
+          rankedStudents
+            .slice(0, 5)
+            .map(s => `🏅 المركز ${s.rank}: ${s.student.name} (${s.solvedCount || 0} سؤال محلول • ${s.totalExams || 0} هياكل • دقة ${s.percentage}%)`)
+            .join('\n');
+      } else {
+        studentsMsg = `⚡ *فرسان الالتزام والأكثر حلاً للامتحانات:*\n` +
+          rankedStudents
+            .slice(0, 5)
+            .map(s => `🏅 المركز ${s.rank}: ${s.student.name} (${s.totalExams} اختبارات منجزة • معدل ${s.percentage}%)`)
+            .join('\n');
+      }
     } else {
-      studentsMsg = `🌟 *أوائل المتفوقين دراسياً:*\n` +
+      studentsMsg = (dataSource === 'structures' ? `🌟 *أوائل المتفوقين في الهياكل:*\n` : `🌟 *أوائل المتفوقين دراسياً:*\n`) +
         rankedStudents
           .slice(0, 5)
-          .map(s => `🏅 المركز ${s.rank}: ${s.student.name} (${s.percentage}%)`)
+          .map(s =>
+            dataSource === 'structures'
+              ? `🏅 المركز ${s.rank}: ${s.student.name} (صحة ${s.percentage}% • ${s.solvedCount || 0} سؤال)`
+              : `🏅 المركز ${s.rank}: ${s.student.name} (${s.percentage}%)`
+          )
           .join('\n');
 
       if ((boardType === 'combined' || includeMostActiveSection) && mostActiveStudents.length > 0) {
-        studentsMsg += `\n\n⚡ *فرسان الالتزام (الأكثر حلاً للامتحانات):*\n` +
+        studentsMsg +=
+          (dataSource === 'structures'
+            ? `\n\n⚡ *فرسان الالتزام (الأكثر حلاً لأسئلة الهياكل):*\n`
+            : `\n\n⚡ *فرسان الالتزام (الأكثر حلاً للامتحانات):*\n`) +
           mostActiveStudents
             .slice(0, 3)
-            .map(s => `🎯 المركز ${s.rank}: ${s.student.name} (${s.totalExams} اختبارات منجزة)`)
+            .map(s =>
+              dataSource === 'structures'
+                ? `🎯 المركز ${s.rank}: ${s.student.name} (${s.solvedCount || 0} سؤال محلول • ${s.percentage}%)`
+                : `🎯 المركز ${s.rank}: ${s.student.name} (${s.totalExams} اختبارات منجزة)`
+            )
             .join('\n');
       }
     }
 
     const msg = `🏆 *${title}* 🏆\n\n` +
       `السلام عليكم ورحمة الله وبركاته،\n` +
-      `أولياء أمورنا الأفاضل، يسرنا أن نشارككم لوحة الشرف في مادة *${subjectText}* لـ *${gradeText}*${periodMsg} تقديراً لاجتهادهم ومشاركتهم المشرفة:\n\n` +
+      `أولياء أمورنا الأفاضل، يسرنا أن نشارككم لوحة الشرف في ${sectionLabel} لـ *${gradeText}*${periodMsg} تقديراً لاجتهادهم ومشاركتهم المشرفة:\n\n` +
       `${studentsMsg}\n\n` +
       `نسأل الله لأبنائنا وبناتنا دوام التفوق والنجاح الباهر 🌟\n` +
       `مع تحيات: *${teacherName}* (${teacherRole})`;
@@ -874,7 +1492,41 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               </button>
             </div>
 
-            {/* Board Type Selection: Overall, Most Active, Combined, or Single Exam */}
+            {/* Data Source Switcher: Academic Exams vs Structures (قسم الهياكل) */}
+            <div className="bg-slate-800/60 p-2.5 rounded-2xl border border-amber-500/30 space-y-2">
+              <span className="block text-[11px] font-bold text-amber-400">
+                مصدر لوحة الشرف:
+              </span>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleDataSourceChange('academic')}
+                  className={`py-2 px-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                    dataSource === 'academic'
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 border-amber-400 shadow-sm'
+                      : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  <span>القسم العادي (الامتحانات)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDataSourceChange('structures')}
+                  className={`py-2 px-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                    dataSource === 'structures'
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 border-amber-400 shadow-sm'
+                      : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>قسم الهياكل</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Board Type Selection: Overall, Most Active, Combined, or Single Exam/Structure */}
             <div className="bg-slate-800/40 p-2.5 rounded-2xl border border-slate-700/60 space-y-2.5">
               <span className="block text-[11px] font-bold text-amber-400">
                 نوع لوحة الشرف والتكريم:
@@ -929,7 +1581,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   }`}
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5" />
-                  <span>امتحان محدد</span>
+                  <span>{dataSource === 'structures' ? 'هيكل محدد' : 'امتحان محدد'}</span>
                 </button>
               </div>
 
@@ -945,7 +1597,9 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
                       />
                       <span className="text-xs font-bold text-slate-200">
-                        تضمين مراكز أكثر الطلاب حلاً للامتحانات
+                        {dataSource === 'structures'
+                          ? 'تضمين مراكز أكثر الطلاب حلاً لأسئلة الهياكل'
+                          : 'تضمين مراكز أكثر الطلاب حلاً للامتحانات'}
                       </span>
                     </label>
                     <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
@@ -978,8 +1632,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               )}
             </div>
 
-            {/* If Exam chosen, select exam */}
-            {boardType === 'exam' && (
+            {/* If Exam chosen in Academic mode, select exam */}
+            {boardType === 'exam' && dataSource === 'academic' && (
               <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-2">
                 <label className="block text-xs font-bold text-slate-300">
                   اختر الامتحان المراد تصدير أوائله:
@@ -1002,12 +1656,43 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               </div>
             )}
 
+            {/* If Specific Structure chosen in Structures mode, select structure */}
+            {boardType === 'exam' && dataSource === 'structures' && (
+              <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-2">
+                <label className="block text-xs font-bold text-slate-300">
+                  اختر الهيكل المراد تصدير أوائله:
+                </label>
+                <select
+                  value={currentStructure?.id || selectedStructureId}
+                  onChange={(e) => {
+                    const nextId = e.target.value;
+                    setSelectedStructureId(nextId);
+                    const matched = structures.find(s => s.id === nextId);
+                    if (matched) {
+                      setTitle(`لوحة شرف أوائل هيكل: ${matched.title}`);
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-medium text-white focus:ring-2 focus:ring-amber-500/30 text-right cursor-pointer"
+                >
+                  {filteredStructuresList.length > 0 ? (
+                    filteredStructuresList.map(st => (
+                      <option key={st.id} value={st.id}>
+                        {st.title} ({st.grade} - {st.term} - {st.track} • {st.subject})
+                      </option>
+                    ))
+                  ) : (
+                    <option value="" disabled>لا توجد هياكل مطابقة للتصفية الحالية</option>
+                  )}
+                </select>
+              </div>
+            )}
+
             {/* Filter by Date Range (From - To) */}
             <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5" />
-                  <span>الفترة الزمنية للاختبارات (من - إلى)</span>
+                  <span>{dataSource === 'structures' ? 'الفترة الزمنية للهياكل (من - إلى)' : 'الفترة الزمنية للاختبارات (من - إلى)'}</span>
                 </h3>
                 {(startDate || endDate) && (
                   <button
@@ -1082,7 +1767,11 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
               {/* Context info tag */}
               <div className="text-[10px] text-slate-400 flex items-center justify-between pt-0.5">
-                <span>النتائج المشمولة: <strong className="text-amber-400">{dateFilteredResults.length}</strong> درجة</span>
+                {dataSource === 'structures' ? (
+                  <span>سجلات الهياكل المشمولة: <strong className="text-amber-400">{filteredStructureProgress.length}</strong> سجل</span>
+                ) : (
+                  <span>النتائج المشمولة: <strong className="text-amber-400">{dateFilteredResults.length}</strong> درجة</span>
+                )}
                 {periodLabel ? (
                   <span className="text-amber-400 font-mono truncate max-w-[160px]" title={periodLabel}>
                     {periodLabel}
@@ -1093,11 +1782,11 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               </div>
             </div>
 
-            {/* Filter by Grade & Track */}
+            {/* Filter by Grade, Track & Structures Metadata */}
             <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-3">
               <h3 className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                 <Filter className="w-3.5 h-3.5" />
-                <span>تصفية الطلاب</span>
+                <span>تصفية الطلاب والبيانات</span>
               </h3>
 
               <div className="grid grid-cols-2 gap-2">
@@ -1123,11 +1812,56 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right cursor-pointer"
                   >
                     <option value="all">الكل</option>
-                    <option value="عام">عام</option>
-                    <option value="متقدم">متقدم</option>
+                    {availableTracks.map(tr => (
+                      <option key={tr} value={tr}>{tr}</option>
+                    ))}
                   </select>
                 </div>
               </div>
+
+              {dataSource === 'structures' && (
+                <div className="grid grid-cols-3 gap-2 pt-0.5">
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">الفصل:</label>
+                    <select
+                      value={selectedTerm}
+                      onChange={(e) => setSelectedTerm(e.target.value)}
+                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-[11px] text-white text-right cursor-pointer"
+                    >
+                      <option value="all">الكل</option>
+                      {ACADEMIC_TERMS.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">السنة:</label>
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(e.target.value)}
+                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-[11px] text-white text-right cursor-pointer"
+                    >
+                      <option value="all">الكل</option>
+                      {availableYears.map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">المادة:</label>
+                    <select
+                      value={selectedSubject}
+                      onChange={(e) => setSelectedSubject(e.target.value)}
+                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-[11px] text-white text-right cursor-pointer"
+                    >
+                      <option value="all">الكل</option>
+                      {availableSubjects.map(sub => (
+                        <option key={sub} value={sub}>{sub}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <div>
@@ -1156,9 +1890,20 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     <option value={85}>≥ 85% (أوائل ومتميزين)</option>
                     <option value={80}>≥ 80% (جيد جداً فما فوق)</option>
                     <option value={70}>≥ 70% (جميع الناجحين بتفوق)</option>
+                    <option value={60}>≥ 60% (متفوقين ومجتهدين)</option>
                   </select>
                 </div>
               </div>
+
+              <label className="flex items-center gap-2 text-[11px] text-slate-300 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={excludeCompleted}
+                  onChange={(e) => setExcludeCompleted(e.target.checked)}
+                  className="rounded text-amber-500 focus:ring-amber-400 cursor-pointer"
+                />
+                <span>استبعاد الطلبة منتهيي الملف (النشطين فقط)</span>
+              </label>
             </div>
 
             {/* Visual Style Theme & Color Customization */}
@@ -1605,17 +2350,44 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               </div>
             </div>
 
-            {/* Congratulatory note */}
-            <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-2">
-              <label className="block text-xs font-bold text-slate-300">
-                رسالة التهنئة الموجهة لأولياء الأمور:
-              </label>
-              <textarea
-                rows={2}
-                value={congratsMessage}
-                onChange={(e) => setCongratsMessage(e.target.value)}
-                className="w-full p-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-200 text-right focus:ring-1 focus:ring-amber-500"
-              />
+            {/* Title, Subtitle & Congratulatory note */}
+            <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-2.5">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                  العنوان الرئيسي للوحة الشرف:
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white font-bold text-right focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                  العنوان الفرعي / الوصف (اختياري):
+                </label>
+                <input
+                  type="text"
+                  value={customSubtitle}
+                  onChange={(e) => setCustomSubtitle(e.target.value)}
+                  placeholder="يُنشأ تلقائياً إذا تُرك فارغاً..."
+                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-200 text-right focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                  رسالة التهنئة الموجهة لأولياء الأمور:
+                </label>
+                <textarea
+                  rows={2}
+                  value={congratsMessage}
+                  onChange={(e) => setCongratsMessage(e.target.value)}
+                  className="w-full p-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-200 text-right focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
             </div>
           </div>
 
@@ -1623,8 +2395,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
           <div className="lg:col-span-8 flex flex-col items-center">
 
             <div className="w-full flex flex-wrap items-center justify-between gap-2 mb-3 text-xs text-slate-400 px-1">
-              <div className="flex items-center gap-2">
-                <span>معاينة لوحة الشرف قبل التصدير:</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span>معاينة لوحة الشرف ({dataSource === 'structures' ? 'قسم الهياكل' : 'القسم العادي'}):</span>
                 <button
                   type="button"
                   onClick={() => setShowLogo(!showLogo)}
@@ -1633,9 +2405,13 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
                       : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                   }`}
-                  title="إمكانية إضافة أو عدم إضافة لوجو المعهد للوحة الشرف"
+                  title="إمكانية إضافة أو عدم إضافة اللوجو للوحة الشرف"
                 >
-                  {showLogo ? '🖼️ لوجو THE WAY INSTITUTE مفعّل ✔' : '🖼️ بدون إضافة اللوجو'}
+                  {showLogo
+                    ? logoChoice === 'teacher'
+                      ? '🖼️ لوجو الأستاذ مفعّل ✔'
+                      : '🖼️ لوجو THE WAY INSTITUTE مفعّل ✔'
+                    : '🖼️ بدون إضافة اللوجو'}
                 </button>
               </div>
               <span className="text-amber-400 font-bold">
@@ -1768,7 +2544,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         }}
                         className="px-2.5 py-1 font-bold border rounded-lg inline-block"
                       >
-                        {displayGrade} {displayTrack}
+                        {displayGrade} {displayTrack}{displayTermTag}{displayYearTag}
                       </span>
                       {periodLabel && (
                         <div
@@ -1810,19 +2586,31 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       {boardType === 'most_active' ? (
                         <>
                           <Flame className="w-3.5 h-3.5" style={{ color: accentColor }} />
-                          <span>وسام فرسان الالتزام والمثابرة</span>
+                          <span>
+                            {dataSource === 'structures'
+                              ? 'وسام فرسان الالتزام في حل الهياكل'
+                              : 'وسام فرسان الالتزام والمثابرة'}
+                          </span>
                           <Flame className="w-3.5 h-3.5" style={{ color: accentColor }} />
                         </>
                       ) : boardType === 'combined' ? (
                         <>
                           <Crown className="w-3.5 h-3.5" style={{ color: accentColor }} />
-                          <span>وسام الشرف والتميز الأكاديمي الشامل</span>
+                          <span>
+                            {dataSource === 'structures'
+                              ? 'وسام الشرف الشامل لقسم الهياكل'
+                              : 'وسام الشرف والتميز الأكاديمي الشامل'}
+                          </span>
                           <Flame className="w-3.5 h-3.5" style={{ color: accentColor }} />
                         </>
                       ) : (
                         <>
                           <Sparkles className="w-3.5 h-3.5" style={{ color: accentColor }} />
-                          <span>وسام التميز والتفوق المستمر</span>
+                          <span>
+                            {dataSource === 'structures'
+                              ? 'وسام التميز وإتقان الهياكل'
+                              : 'وسام التميز والتفوق المستمر'}
+                          </span>
                           <Sparkles className="w-3.5 h-3.5" style={{ color: accentColor }} />
                         </>
                       )}
@@ -1839,7 +2627,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       {title}
                     </h1>
 
-                    {/* Subtitle / Exam Title */}
+                    {/* Subtitle / Exam or Structure Title */}
                     <p
                       style={{
                         fontFamily: fontFamily,
@@ -1848,7 +2636,15 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       }}
                       className="font-semibold mt-1"
                     >
-                      {boardType === 'exam' && currentExam
+                      {dataSource === 'structures'
+                        ? boardType === 'exam' && currentStructure
+                          ? `نتائج أوائل هيكل: ${currentStructure.title} (إجمالي الأسئلة: ${currentStructure.totalQuestions} سؤال)${periodLabel ? ` • ${periodLabel}` : ''}`
+                          : boardType === 'most_active'
+                          ? customSubtitle || `تكريم الطلاب الأكثر حلاً لأسئلة الهياكل • مادة ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
+                          : boardType === 'combined'
+                          ? customSubtitle || `لوحة شرف الهياكل الشاملة: أوائل نسب الصحة وفرسان حل الأسئلة • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
+                          : customSubtitle || `لوحة شرف قسم الهياكل لأعلى نسب صحة الأسئلة • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
+                        : boardType === 'exam' && currentExam
                         ? `نتائج أوائل: ${currentExam.title} (الدرجة الكاملة: ${currentExam.totalScore})${periodLabel ? ` • ${periodLabel}` : ''}`
                         : boardType === 'most_active'
                         ? customSubtitle || `تكريم الطلاب الأكثر حلاً للاختبارات والمشاركات • مادة ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
@@ -1878,7 +2674,9 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         style={{ fontFamily: fontFamily, color: textColor }}
                         className="text-xs font-bold"
                       >
-                        القسم الأول: أوائل التفوق والامتياز الدراسي
+                        {dataSource === 'structures'
+                          ? 'القسم الأول: أوائل التفوق وإتقان أسئلة الهياكل'
+                          : 'القسم الأول: أوائل التفوق والامتياز الدراسي'}
                       </h2>
                     </div>
                   )}
@@ -1887,7 +2685,9 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   <div className="space-y-2.5 my-3">
                     {rankedStudents.length === 0 ? (
                       <div className="py-10 text-center text-slate-400 text-xs">
-                        لا يوجد طلاب في نطاق التفوق المحدد ({minPercentage}% فأعلى). يمكنك تخفيض نسبة التفوق من الإعدادات.
+                        {dataSource === 'structures'
+                          ? `لا يوجد طلاب في نطاق التفوق المحدد بالهياكل (${minPercentage}% فأعلى). يمكنك تعديل التصفية أو تخفيض النسبة.`
+                          : `لا يوجد طلاب في نطاق التفوق المحدد (${minPercentage}% فأعلى). يمكنك تخفيض نسبة التفوق من الإعدادات.`}
                       </div>
                     ) : (
                       rankedStudents.map((item) => {
@@ -1989,7 +2789,13 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                   }}
                                   className="block font-medium"
                                 >
-                                  {boardType === 'most_active'
+                                  {dataSource === 'structures'
+                                    ? boardType === 'most_active'
+                                      ? `متوسط الصحة: ${item.percentage}% • ${item.totalExams || 0} هياكل`
+                                      : boardType === 'overall' || boardType === 'combined'
+                                      ? `${item.totalExams || 0} هياكل (${item.solvedCount || 0}/${item.totalQuestions || 0} سؤال)`
+                                      : `المحلول: ${item.solvedCount || 0}/${item.totalQuestions || 0} سؤال (إنجاز ${item.completionPercentage || 0}%)`
+                                    : boardType === 'most_active'
                                     ? `متوسط الدرجات: ${item.percentage}%`
                                     : boardType === 'overall' || boardType === 'combined'
                                     ? `${item.totalExams} اختبارات مقيمة`
@@ -2002,7 +2808,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                   backgroundColor: `${accentColor}18`,
                                   borderColor: `${accentColor}40`,
                                 }}
-                                className="border px-3 py-1 rounded-xl text-center min-w-[70px]"
+                                className="border px-3 py-1 rounded-xl text-center min-w-[74px]"
                               >
                                 {boardType === 'most_active' ? (
                                   <>
@@ -2013,7 +2819,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                       }}
                                       className="font-black font-mono block leading-tight"
                                     >
-                                      {item.totalExams} اختبار
+                                      {dataSource === 'structures' ? `${item.solvedCount || 0} سؤال` : `${item.totalExams} اختبار`}
                                     </span>
                                     <span
                                       style={{
@@ -2022,19 +2828,32 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                       }}
                                       className="block font-bold mt-0.5"
                                     >
-                                      تم حلها
+                                      {dataSource === 'structures' ? `في ${item.totalExams || 0} هيكل` : 'تم حلها'}
                                     </span>
                                   </>
                                 ) : (
-                                  <span
-                                    style={{
-                                      color: accentColor,
-                                      fontSize: `${Math.round(16 * (fontSizeScale / 100))}px`
-                                    }}
-                                    className="font-black font-mono block leading-tight"
-                                  >
-                                    {item.percentage}%
-                                  </span>
+                                  <>
+                                    <span
+                                      style={{
+                                        color: accentColor,
+                                        fontSize: `${Math.round(16 * (fontSizeScale / 100))}px`
+                                      }}
+                                      className="font-black font-mono block leading-tight"
+                                    >
+                                      {item.percentage}%
+                                    </span>
+                                    {dataSource === 'structures' && (
+                                      <span
+                                        style={{
+                                          color: isLightBg ? '#64748b' : '#94a3b8',
+                                          fontSize: `${Math.round(9 * (fontSizeScale / 100))}px`
+                                        }}
+                                        className="block font-mono mt-0.5"
+                                      >
+                                        {item.solvedCount || 0}/{item.totalQuestions || 0} س
+                                      </span>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -2044,7 +2863,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     )}
                   </div>
 
-                  {/* Secondary Section: فرسان الالتزام والمثابرة (الأكثر حلاً للامتحانات) */}
+                  {/* Secondary Section: فرسان الالتزام والمثابرة (الأكثر حلاً للامتحانات أو أسئلة الهياكل) */}
                   {(boardType === 'combined' || (boardType === 'overall' && includeMostActiveSection)) && mostActiveStudents.length > 0 && (
                     <div
                       style={{
@@ -2071,7 +2890,9 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                               }}
                               className="font-black leading-tight"
                             >
-                              فرسان الالتزام والمثابرة • الأكثر حلاً للامتحانات
+                              {dataSource === 'structures'
+                                ? 'فرسان الالتزام والمثابرة • الأكثر حلاً لأسئلة الهياكل'
+                                : 'فرسان الالتزام والمثابرة • الأكثر حلاً للامتحانات'}
                             </h2>
                             <p
                               style={{
@@ -2079,7 +2900,9 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                 fontSize: `${Math.round(10 * (fontSizeScale / 100))}px`
                               }}
                             >
-                              تقديراً للحرص الدؤوب والمشاركة الفعالة في إنجاز التقييمات والاختبارات
+                              {dataSource === 'structures'
+                                ? 'تقديراً للحرص الدؤوب والاجتهاد في حل وإنجاز أسئلة الهياكل بدقة متميزة'
+                                : 'تقديراً للحرص الدؤوب والمشاركة الفعالة في إنجاز التقييمات والاختبارات'}
                             </p>
                           </div>
                         </div>
@@ -2164,7 +2987,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                   }}
                                   className="font-black font-mono block leading-none"
                                 >
-                                  {act.totalExams} اختبار
+                                  {dataSource === 'structures' ? `${act.solvedCount || 0} سؤال` : `${act.totalExams} اختبار`}
                                 </span>
                                 <span
                                   style={{
@@ -2173,7 +2996,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                   }}
                                   className="block font-mono mt-0.5"
                                 >
-                                  {act.percentage}%
+                                  {dataSource === 'structures' ? `${act.totalExams || 0} هيكل • ${act.percentage}%` : `${act.percentage}%`}
                                 </span>
                               </div>
                             </div>

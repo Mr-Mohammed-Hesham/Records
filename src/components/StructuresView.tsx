@@ -24,6 +24,7 @@ import {
   AlertCircle,
   Sparkles,
   FileText,
+  Award,
 } from 'lucide-react';
 import {
   Student,
@@ -46,6 +47,7 @@ import {
 } from '../utils/studentStatus';
 import { exportStructuresReportExcel, loadExcelPreferences } from '../utils/excel';
 import { ExcelExportModal } from './ExcelExportModal';
+import { HonorBoardModal } from './HonorBoardModal';
 
 interface StructuresViewProps {
   structures: ExamStructure[];
@@ -93,6 +95,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
   const [isStructureModalOpen, setIsStructureModalOpen] = useState(false);
   const [editingStructure, setEditingStructure] = useState<ExamStructure | null>(null);
   const [isExcelExportModalOpen, setIsExcelExportModalOpen] = useState(false);
+  const [isHonorBoardOpen, setIsHonorBoardOpen] = useState(false);
 
   // Student Question Scoring Modal
   const [scoringModalState, setScoringModalState] = useState<{
@@ -372,6 +375,18 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            id="btn-structures-honor-board"
+            type="button"
+            onClick={() => setIsHonorBoardOpen(true)}
+            disabled={structures.length === 0}
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-black text-slate-950 bg-gradient-to-r from-amber-300 via-amber-400 to-orange-400 hover:from-amber-200 hover:to-orange-300 rounded-xl transition cursor-pointer shadow-md shadow-amber-500/20 disabled:opacity-50 whitespace-nowrap shrink-0"
+            title="تصميم وتصدير لوحات شرف قسم الهياكل باللوجو وشعار المعلم وكافة التقسيمات"
+          >
+            <Award className="w-4 h-4 text-slate-950" />
+            <span>لوحة شرف الهياكل 📸</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setIsExcelExportModalOpen(true)}
@@ -1145,6 +1160,25 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
         defaultSubject={filterSubject}
         defaultStatus={filterStatus}
         defaultStructureId={selectedStructure?.id || 'الكل'}
+      />
+
+      {/* Modal 4: Structures Honor Board Modal */}
+      <HonorBoardModal
+        isOpen={isHonorBoardOpen}
+        onClose={() => setIsHonorBoardOpen(false)}
+        students={students}
+        exams={[]}
+        allResults={[]}
+        settings={settings}
+        structures={structures}
+        structureProgress={structureProgress}
+        initialDataSource="structures"
+        initialStructureId={selectedStructure?.id}
+        initialGrade={filterGrade !== 'الكل' ? filterGrade : 'all'}
+        initialTrack={filterTrack !== 'الكل' ? filterTrack : 'all'}
+        initialTerm={filterTerm !== 'الكل' ? filterTerm : 'all'}
+        initialSubject={filterSubject !== 'الكل' ? filterSubject : 'all'}
+        initialYear={filterYear !== 'الكل' ? filterYear : 'all'}
       />
     </div>
   );

@@ -2648,6 +2648,8 @@ export default function App() {
                 settings
               }
               structuresCount={structures.length}
+              structures={structures}
+              structureProgress={structureProgress}
               onNavigate={(
                 view
               ) => {
