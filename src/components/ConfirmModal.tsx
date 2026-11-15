@@ -8,6 +8,7 @@ interface ConfirmModalProps {
   confirmText?: string;
   cancelText?: string;
   isDestructive?: boolean;
+  zIndexClass?: string;
   onConfirm: () => void | Promise<void>;
   onCancel?: () => void;
   onClose?: () => void;
@@ -20,6 +21,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   confirmText = 'تأكيد',
   cancelText = 'إلغاء',
   isDestructive = true,
+  zIndexClass = 'z-50',
   onConfirm,
   onCancel,
   onClose,
@@ -33,7 +35,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200"
+      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200`}
       onClick={handleCancel}
       dir="rtl"
     >
@@ -43,9 +45,13 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
         className="bg-white dark:bg-slate-900 rounded-3xl max-w-sm sm:max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-100 dark:border-slate-800 text-right animate-in zoom-in-95 duration-200 transition-colors"
       >
         <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
-            <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 rounded-2xl border border-rose-200/50 dark:border-rose-900/50 shrink-0">
-              <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+          <div className={`flex items-center gap-3 ${isDestructive ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`}>
+            <div className={`p-2.5 rounded-2xl border shrink-0 ${
+              isDestructive
+                ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200/50 dark:border-rose-900/50'
+                : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200/60 dark:border-amber-800/60'
+            }`}>
+              <AlertTriangle className={`w-5 h-5 ${isDestructive ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`} />
             </div>
             <h3 className="font-extrabold text-slate-900 dark:text-white text-base sm:text-lg">
               {title}

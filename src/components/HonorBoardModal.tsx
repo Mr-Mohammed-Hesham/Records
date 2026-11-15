@@ -910,15 +910,23 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         });
       }
 
-      // Specific Structure Top Students
+      // Specific Structure Top Students (best/latest attempt per student)
       if (!currentStructure) return [];
-      const structProgress = structureProgress.filter(sp => {
+      const structProgressRaw = structureProgress.filter(sp => {
         if (sp.structureId !== currentStructure.id) return false;
         const recDate = sp.date || sp.updatedAt?.split('T')[0] || '';
         if (startDate && recDate && recDate < startDate) return false;
         if (endDate && recDate && recDate > endDate) return false;
         return true;
       });
+      const structProgressMap = new Map<string, StudentStructureProgress>();
+      structProgressRaw.forEach(sp => {
+        const prev = structProgressMap.get(sp.studentDocId);
+        if (!prev || sp.overallAccuracyPercentage > prev.overallAccuracyPercentage || (sp.overallAccuracyPercentage === prev.overallAccuracyPercentage && (sp.attemptNumber || 1) >= (prev.attemptNumber || 1))) {
+          structProgressMap.set(sp.studentDocId, sp);
+        }
+      });
+      const structProgress = Array.from(structProgressMap.values());
       const studentMap = new Map<string, Student>();
       students.forEach(s => studentMap.set(s.id, s));
 

@@ -20,6 +20,7 @@ import {
   Smartphone,
   Monitor,
   Layers,
+  Sparkles,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -476,9 +477,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   const structureQuestionChartData = useMemo(() => {
     if (!activeChartStructure) return [];
-    const relRecords = filteredStructureProgressForReport.filter(
+    const relRaw = filteredStructureProgressForReport.filter(
       (p) => p.structureId === activeChartStructure.id
     );
+    const latestByStudent = new Map<string, StudentStructureProgress>();
+    relRaw.forEach((p) => {
+      const prev = latestByStudent.get(p.studentDocId);
+      if (!prev || (p.attemptNumber || 1) >= (prev.attemptNumber || 1)) {
+        latestByStudent.set(p.studentDocId, p);
+      }
+    });
+    const relRecords = Array.from(latestByStudent.values());
     const totalQ = Math.max(
       1,
       activeChartStructure.totalQuestions || activeChartStructure.questions?.length || 1
@@ -1941,11 +1950,27 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     const statusMeta = studentObj
                       ? ENROLLMENT_STATUS_META[getEffectiveEnrollmentStatus(studentObj)]
                       : ENROLLMENT_STATUS_META['active'];
+                    const isImp =
+                      Boolean(rec.isImprovement) ||
+                      (rec.attemptNumber !== undefined && rec.attemptNumber > 1);
+                    const prevAcc = rec.previousAccuracy;
+                    const accDiff =
+                      isImp && prevAcc !== undefined
+                        ? Math.round((rec.overallAccuracyPercentage - prevAcc) * 10) / 10
+                        : null;
+                    const qImpCount =
+                      rec.improvementsCount ??
+                      (rec.questionScores || []).filter(
+                        (qs) => qs.isImprovement || (qs.attemptNumber !== undefined && qs.attemptNumber > 1)
+                      ).length;
+
                     return (
                       <tr
                         key={rec.id}
                         onClick={() => studentObj && onOpenStudentProfile(studentObj)}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
+                        className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors ${
+                          isImp ? 'bg-amber-50/40 dark:bg-amber-950/20 border-r-4 border-r-amber-500' : ''
+                        }`}
                       >
                         <td className="py-2.5 px-3 text-center font-mono text-slate-400">{idx + 1}</td>
                         <td className="py-2.5 px-3 font-extrabold text-slate-900 dark:text-white">
@@ -1955,6 +1980,40 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                         <td className="py-2.5 px-3">
                           <div className="font-bold text-slate-900 dark:text-slate-100">{rec.structureTitle}</div>
                           <div className="text-[11px] text-amber-600 dark:text-amber-400">{rec.subject}</div>
+                          {(isImp || qImpCount > 0) && (
+                            <div className="flex items-center gap-1 flex-wrap mt-1">
+                              {isImp && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                                  <Sparkles className="w-2.5 h-2.5 text-amber-600" />
+                                  {rec.attemptLabel || `تحسين (محاولة ${rec.attemptNumber || 2})`}
+                                </span>
+                              )}
+                              {prevAcc !== undefined && (
+                                <span className="text-[10px] font-mono text-slate-400">
+                                  (السابقة: {prevAcc}%)
+                                </span>
+                              )}
+                              {accDiff !== null && (
+                                <span
+                                  className={`text-[10px] font-mono font-bold ${
+                                    accDiff > 0
+                                      ? 'text-emerald-600'
+                                      : accDiff < 0
+                                      ? 'text-rose-600'
+                                      : 'text-slate-500'
+                                  }`}
+                                >
+                                  {accDiff > 0 ? `+${accDiff}% ↑` : `${accDiff}%`}
+                                </span>
+                              )}
+                              {qImpCount > 0 && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                                  <Sparkles className="w-2.5 h-2.5" />
+                                  {qImpCount} سؤال محسّن
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="py-2.5 px-3 text-[11px] text-slate-600 dark:text-slate-300">
                           <div>{rec.grade} • {rec.track}</div>
@@ -1976,22 +2035,34 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                         </td>
                         <td className="py-2.5 px-3">
                           <div className="flex flex-wrap gap-1 font-mono tabular-nums max-w-[300px]">
-                            {(rec.questionScores || []).map((qs) => (
-                              <span
-                                key={qs.questionNumber}
-                                className={`px-1.5 py-0.5 rounded text-[10px] border ${
-                                  !qs.solved
-                                    ? 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
-                                    : qs.accuracyPercentage >= 80
-                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                                    : qs.accuracyPercentage >= 50
-                                    ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                                    : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
-                                }`}
-                              >
-                                س{qs.questionNumber}:{qs.solved ? `${qs.accuracyPercentage}%` : '—'}
-                              </span>
-                            ))}
+                            {(rec.questionScores || []).map((qs) => {
+                              const isQImp =
+                                Boolean(qs.isImprovement) ||
+                                (qs.attemptNumber !== undefined && qs.attemptNumber > 1);
+                              return (
+                                <span
+                                  key={qs.questionNumber}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] border ${
+                                    isQImp ? 'ring-1 ring-amber-400 dark:ring-amber-600 ' : ''
+                                  }${
+                                    !qs.solved
+                                      ? 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                                      : qs.accuracyPercentage >= 80
+                                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                      : qs.accuracyPercentage >= 50
+                                      ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                                      : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                                  }`}
+                                  title={
+                                    isQImp && qs.previousAccuracy !== undefined
+                                      ? `سؤال ${qs.questionNumber}: ${qs.accuracyPercentage}% (تحسين من ${qs.previousAccuracy}% • محاولة ${qs.attemptNumber || 2})`
+                                      : `سؤال ${qs.questionNumber}: ${qs.solved ? `${qs.accuracyPercentage}%` : 'لم يُحل'}`
+                                  }
+                                >
+                                  س{qs.questionNumber}:{qs.solved ? `${qs.accuracyPercentage}%${isQImp ? '↑' : ''}` : '—'}
+                                </span>
+                              );
+                            })}
                           </div>
                         </td>
                       </tr>

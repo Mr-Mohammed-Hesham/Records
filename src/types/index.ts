@@ -192,15 +192,30 @@ export interface ExamStructure {
   updatedAt?: string;
 }
 
+export interface StructureQuestionAttempt {
+  attemptNumber: number; // 1 للمحاولة الأساسية، 2 للتحسين، 3، إلخ
+  attemptLabel?: string; // e.g. "المحاولة الأساسية" أو "تحسين درجة (محاولة 2)"
+  accuracyPercentage: number;
+  previousAccuracy?: number;
+  date?: string;
+  notes?: string;
+}
+
 export interface StructureQuestionScore {
   questionNumber: number;
   solved: boolean; // هل قام الطالب بحل السؤال؟
   accuracyPercentage: number; // نسبة صحة السؤال (0 إلى 100)
   notes?: string;
+  // حقول تحسين الدرجات على مستوى السؤال
+  attemptNumber?: number; // 1 للمحاولة الأساسية، 2 للتحسين، 3، إلخ
+  attemptLabel?: string;
+  isImprovement?: boolean;
+  previousAccuracy?: number; // نسبة الصحة السابقة قبل التحسين
+  attempts?: StructureQuestionAttempt[]; // سجل محاولات التحسين التفصيلي لهذا السؤال
 }
 
 export interface StudentStructureProgress {
-  id: string; // `${structureId}__${studentDocId}` أو Firestore doc ID
+  id: string; // `${structureId}__${studentDocId}` للمحاولة الأساسية أو `${structureId}__${studentDocId}__attempt_N` للتحسين
   structureId: string;
   structureTitle: string;
   studentDocId: string; // Firestore doc ID للطالب
@@ -218,6 +233,13 @@ export interface StudentStructureProgress {
   completionPercentage: number; // نسبة إتمام الحل من الهيكل %
   overallAccuracyPercentage: number; // متوسط نسبة صحة الأسئلة المحلولة %
   questionScores: StructureQuestionScore[]; // نسبة صحة وحل كل سؤال على حدة
+  // حقول تحسين الدرجات على مستوى الطالب في الهيكل (مثل الامتحانات العادية تماماً)
+  attemptNumber?: number; // 1 للمحاولة الأساسية، 2 للتحسين، 3، إلخ
+  attemptLabel?: string; // e.g. "المحاولة الأساسية" أو "تحسين درجة (محاولة 2)"
+  isImprovement?: boolean; // هل هذه محاولة تحسين للهيكل؟
+  previousAccuracy?: number; // متوسط الصحة السابق قبل التحسين %
+  previousSolvedCount?: number; // عدد الأسئلة المحلولة في المحاولة السابقة
+  improvementsCount?: number; // عدد الأسئلة المحسّنة داخل هذا السجل
   notes?: string;
   createdAt: string;
   updatedAt?: string;

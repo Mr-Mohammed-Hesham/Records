@@ -5,26 +5,19 @@ import {
   Search,
   Edit3,
   Trash2,
-  CheckCircle2,
   X,
   Save,
   FileSpreadsheet,
-  Users,
-  BookOpen,
-  Calendar,
-  Compass,
-  Filter,
-  CheckSquare,
-  Square,
   Sliders,
   BarChart3,
-  ChevronRight,
-  ChevronLeft,
   UserCheck,
-  AlertCircle,
   Sparkles,
-  FileText,
   Award,
+  CheckSquare,
+  Square,
+  Users,
+  History,
+  RotateCcw,
 } from 'lucide-react';
 import {
   Student,
@@ -45,9 +38,20 @@ import {
   getEffectiveEnrollmentStatus,
   ENROLLMENT_STATUS_META,
 } from '../utils/studentStatus';
+import {
+  loadViewState,
+  saveViewState,
+  recordLastActivity,
+  saveStructureFormDraft,
+  loadStructureFormDraft,
+  clearStructureFormDraft,
+} from '../utils/activityTracker';
 import { exportStructuresReportExcel, loadExcelPreferences } from '../utils/excel';
 import { ExcelExportModal } from './ExcelExportModal';
 import { HonorBoardModal } from './HonorBoardModal';
+import { StudentStructureScoringModal } from './StudentStructureScoringModal';
+import { BatchStructureScoringModal } from './BatchStructureScoringModal';
+import { ConfirmModal } from './ConfirmModal';
 
 interface StructuresViewProps {
   structures: ExamStructure[];
@@ -60,6 +64,9 @@ interface StructuresViewProps {
   onSaveProgress: (
     data: Omit<StudentStructureProgress, 'id'> & { id?: string }
   ) => Promise<StudentStructureProgress>;
+  onSaveBatchProgress?: (
+    records: Array<Omit<StudentStructureProgress, 'id'> & { id?: string }>
+  ) => Promise<StudentStructureProgress[]>;
   onDeleteProgress: (progress: StudentStructureProgress) => void;
   onOpenStudentProfile: (student: Student) => void;
 }
@@ -73,23 +80,47 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
   onUpdateStructure,
   onDeleteStructure,
   onSaveProgress,
+  onSaveBatchProgress,
   onDeleteProgress,
   onOpenStudentProfile,
 }) => {
-  // Global filters for الهياكل
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterGrade, setFilterGrade] = useState('الكل');
-  const [filterTerm, setFilterTerm] = useState('الكل');
-  const [filterTrack, setFilterTrack] = useState('الكل');
-  const [filterYear, setFilterYear] = useState('الكل');
-  const [filterSubject, setFilterSubject] = useState('الكل');
-  const [filterStatus, setFilterStatus] = useState('exclude_completed');
-  const [studentListScope, setStudentListScope] = useState<'matching' | 'all' | 'recorded_only'>('matching');
+  const initialPersisted = useMemo(
+    () =>
+      loadViewState('STRUCTURES_VIEW_STATE', {
+        searchQuery: '',
+        filterGrade: 'الكل',
+        filterTerm: 'الكل',
+        filterTrack: 'الكل',
+        filterYear: 'الكل',
+        filterSubject: 'الكل',
+        filterStatus: 'exclude_completed',
+        studentListScope: 'matching' as 'matching' | 'all' | 'recorded_only',
+        selectedStructureId: structures[0]?.id || '',
+      }),
+    []
+  );
+
+  // Global filters for الهياكل (with automatic persistence)
+  const [searchQuery, setSearchQuery] = useState(initialPersisted.searchQuery);
+  const [filterGrade, setFilterGrade] = useState(initialPersisted.filterGrade);
+  const [filterTerm, setFilterTerm] = useState(initialPersisted.filterTerm);
+  const [filterTrack, setFilterTrack] = useState(initialPersisted.filterTrack);
+  const [filterYear, setFilterYear] = useState(initialPersisted.filterYear);
+  const [filterSubject, setFilterSubject] = useState(initialPersisted.filterSubject);
+  const [filterStatus, setFilterStatus] = useState(initialPersisted.filterStatus);
+  const [studentListScope, setStudentListScope] = useState<'matching' | 'all' | 'recorded_only'>(
+    initialPersisted.studentListScope
+  );
 
   // Selected Structure ID
   const [selectedStructureId, setSelectedStructureId] = useState<string>(
-    structures[0]?.id || ''
+    initialPersisted.selectedStructureId || structures[0]?.id || ''
   );
+
+  // Multi-student batch selection states
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+  const [selectCountInput, setSelectCountInput] = useState<number>(5);
+  const [isBatchScoringOpen, setIsBatchScoringOpen] = useState(false);
 
   // Create/Edit Structure Modal
   const [isStructureModalOpen, setIsStructureModalOpen] = useState(false);
@@ -97,22 +128,53 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
   const [isExcelExportModalOpen, setIsExcelExportModalOpen] = useState(false);
   const [isHonorBoardOpen, setIsHonorBoardOpen] = useState(false);
 
-  // Student Question Scoring Modal
+  // Student Question Scoring & Improvement Modal
   const [scoringModalState, setScoringModalState] = useState<{
     isOpen: boolean;
     structure: ExamStructure | null;
     student: Student | null;
     existingProgress: StudentStructureProgress | null;
+    isNewImprovementAttempt?: boolean;
+    baselineProgress?: StudentStructureProgress | null;
+    nextAttemptNumber?: number;
   }>({
     isOpen: false,
     structure: null,
     student: null,
     existingProgress: null,
+    isNewImprovementAttempt: false,
+    baselineProgress: null,
+    nextAttemptNumber: 2,
   });
 
   // Add Student Quick Picker inside Selected Structure
   const [studentPickerSearch, setStudentPickerSearch] = useState('');
   const [showAddAnyStudentPicker, setShowAddAnyStudentPicker] = useState(false);
+
+  // Persist StructuresView filters & selected structure whenever they change
+  useEffect(() => {
+    saveViewState('STRUCTURES_VIEW_STATE', {
+      searchQuery,
+      filterGrade,
+      filterTerm,
+      filterTrack,
+      filterYear,
+      filterSubject,
+      filterStatus,
+      studentListScope,
+      selectedStructureId,
+    });
+  }, [
+    searchQuery,
+    filterGrade,
+    filterTerm,
+    filterTrack,
+    filterYear,
+    filterSubject,
+    filterStatus,
+    studentListScope,
+    selectedStructureId,
+  ]);
 
   const gradesList = useMemo(() => {
     const base = settings?.grades && settings.grades.length > 0 ? settings.grades : UAE_GRADES;
@@ -174,6 +236,20 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
     [filteredStructures, selectedStructureId]
   );
 
+  // Reset multi-selection when switching structure and record latest activity
+  useEffect(() => {
+    setSelectedStudentIds(new Set());
+    if (selectedStructure) {
+      recordLastActivity({
+        view: 'structures',
+        tab: 'structures',
+        structureId: selectedStructure.id,
+        structureTitle: selectedStructure.title,
+        actionLabel: `قسم الهياكل: ${selectedStructure.title}`,
+      });
+    }
+  }, [selectedStructure?.id]);
+
   // Student map for quick lookups
   const studentMap = useMemo(() => new Map(students.map((s) => [s.id, s])), [students]);
 
@@ -183,25 +259,56 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
     return structureProgress.filter((p) => p.structureId === selectedStructure.id);
   }, [structureProgress, selectedStructure]);
 
-  // Filtered students visible in the selected structure workspace
+  // Latest progress per student for cohort analytics (uses most recent improved attempt)
+  const latestStructureProgress = useMemo(() => {
+    const map = new Map<string, StudentStructureProgress>();
+    selectedStructureProgress.forEach((p) => {
+      const prev = map.get(p.studentDocId);
+      if (!prev) {
+        map.set(p.studentDocId, p);
+        return;
+      }
+      const prevAtt = prev.attemptNumber || 1;
+      const curAtt = p.attemptNumber || 1;
+      if (
+        curAtt > prevAtt ||
+        (curAtt === prevAtt &&
+          new Date(p.updatedAt || p.createdAt || 0).getTime() >=
+            new Date(prev.updatedAt || prev.createdAt || 0).getTime())
+      ) {
+        map.set(p.studentDocId, p);
+      }
+    });
+    return Array.from(map.values());
+  }, [selectedStructureProgress]);
+
+  // Progress attempts grouped by studentDocId (ascending by attemptNumber)
+  const progressByStudentMap = useMemo(() => {
+    const map = new Map<string, StudentStructureProgress[]>();
+    selectedStructureProgress.forEach((p) => {
+      const list = map.get(p.studentDocId) || [];
+      list.push(p);
+      map.set(p.studentDocId, list);
+    });
+    map.forEach((list) => {
+      list.sort((a, b) => (a.attemptNumber || 1) - (b.attemptNumber || 1));
+    });
+    return map;
+  }, [selectedStructureProgress]);
+
+  // Filtered students visible in the selected structure workspace (expanding multiple attempts like ScoreEntryModal)
   const workspaceStudentRows = useMemo(() => {
     if (!selectedStructure) return [];
 
-    const progressByStudentId = new Map<string, StudentStructureProgress>();
-    selectedStructureProgress.forEach((p) => {
-      progressByStudentId.set(p.studentDocId, p);
-    });
-
-    // Combine registered students + any orphaned progress records safely
+    // Combine registered students with multi-attempt expansion
     const matchingStudents = students.filter((st) => {
-      // Status filter
       const effStatus = getEffectiveEnrollmentStatus(st);
       if (filterStatus === 'exclude_completed' && effStatus === 'completed') return false;
       if (filterStatus !== 'الكل' && filterStatus !== 'exclude_completed' && effStatus !== filterStatus) {
         return false;
       }
 
-      const hasProgress = progressByStudentId.has(st.id);
+      const hasProgress = progressByStudentMap.has(st.id);
       if (studentListScope === 'recorded_only') {
         return hasProgress;
       }
@@ -209,8 +316,6 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
         return true;
       }
 
-      // 'matching' scope: if student already has progress for this structure, always include;
-      // otherwise match grade (and optionally term/track/year if defined on student)
       if (hasProgress) return true;
       if (st.grade !== selectedStructure.grade) return false;
       if (st.term && selectedStructure.term && st.term !== selectedStructure.term) return false;
@@ -235,33 +340,123 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
       );
     });
 
-    return filteredBySearch
-      .map((student) => ({
-        student,
-        progress: progressByStudentId.get(student.id) || null,
-      }))
-      .sort((a, b) => {
-        if (a.progress && !b.progress) return -1;
-        if (!a.progress && b.progress) return 1;
-        if (a.progress && b.progress) {
-          return b.progress.overallAccuracyPercentage - a.progress.overallAccuracyPercentage;
+    const sortedStudents = [...filteredBySearch].sort((a, b) => {
+      const listA = progressByStudentMap.get(a.id);
+      const listB = progressByStudentMap.get(b.id);
+      if (listA && !listB) return -1;
+      if (!listA && listB) return 1;
+      if (listA && listB) {
+        const latestA = listA[listA.length - 1];
+        const latestB = listB[listB.length - 1];
+        if (latestB.overallAccuracyPercentage !== latestA.overallAccuracyPercentage) {
+          return latestB.overallAccuracyPercentage - latestA.overallAccuracyPercentage;
         }
-        return a.student.name.localeCompare(b.student.name, 'ar');
-      });
+      }
+      return a.name.localeCompare(b.name, 'ar');
+    });
+
+    const expandedRows: Array<{
+      rowKey: string;
+      student: Student;
+      progress: StudentStructureProgress | null;
+      maxAttempt: number;
+      latestAttempt: StudentStructureProgress | null;
+    }> = [];
+
+    sortedStudents.forEach((student) => {
+      const attempts = progressByStudentMap.get(student.id) || [];
+      if (attempts.length === 0) {
+        expandedRows.push({
+          rowKey: `${student.id}__empty`,
+          student,
+          progress: null,
+          maxAttempt: 0,
+          latestAttempt: null,
+        });
+      } else {
+        const maxAttempt = Math.max(...attempts.map((a) => a.attemptNumber || 1), 1);
+        const latestAttempt = attempts[attempts.length - 1];
+        attempts.forEach((rec, idx) => {
+          expandedRows.push({
+            rowKey: rec.id || `${student.id}_attempt_${idx + 1}`,
+            student,
+            progress: rec,
+            maxAttempt,
+            latestAttempt,
+          });
+        });
+      }
+    });
+
+    return expandedRows;
   }, [
     selectedStructure,
-    selectedStructureProgress,
+    progressByStudentMap,
     students,
     filterStatus,
     studentListScope,
     studentPickerSearch,
   ]);
 
-  // Cohort Question-by-Question Accuracy Analytics for Selected Structure
+  // Unique visible students (preserving table order) for multi-selection & batch entry
+  const uniqueVisibleStudents = useMemo(() => {
+    const seen = new Set<string>();
+    const list: Student[] = [];
+    workspaceStudentRows.forEach(({ student }) => {
+      if (!seen.has(student.id)) {
+        seen.add(student.id);
+        list.push(student);
+      }
+    });
+    return list;
+  }, [workspaceStudentRows]);
+
+  const selectedBatchStudents = useMemo(
+    () => students.filter((st) => selectedStudentIds.has(st.id)),
+    [students, selectedStudentIds]
+  );
+
+  const allVisibleSelected =
+    uniqueVisibleStudents.length > 0 &&
+    uniqueVisibleStudents.every((st) => selectedStudentIds.has(st.id));
+
+  const toggleSelectStudent = (studentDocId: string) => {
+    setSelectedStudentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(studentDocId)) next.delete(studentDocId);
+      else next.add(studentDocId);
+      return next;
+    });
+  };
+
+  const handleSelectAllVisibleStudents = () => {
+    setSelectedStudentIds(new Set(uniqueVisibleStudents.map((s) => s.id)));
+  };
+
+  const handleSelectUnrecordedVisibleStudents = () => {
+    setSelectedStudentIds(
+      new Set(
+        uniqueVisibleStudents
+          .filter((s) => !progressByStudentMap.has(s.id))
+          .map((s) => s.id)
+      )
+    );
+  };
+
+  const handleSelectSpecificStudentCount = (countRaw: number) => {
+    const count = Math.max(1, Math.min(uniqueVisibleStudents.length, Math.floor(countRaw || 1)));
+    setSelectedStudentIds(new Set(uniqueVisibleStudents.slice(0, count).map((s) => s.id)));
+  };
+
+  const handleClearStudentSelection = () => {
+    setSelectedStudentIds(new Set());
+  };
+
+  // Cohort Question-by-Question Accuracy Analytics for Selected Structure (using latest attempt per student)
   const questionAnalytics = useMemo(() => {
     if (!selectedStructure) return [];
     const totalQ = Math.max(1, selectedStructure.totalQuestions || selectedStructure.questions?.length || 1);
-    const activeProgress = selectedStructureProgress.filter((p) => {
+    const activeProgress = latestStructureProgress.filter((p) => {
       const st = studentMap.get(p.studentDocId);
       if (!st) return true;
       const effStatus = getEffectiveEnrollmentStatus(st);
@@ -306,14 +501,14 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
       });
     }
     return list;
-  }, [selectedStructure, selectedStructureProgress, studentMap, filterStatus]);
+  }, [selectedStructure, latestStructureProgress, studentMap, filterStatus]);
 
-  // Summary metrics for selected structure
+  // Summary metrics for selected structure (using latest attempt per student)
   const structureSummary = useMemo(() => {
     if (!selectedStructure) {
       return { recordedCount: 0, avgSolved: 0, avgCompletion: 0, avgAccuracy: 0 };
     }
-    const relevantProgress = selectedStructureProgress.filter((p) => {
+    const relevantProgress = latestStructureProgress.filter((p) => {
       const st = studentMap.get(p.studentDocId);
       if (!st) return true;
       const eff = getEffectiveEnrollmentStatus(st);
@@ -341,7 +536,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
       ) / 10;
 
     return { recordedCount: count, avgSolved, avgCompletion, avgAccuracy };
-  }, [selectedStructure, selectedStructureProgress, studentMap, filterStatus]);
+  }, [selectedStructure, latestStructureProgress, studentMap, filterStatus]);
 
   const handleExportCurrentStructuresExcel = () => {
     const prefs = loadExcelPreferences();
@@ -578,13 +773,21 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
               <div className="space-y-2 max-h-[680px] overflow-y-auto pl-0.5">
                 {filteredStructures.map((st) => {
                   const isSelected = selectedStructure?.id === st.id;
-                  const countRecorded = structureProgress.filter((p) => p.structureId === st.id).length;
                   const stProgress = structureProgress.filter((p) => p.structureId === st.id);
+                  const latestByStudent = new Map<string, StudentStructureProgress>();
+                  stProgress.forEach((p) => {
+                    const prev = latestByStudent.get(p.studentDocId);
+                    if (!prev || (p.attemptNumber || 1) >= (prev.attemptNumber || 1)) {
+                      latestByStudent.set(p.studentDocId, p);
+                    }
+                  });
+                  const latestList = Array.from(latestByStudent.values());
+                  const countRecorded = latestList.length;
                   const avgAcc =
-                    stProgress.length > 0
+                    latestList.length > 0
                       ? Math.round(
-                          stProgress.reduce((a, b) => a + (b.overallAccuracyPercentage || 0), 0) /
-                            stProgress.length
+                          latestList.reduce((a, b) => a + (b.overallAccuracyPercentage || 0), 0) /
+                            latestList.length
                         )
                       : 0;
 
@@ -779,34 +982,64 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                           })
                           .slice(0, 25)
                           .map((st) => {
-                            const existing = selectedStructureProgress.find(
-                              (p) => p.studentDocId === st.id
-                            ) || null;
+                            const stAttempts = progressByStudentMap.get(st.id) || [];
+                            const existing = stAttempts[stAttempts.length - 1] || null;
+                            const nextAtt = stAttempts.length > 0
+                              ? Math.max(...stAttempts.map((a) => a.attemptNumber || 1), 1) + 1
+                              : 2;
                             return (
-                              <button
+                              <div
                                 key={st.id}
-                                type="button"
-                                onClick={() => {
-                                  setShowAddAnyStudentPicker(false);
-                                  setScoringModalState({
-                                    isOpen: true,
-                                    structure: selectedStructure,
-                                    student: st,
-                                    existingProgress: existing,
-                                  });
-                                }}
-                                className="w-full px-3 py-2 text-right hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center justify-between gap-2 text-xs cursor-pointer"
+                                className="w-full px-3 py-2 text-right hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center justify-between gap-2 text-xs"
                               >
-                                <div>
-                                  <span className="font-bold text-slate-900 dark:text-white">{st.name}</span>
-                                  <span className="text-[11px] text-slate-400 mr-2">
-                                    ({st.grade}{st.track ? ` • ${st.track}` : ''})
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowAddAnyStudentPicker(false);
+                                    setScoringModalState({
+                                      isOpen: true,
+                                      structure: selectedStructure,
+                                      student: st,
+                                      existingProgress: existing,
+                                      isNewImprovementAttempt: false,
+                                      baselineProgress: null,
+                                      nextAttemptNumber: nextAtt,
+                                    });
+                                  }}
+                                  className="flex-1 text-right flex items-center justify-between gap-2 cursor-pointer"
+                                >
+                                  <div>
+                                    <span className="font-bold text-slate-900 dark:text-white">{st.name}</span>
+                                    <span className="text-[11px] text-slate-400 mr-2">
+                                      ({st.grade}{st.track ? ` • ${st.track}` : ''})
+                                    </span>
+                                  </div>
+                                  <span className="font-mono text-[11px] text-amber-600 dark:text-amber-400 font-bold">
+                                    {existing ? `${existing.solvedCount}/${existing.totalQuestions} (${existing.overallAccuracyPercentage}%)` : 'رصد جديد ←'}
                                   </span>
-                                </div>
-                                <span className="font-mono text-[11px] text-amber-600 dark:text-amber-400 font-bold">
-                                  {existing ? `${existing.solvedCount}/${existing.totalQuestions} (${existing.overallAccuracyPercentage}%)` : 'رصد جديد ←'}
-                                </span>
-                              </button>
+                                </button>
+                                {existing && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setShowAddAnyStudentPicker(false);
+                                      setScoringModalState({
+                                        isOpen: true,
+                                        structure: selectedStructure,
+                                        student: st,
+                                        existingProgress: null,
+                                        isNewImprovementAttempt: true,
+                                        baselineProgress: existing,
+                                        nextAttemptNumber: nextAtt,
+                                      });
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-lg cursor-pointer shrink-0"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    تحسين
+                                  </button>
+                                )}
+                              </div>
                             );
                           })}
                       </div>
@@ -892,7 +1125,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                               : 'text-slate-500 dark:text-slate-400'
                           }`}
                         >
-                          المرصودين فقط ({selectedStructureProgress.length})
+                          المرصودين فقط ({latestStructureProgress.length})
                         </button>
                         <button
                           type="button"
@@ -921,6 +1154,87 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                     />
                   </div>
 
+                  {/* Multi-Student Selection & One-Click Batch Score Toolbar */}
+                  {uniqueVisibleStudents.length > 0 && (
+                    <div className="p-3 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1 ml-1">
+                          <Users className="w-3.5 h-3.5 text-amber-500" />
+                          <span>تحديد الطلاب للرصد الجماعي:</span>
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={handleSelectAllVisibleStudents}
+                          className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] hover:border-amber-500 cursor-pointer"
+                        >
+                          تحديد الكل ({uniqueVisibleStudents.length})
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleSelectUnrecordedVisibleStudents}
+                          className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] hover:border-amber-500 cursor-pointer"
+                        >
+                          تحديد غير المرصودين
+                        </button>
+
+                        <div className="inline-flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-0.5">
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400">تحديد عدد:</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={Math.max(1, uniqueVisibleStudents.length)}
+                            value={selectCountInput}
+                            onChange={(e) =>
+                              setSelectCountInput(Math.max(1, Number(e.target.value) || 1))
+                            }
+                            className="w-12 px-1 py-0.5 text-center font-mono font-bold text-[11px] bg-slate-50 dark:bg-slate-800 rounded text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSelectSpecificStudentCount(selectCountInput)}
+                            className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] cursor-pointer"
+                          >
+                            تحديد
+                          </button>
+                        </div>
+
+                        {selectedStudentIds.size > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleClearStudentSelection}
+                            className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-bold text-[11px] cursor-pointer hover:bg-rose-100"
+                          >
+                            إلغاء التحديد ({selectedStudentIds.size})
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 font-mono">
+                          المحدد:{' '}
+                          <strong className="text-amber-600 dark:text-amber-400">
+                            {selectedStudentIds.size}
+                          </strong>
+                        </span>
+
+                        {selectedStudentIds.size > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setIsBatchScoringOpen(true)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-[11px] shadow-sm cursor-pointer"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>
+                              تسجيل ورصد الدرجة للمحددين مرة واحدة ({selectedStudentIds.size})
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {workspaceStudentRows.length === 0 ? (
                     <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 space-y-2">
                       <p className="text-xs font-bold text-slate-600 dark:text-slate-300">
@@ -935,6 +1249,24 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                       <table className="w-full text-right text-xs">
                         <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-800">
                           <tr>
+                            <th className="py-2.5 px-2.5 w-10 text-center">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  allVisibleSelected
+                                    ? handleClearStudentSelection()
+                                    : handleSelectAllVisibleStudents()
+                                }
+                                className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer inline-flex items-center justify-center"
+                                title={allVisibleSelected ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+                              >
+                                {allVisibleSelected ? (
+                                  <CheckSquare className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                                ) : (
+                                  <Square className="w-4 h-4 text-slate-400" />
+                                )}
+                              </button>
+                            </th>
                             <th className="py-2.5 px-3">الطالب</th>
                             <th className="py-2.5 px-3">الصف / الفصل / المسار / المادة</th>
                             <th className="py-2.5 px-3 text-center">الأسئلة المحلولة</th>
@@ -944,19 +1276,56 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-                          {workspaceStudentRows.map(({ student, progress }) => {
+                          {workspaceStudentRows.map(({ rowKey, student, progress, maxAttempt, latestAttempt }) => {
                             const effStatus = getEffectiveEnrollmentStatus(student);
                             const stMeta = ENROLLMENT_STATUS_META[effStatus];
                             const totalQ = progress?.totalQuestions || selectedStructure.totalQuestions;
                             const solvedCount = progress?.solvedCount || 0;
                             const completionPct = progress?.completionPercentage || 0;
                             const accuracyPct = progress?.overallAccuracyPercentage || 0;
+                            const isAttemptImprovement =
+                              Boolean(progress?.isImprovement) ||
+                              Boolean(progress?.attemptNumber && progress.attemptNumber > 1);
+                            const prevAcc = progress?.previousAccuracy;
+                            const accDiff =
+                              isAttemptImprovement && prevAcc !== undefined
+                                ? Math.round((accuracyPct - prevAcc) * 10) / 10
+                                : null;
+                            const qImpCount =
+                              progress?.improvementsCount ??
+                              (progress?.questionScores || []).filter(
+                                (qs) => qs.isImprovement || (qs.attemptNumber !== undefined && qs.attemptNumber > 1)
+                              ).length;
+                            const isStudentSelected = selectedStudentIds.has(student.id);
 
                             return (
                               <tr
-                                key={student.id}
-                                className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                                key={rowKey}
+                                className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${
+                                  isStudentSelected
+                                    ? 'bg-amber-100/45 dark:bg-amber-900/25'
+                                    : isAttemptImprovement
+                                    ? 'bg-amber-50/40 dark:bg-amber-950/20 border-r-4 border-r-amber-500'
+                                    : ''
+                                }`}
                               >
+                                <td className="py-2.5 px-2.5 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleSelectStudent(student.id);
+                                    }}
+                                    className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer inline-flex items-center justify-center"
+                                    title={isStudentSelected ? 'إلغاء تحديد الطالب' : 'تحديد الطالب'}
+                                  >
+                                    {isStudentSelected ? (
+                                      <CheckSquare className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                                    ) : (
+                                      <Square className="w-4 h-4 text-slate-400" />
+                                    )}
+                                  </button>
+                                </td>
                                 <td className="py-2.5 px-3">
                                   <button
                                     type="button"
@@ -965,11 +1334,49 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                   >
                                     {student.name}
                                   </button>
-                                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5">
+                                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5 flex-wrap">
                                     <span>{student.studentId}</span>
                                     <span>•</span>
                                     <span>{stMeta?.shortLabel}</span>
                                   </div>
+                                  {progress && (
+                                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                      {isAttemptImprovement ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                                          <Sparkles className="w-2.5 h-2.5 text-amber-600" />
+                                          تحسين (محاولة {progress.attemptNumber || 2})
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                                          المحاولة الأساسية
+                                        </span>
+                                      )}
+                                      {prevAcc !== undefined && (
+                                        <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                                          (السابقة: {prevAcc}%)
+                                        </span>
+                                      )}
+                                      {accDiff !== null && (
+                                        <span
+                                          className={`text-[10px] font-mono font-bold ${
+                                            accDiff > 0
+                                              ? 'text-emerald-600 dark:text-emerald-400'
+                                              : accDiff < 0
+                                              ? 'text-rose-600 dark:text-rose-400'
+                                              : 'text-slate-500'
+                                          }`}
+                                        >
+                                          {accDiff > 0 ? `+${accDiff}% ↑` : `${accDiff}%`}
+                                        </span>
+                                      )}
+                                      {qImpCount > 0 && (
+                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                                          <Sparkles className="w-2.5 h-2.5" />
+                                          {qImpCount} سؤال محسّن
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
                                 </td>
 
                                 <td className="py-2.5 px-3 text-[11px] text-slate-600 dark:text-slate-300">
@@ -1012,26 +1419,37 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                   )}
                                 </td>
 
-                                <td className="py-2.5 px-3 max-w-[260px]">
+                                <td className="py-2.5 px-3 max-w-[280px]">
                                   {progress && progress.questionScores && progress.questionScores.length > 0 ? (
                                     <div className="flex flex-wrap gap-1 font-mono tabular-nums">
-                                      {progress.questionScores.slice(0, 12).map((qs) => (
-                                        <span
-                                          key={qs.questionNumber}
-                                          className={`px-1.5 py-0.5 rounded text-[10px] border ${
-                                            !qs.solved
-                                              ? 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
-                                              : qs.accuracyPercentage >= 80
-                                              ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                                              : qs.accuracyPercentage >= 50
-                                              ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                                              : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
-                                          }`}
-                                          title={`سؤال ${qs.questionNumber}: ${qs.solved ? `${qs.accuracyPercentage}%` : 'لم يُحل'}`}
-                                        >
-                                          س{qs.questionNumber}:{qs.solved ? `${qs.accuracyPercentage}%` : '—'}
-                                        </span>
-                                      ))}
+                                      {progress.questionScores.slice(0, 12).map((qs) => {
+                                        const isQImp =
+                                          Boolean(qs.isImprovement) ||
+                                          (qs.attemptNumber !== undefined && qs.attemptNumber > 1);
+                                        return (
+                                          <span
+                                            key={qs.questionNumber}
+                                            className={`px-1.5 py-0.5 rounded text-[10px] border ${
+                                              isQImp ? 'ring-1 ring-amber-400 dark:ring-amber-600 ' : ''
+                                            }${
+                                              !qs.solved
+                                                ? 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                                                : qs.accuracyPercentage >= 80
+                                                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                                : qs.accuracyPercentage >= 50
+                                                ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                                                : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                                            }`}
+                                            title={
+                                              isQImp && qs.previousAccuracy !== undefined
+                                                ? `سؤال ${qs.questionNumber}: ${qs.accuracyPercentage}% (تحسين من ${qs.previousAccuracy}% • محاولة ${qs.attemptNumber || 2})`
+                                                : `سؤال ${qs.questionNumber}: ${qs.solved ? `${qs.accuracyPercentage}%` : 'لم يُحل'}`
+                                            }
+                                          >
+                                            س{qs.questionNumber}:{qs.solved ? `${qs.accuracyPercentage}%${isQImp ? '↑' : ''}` : '—'}
+                                          </span>
+                                        );
+                                      })}
                                       {progress.questionScores.length > 12 && (
                                         <span className="text-[10px] text-slate-400 px-1">
                                           +{progress.questionScores.length - 12}
@@ -1053,18 +1471,42 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                           structure: selectedStructure,
                                           student,
                                           existingProgress: progress,
+                                          isNewImprovementAttempt: false,
+                                          baselineProgress: null,
+                                          nextAttemptNumber: maxAttempt + 1,
                                         })
                                       }
-                                      className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-300 font-bold text-[11px] transition cursor-pointer whitespace-nowrap"
+                                      className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-[11px] transition cursor-pointer whitespace-nowrap"
                                     >
-                                      {progress ? 'تعديل الأسئلة' : 'رصد الحل'}
+                                      {progress ? 'تعديل / تحسين الأسئلة' : 'رصد الحل'}
                                     </button>
+                                    {progress && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setScoringModalState({
+                                            isOpen: true,
+                                            structure: selectedStructure,
+                                            student,
+                                            existingProgress: null,
+                                            isNewImprovementAttempt: true,
+                                            baselineProgress: latestAttempt || progress,
+                                            nextAttemptNumber: maxAttempt + 1,
+                                          })
+                                        }
+                                        className="inline-flex items-center gap-1 px-2 py-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-300/80 dark:border-amber-700/80 rounded-lg transition-all cursor-pointer shadow-2xs whitespace-nowrap"
+                                        title="إضافة محاولة تحسين جديدة لنفس الطالب في هذا الهيكل"
+                                      >
+                                        <Plus className="w-3 h-3" />
+                                        تحسين
+                                      </button>
+                                    )}
                                     {progress && (
                                       <button
                                         type="button"
                                         onClick={() => onDeleteProgress(progress)}
                                         className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg cursor-pointer"
-                                        title="حذف سجل الطالب من هذا الهيكل"
+                                        title={isAttemptImprovement ? 'حذف محاولة التحسين' : 'حذف سجل الطالب من هذا الهيكل'}
                                       >
                                         <Trash2 className="w-3.5 h-3.5" />
                                       </button>
@@ -1110,13 +1552,16 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
         }}
       />
 
-      {/* Modal 2: Student Structure Question-by-Question Scoring Modal */}
+      {/* Modal 2: Student Structure Question-by-Question Scoring & Improvement Modal */}
       {scoringModalState.isOpen && scoringModalState.structure && scoringModalState.student && (
         <StudentStructureScoringModal
           isOpen={scoringModalState.isOpen}
           structure={scoringModalState.structure}
           student={scoringModalState.student}
           existingProgress={scoringModalState.existingProgress}
+          isNewImprovementAttempt={scoringModalState.isNewImprovementAttempt}
+          baselineProgress={scoringModalState.baselineProgress}
+          nextAttemptNumber={scoringModalState.nextAttemptNumber}
           settings={settings}
           gradesList={gradesList}
           subjectsList={subjectsList}
@@ -1128,6 +1573,9 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
               structure: null,
               student: null,
               existingProgress: null,
+              isNewImprovementAttempt: false,
+              baselineProgress: null,
+              nextAttemptNumber: 2,
             })
           }
           onSave={async (record) => {
@@ -1137,6 +1585,9 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
               structure: null,
               student: null,
               existingProgress: null,
+              isNewImprovementAttempt: false,
+              baselineProgress: null,
+              nextAttemptNumber: 2,
             });
           }}
         />
@@ -1180,6 +1631,32 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
         initialSubject={filterSubject !== 'الكل' ? filterSubject : 'all'}
         initialYear={filterYear !== 'الكل' ? filterYear : 'all'}
       />
+
+      {/* Modal 5: Batch Student Structure Scoring Modal */}
+      {isBatchScoringOpen && selectedStructure && selectedBatchStudents.length > 0 && (
+        <BatchStructureScoringModal
+          isOpen={isBatchScoringOpen}
+          structure={selectedStructure}
+          selectedStudents={selectedBatchStudents}
+          existingProgressByStudent={progressByStudentMap}
+          gradesList={gradesList}
+          subjectsList={subjectsList}
+          tracksList={tracksList}
+          yearsList={yearsList}
+          onClose={() => setIsBatchScoringOpen(false)}
+          onSaveBatch={async (records) => {
+            if (onSaveBatchProgress) {
+              await onSaveBatchProgress(records);
+            } else {
+              for (const rec of records) {
+                await onSaveProgress(rec);
+              }
+            }
+            setIsBatchScoringOpen(false);
+            setSelectedStudentIds(new Set());
+          }}
+        />
+      )}
     </div>
   );
 };
@@ -1228,6 +1705,48 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [isDirty, setIsDirty] = useState(false);
+
+  const formDraftKey = structureToEdit?.id || 'new';
+  interface StructureFormDraftPayload {
+    title: string;
+    code: string;
+    grade: string;
+    term: string;
+    track: string;
+    customTrack: string;
+    academicYear: string;
+    subject: string;
+    customSubject: string;
+    group: string;
+    date: string;
+    totalQuestions: number;
+    questions: StructureQuestionItem[];
+    notes: string;
+  }
+
+  const [pendingDraft, setPendingDraft] = useState<{
+    payload: StructureFormDraftPayload;
+    updatedAt: string;
+  } | null>(null);
+
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText: string;
+    isDestructive: boolean;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'تأكيد',
+    cancelText: 'تراجع',
+    isDestructive: true,
+    onConfirm: () => {},
+  });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -1281,17 +1800,157 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
       setShowQuestionTitlesEditor(false);
     }
     setError('');
+    setIsDirty(false);
+    const savedDraft = loadStructureFormDraft<StructureFormDraftPayload>(formDraftKey);
+    if (savedDraft && savedDraft.payload) {
+      setPendingDraft(savedDraft);
+    } else {
+      setPendingDraft(null);
+    }
   }, [isOpen, structureToEdit]);
+
+  // Auto-save form draft whenever dirty
+  useEffect(() => {
+    if (!isOpen || !isDirty) return;
+    saveStructureFormDraft<StructureFormDraftPayload>(formDraftKey, {
+      title,
+      code,
+      grade,
+      term,
+      track,
+      customTrack,
+      academicYear,
+      subject,
+      customSubject,
+      group,
+      date,
+      totalQuestions,
+      questions,
+      notes,
+    });
+  }, [
+    isOpen,
+    isDirty,
+    formDraftKey,
+    title,
+    code,
+    grade,
+    term,
+    track,
+    customTrack,
+    academicYear,
+    subject,
+    customSubject,
+    group,
+    date,
+    totalQuestions,
+    questions,
+    notes,
+  ]);
+
+  const requestSafeClose = () => {
+    if (!isDirty) {
+      onClose();
+      return;
+    }
+    setConfirmState({
+      isOpen: true,
+      title: 'تحذير: بيانات غير محفوظة للهيكل',
+      message: `لديك تعديلات غير محفوظة في نموذج "${title.trim() || 'الهيكل'}". في حال الخروج الآن سيتم تجاهل التعديلات غير المحفوظة. هل تريد الخروج دون حفظ؟`,
+      confirmText: 'تجاهل التعديلات والخروج',
+      cancelText: 'البقاء وحفظ البيانات',
+      isDestructive: true,
+      onConfirm: () => {
+        clearStructureFormDraft(formDraftKey);
+        setConfirmState((prev) => ({ ...prev, isOpen: false }));
+        onClose();
+      },
+    });
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (confirmState.isOpen) {
+        setConfirmState((prev) => ({ ...prev, isOpen: false }));
+      } else {
+        requestSafeClose();
+      }
+    };
+    window.addEventListener('keydown', handleEsc, { capture: true });
+    return () => window.removeEventListener('keydown', handleEsc, { capture: true });
+  });
+
+  const markDirty = () => {
+    if (!isDirty) setIsDirty(true);
+  };
+
+  const handleRestoreDraft = () => {
+    if (!pendingDraft) return;
+    const p = pendingDraft.payload;
+    setTitle(p.title || '');
+    setCode(p.code || '');
+    setGrade(p.grade || grade);
+    setTerm(p.term || term);
+    setTrack(p.track || track);
+    setCustomTrack(p.customTrack || '');
+    setAcademicYear(p.academicYear || academicYear);
+    setSubject(p.subject || subject);
+    setCustomSubject(p.customSubject || '');
+    setGroup(p.group || 'الكل');
+    setDate(p.date || date);
+    setTotalQuestions(p.totalQuestions || 10);
+    setQuestions(p.questions || []);
+    setNotes(p.notes || '');
+    setShowQuestionTitlesEditor(
+      Boolean(p.questions?.some((q) => (q.title || '').trim() || (q.topic || '').trim()))
+    );
+    setPendingDraft(null);
+    setIsDirty(true);
+  };
+
+  const handleDiscardDraft = () => {
+    clearStructureFormDraft(formDraftKey);
+    setPendingDraft(null);
+  };
 
   const handleTotalQuestionsChange = (nextCountRaw: number) => {
     const nextCount = Math.max(1, Math.min(100, Math.round(nextCountRaw || 1)));
-    setTotalQuestions(nextCount);
-    setQuestions((prev) =>
-      Array.from({ length: nextCount }, (_, idx) => {
-        const existing = prev.find((item) => item.questionNumber === idx + 1);
-        return existing || { questionNumber: idx + 1, title: '', topic: '' };
-      })
-    );
+    const willDropNamedQuestions =
+      nextCount < questions.length &&
+      questions.slice(nextCount).some((q) => (q.title || '').trim() || (q.topic || '').trim());
+
+    const applyResize = () => {
+      markDirty();
+      setTotalQuestions(nextCount);
+      setQuestions((prev) =>
+        Array.from({ length: nextCount }, (_, idx) => {
+          const existing = prev.find((item) => item.questionNumber === idx + 1);
+          return existing || { questionNumber: idx + 1, title: '', topic: '' };
+        })
+      );
+    };
+
+    if (willDropNamedQuestions) {
+      setConfirmState({
+        isOpen: true,
+        title: 'تحذير: تقليص عدد أسئلة الهيكل',
+        message: `تقليص العدد إلى (${nextCount}) سؤال سيحذف عناوين الأسئلة من س${nextCount + 1} إلى س${questions.length}. هل تريد المتابعة؟`,
+        confirmText: 'تقليص العدد',
+        cancelText: 'تراجع',
+        isDestructive: true,
+        onConfirm: () => {
+          applyResize();
+          setConfirmState((prev) => ({ ...prev, isOpen: false }));
+        },
+      });
+      return;
+    }
+
+    applyResize();
   };
 
   if (!isOpen) return null;
@@ -1338,6 +1997,8 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
         updatedAt: now,
       };
       await onSave(payload, structureToEdit?.id);
+      clearStructureFormDraft(formDraftKey);
+      setIsDirty(false);
     } catch (err) {
       console.error('Save structure error:', err);
       setError('حدث خطأ أثناء حفظ بيانات الهيكل');
@@ -1347,23 +2008,33 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
   };
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) requestSafeClose();
       }}
     >
-      <div className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-right">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-right"
+      >
         <div className="px-5 py-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <Layers className="w-5 h-5 text-amber-500" />
             <h3 className="font-black text-base text-slate-900 dark:text-white">
               {structureToEdit ? 'تعديل بيانات الهيكل' : 'إضافة هيكل جديد'}
             </h3>
+            {isDirty && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                <History className="w-3 h-3" />
+                مسودة تقدم محفوظة
+              </span>
+            )}
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestSafeClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -1371,6 +2042,34 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 overflow-y-auto space-y-4 text-xs">
+          {pendingDraft && (
+            <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span className="font-bold text-amber-900 dark:text-amber-100">
+                  توجد مسودة تقدم محفوظة تلقائياً لهذا الهيكل من جلسة سابقة
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleRestoreDraft}
+                  className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black cursor-pointer"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>استعادة البيانات</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold cursor-pointer"
+                >
+                  تجاهل
+                </button>
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl font-bold">
               {error}
@@ -1385,7 +2084,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
               <input
                 type="text"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => {
+                  markDirty();
+                  setTitle(e.target.value);
+                }}
                 placeholder="مثال: هيكل الفيزياء النهائي - الفصل الثاني"
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold"
                 required
@@ -1399,7 +2101,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
               <input
                 type="text"
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
+                onChange={(e) => {
+                  markDirty();
+                  setCode(e.target.value);
+                }}
                 placeholder="STR-01"
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono"
               />
@@ -1411,7 +2116,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
               <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">الصف الدراسي *</label>
               <select
                 value={grade}
-                onChange={(e) => setGrade(e.target.value)}
+                onChange={(e) => {
+                  markDirty();
+                  setGrade(e.target.value);
+                }}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold cursor-pointer"
               >
                 {gradesList.map((g) => (
@@ -1424,7 +2132,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
               <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">الفصل الدراسي *</label>
               <select
                 value={term}
-                onChange={(e) => setTerm(e.target.value)}
+                onChange={(e) => {
+                  markDirty();
+                  setTerm(e.target.value);
+                }}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold cursor-pointer"
               >
                 {ACADEMIC_TERMS.map((t) => (
@@ -1437,7 +2148,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
               <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">السنة الدراسية *</label>
               <select
                 value={academicYear}
-                onChange={(e) => setAcademicYear(e.target.value)}
+                onChange={(e) => {
+                  markDirty();
+                  setAcademicYear(e.target.value);
+                }}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono font-semibold cursor-pointer"
               >
                 {yearsList.map((y) => (
@@ -1452,7 +2166,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
               <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">المسار *</label>
               <select
                 value={track}
-                onChange={(e) => setTrack(e.target.value)}
+                onChange={(e) => {
+                  markDirty();
+                  setTrack(e.target.value);
+                }}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold cursor-pointer"
               >
                 {tracksList.map((tr) => (
@@ -1464,7 +2181,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                 <input
                   type="text"
                   value={customTrack}
-                  onChange={(e) => setCustomTrack(e.target.value)}
+                  onChange={(e) => {
+                    markDirty();
+                    setCustomTrack(e.target.value);
+                  }}
                   placeholder="اكتب اسم المسار..."
                   className="mt-1.5 w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-amber-400 rounded-xl"
                 />
@@ -1475,7 +2195,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
               <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">المادة *</label>
               <select
                 value={subject}
-                onChange={(e) => setSubject(e.target.value)}
+                onChange={(e) => {
+                  markDirty();
+                  setSubject(e.target.value);
+                }}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold cursor-pointer"
               >
                 {subjectsList.map((s) => (
@@ -1487,7 +2210,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                 <input
                   type="text"
                   value={customSubject}
-                  onChange={(e) => setCustomSubject(e.target.value)}
+                  onChange={(e) => {
+                    markDirty();
+                    setCustomSubject(e.target.value);
+                  }}
                   placeholder="اكتب اسم المادة..."
                   className="mt-1.5 w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-amber-400 rounded-xl"
                 />
@@ -1498,7 +2224,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
               <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">الشعبة / المجموعة</label>
               <select
                 value={group}
-                onChange={(e) => setGroup(e.target.value)}
+                onChange={(e) => {
+                  markDirty();
+                  setGroup(e.target.value);
+                }}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold cursor-pointer"
               >
                 <option value="الكل">كل الشعب</option>
@@ -1530,7 +2259,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
               <input
                 type="date"
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => {
+                  markDirty();
+                  setDate(e.target.value);
+                }}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono"
               />
             </div>
@@ -1563,6 +2295,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                       value={qItem.title || ''}
                       onChange={(e) => {
                         const val = e.target.value;
+                        markDirty();
                         setQuestions((prev) =>
                           prev.map((item, i) => (i === idx ? { ...item, title: val } : item))
                         );
@@ -1581,7 +2314,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
             <textarea
               rows={2}
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => {
+                markDirty();
+                setNotes(e.target.value);
+              }}
               placeholder="أي ملاحظات أو تعليمات خاصة بهذا الهيكل..."
               className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
             />
@@ -1590,7 +2326,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestSafeClose}
               className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
             >
               إلغاء
@@ -1607,471 +2343,19 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
         </form>
       </div>
     </div>
+
+    <ConfirmModal
+      isOpen={confirmState.isOpen}
+      zIndexClass="z-[70]"
+      title={confirmState.title}
+      message={confirmState.message}
+      confirmText={confirmState.confirmText}
+      cancelText={confirmState.cancelText}
+      isDestructive={confirmState.isDestructive}
+      onConfirm={confirmState.onConfirm}
+      onCancel={() => setConfirmState((prev) => ({ ...prev, isOpen: false }))}
+    />
+    </>
   );
 };
 
-/* ============================================================================
-   SUBCOMPONENT: Student Question-by-Question Structure Scoring Modal
-   ============================================================================ */
-
-interface StudentStructureScoringModalProps {
-  isOpen: boolean;
-  structure: ExamStructure;
-  student: Student;
-  existingProgress: StudentStructureProgress | null;
-  settings: TeacherSettings;
-  gradesList: string[];
-  subjectsList: string[];
-  tracksList: string[];
-  yearsList: string[];
-  onClose: () => void;
-  onSave: (record: Omit<StudentStructureProgress, 'id'> & { id?: string }) => Promise<void>;
-}
-
-const StudentStructureScoringModal: React.FC<StudentStructureScoringModalProps> = ({
-  isOpen,
-  structure,
-  student,
-  existingProgress,
-  gradesList,
-  subjectsList,
-  tracksList,
-  yearsList,
-  onClose,
-  onSave,
-}) => {
-  const totalQ = Math.max(1, structure.totalQuestions || structure.questions?.length || 1);
-
-  const [grade, setGrade] = useState(existingProgress?.grade || structure.grade || student.grade);
-  const [term, setTerm] = useState(existingProgress?.term || structure.term || student.term || ACADEMIC_TERMS[0]);
-  const [track, setTrack] = useState(existingProgress?.track || structure.track || student.track || ACADEMIC_TRACKS[0]);
-  const [academicYear, setAcademicYear] = useState(
-    existingProgress?.academicYear || structure.academicYear || student.academicYear || ACADEMIC_YEARS[0]
-  );
-  const [subject, setSubject] = useState(
-    existingProgress?.subject || structure.subject || student.subject
-  );
-  const [group, setGroup] = useState(existingProgress?.group || student.group || structure.group || 'الكل');
-  const [date, setDate] = useState(existingProgress?.date || new Date().toISOString().split('T')[0]);
-  const [notes, setNotes] = useState(existingProgress?.notes || '');
-  const [questionScores, setQuestionScores] = useState<StructureQuestionScore[]>(() => {
-    const existingMap = new Map(
-      (existingProgress?.questionScores || []).map((item) => [item.questionNumber, item])
-    );
-    return Array.from({ length: totalQ }, (_, idx) => {
-      const qNum = idx + 1;
-      const found = existingMap.get(qNum);
-      return (
-        found || {
-          questionNumber: qNum,
-          solved: false,
-          accuracyPercentage: 0,
-          notes: '',
-        }
-      );
-    });
-  });
-  const [saving, setSaving] = useState(false);
-
-  // Computed live stats
-  const liveStats = useMemo(() => {
-    const solvedItems = questionScores.filter((q) => q.solved);
-    const solvedCount = solvedItems.length;
-    const completionPercentage = Math.round((solvedCount / totalQ) * 1000) / 10;
-    const overallAccuracyPercentage =
-      solvedCount > 0
-        ? Math.round(
-            (solvedItems.reduce((acc, q) => acc + (Number(q.accuracyPercentage) || 0), 0) /
-              solvedCount) *
-              10
-          ) / 10
-        : 0;
-    return { solvedCount, completionPercentage, overallAccuracyPercentage };
-  }, [questionScores, totalQ]);
-
-  if (!isOpen) return null;
-
-  const setAllQuestionsState = (solved: boolean, accuracy: number) => {
-    setQuestionScores((prev) =>
-      prev.map((q) => ({
-        ...q,
-        solved,
-        accuracyPercentage: solved ? accuracy : 0,
-      }))
-    );
-  };
-
-  const applyAccuracyToSolved = (accuracy: number) => {
-    setQuestionScores((prev) =>
-      prev.map((q) => (q.solved ? { ...q, accuracyPercentage: accuracy } : q))
-    );
-  };
-
-  const toggleQuestionSolved = (qNum: number) => {
-    setQuestionScores((prev) =>
-      prev.map((q) => {
-        if (q.questionNumber !== qNum) return q;
-        const nextSolved = !q.solved;
-        return {
-          ...q,
-          solved: nextSolved,
-          accuracyPercentage: nextSolved ? (q.accuracyPercentage > 0 ? q.accuracyPercentage : 100) : 0,
-        };
-      })
-    );
-  };
-
-  const updateQuestionAccuracy = (qNum: number, rawVal: number) => {
-    const clamped = Math.max(0, Math.min(100, isNaN(rawVal) ? 0 : rawVal));
-    setQuestionScores((prev) =>
-      prev.map((q) =>
-        q.questionNumber === qNum
-          ? {
-              ...q,
-              solved: true,
-              accuracyPercentage: clamped,
-            }
-          : q
-      )
-    );
-  };
-
-  const handleSaveRecord = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      setSaving(true);
-      await onSave({
-        id: existingProgress?.id || `${structure.id}__${student.id}`,
-        structureId: structure.id,
-        structureTitle: structure.title,
-        studentDocId: student.id,
-        studentId: student.studentId,
-        studentName: student.name,
-        grade,
-        term,
-        track,
-        academicYear,
-        subject,
-        group,
-        date,
-        totalQuestions: totalQ,
-        solvedCount: liveStats.solvedCount,
-        completionPercentage: liveStats.completionPercentage,
-        overallAccuracyPercentage: liveStats.overallAccuracyPercentage,
-        questionScores,
-        notes: notes.trim() || '',
-        createdAt: existingProgress?.createdAt || new Date().toISOString(),
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-right">
-        {/* Header */}
-        <div className="px-5 py-4 bg-slate-50 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
-          <div>
-            <h3 className="font-black text-base text-slate-900 dark:text-white">
-              رصد حل أسئلة الهيكل للطالب: {student.name}
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              الهيكل: <strong className="text-amber-600 dark:text-amber-400">{structure.title}</strong> • إجمالي الأسئلة: <strong className="font-mono">{totalQ}</strong>
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSaveRecord} className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs">
-          {/* Live Summary Banner */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">قام بحل</span>
-              <span className="text-xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
-                {liveStats.solvedCount} / {totalQ} سؤال
-              </span>
-            </div>
-            <div className="p-3 bg-amber-50/70 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800/70 text-center">
-              <span className="text-[11px] text-amber-700 dark:text-amber-400 block">نسبة إنجاز الهيكل</span>
-              <span className="text-xl font-black font-mono tabular-nums text-amber-600 dark:text-amber-400">
-                {liveStats.completionPercentage}%
-              </span>
-            </div>
-            <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800/70 text-center">
-              <span className="text-[11px] text-emerald-700 dark:text-emerald-400 block">متوسط نسبة الصحة</span>
-              <span className="text-xl font-black font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
-                {liveStats.overallAccuracyPercentage}%
-              </span>
-            </div>
-          </div>
-
-          {/* Complete Academic Metadata per Student-Haykal Record */}
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2.5">
-            <span className="font-bold text-slate-700 dark:text-slate-300 block">
-              بيانات القيد الأكاديمي لهذا السجل (الصف / الفصل / المسار / السنة / المادة):
-            </span>
-            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
-              <select
-                value={grade}
-                onChange={(e) => setGrade(e.target.value)}
-                className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold"
-                title="الصف"
-              >
-                {Array.from(new Set([...gradesList, grade])).map((g) => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-
-              <select
-                value={term}
-                onChange={(e) => setTerm(e.target.value)}
-                className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold"
-                title="الفصل"
-              >
-                {ACADEMIC_TERMS.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-
-              <select
-                value={track}
-                onChange={(e) => setTrack(e.target.value)}
-                className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold"
-                title="المسار"
-              >
-                {Array.from(new Set([...tracksList, track])).map((tr) => (
-                  <option key={tr} value={tr}>{tr}</option>
-                ))}
-              </select>
-
-              <select
-                value={academicYear}
-                onChange={(e) => setAcademicYear(e.target.value)}
-                className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono font-semibold"
-                title="السنة الدراسية"
-              >
-                {Array.from(new Set([...yearsList, academicYear])).map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-
-              <select
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold"
-                title="المادة"
-              >
-                {Array.from(new Set([...subjectsList, subject])).map((sb) => (
-                  <option key={sb} value={sb}>{sb}</option>
-                ))}
-              </select>
-
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono"
-                title="تاريخ التقييم"
-              />
-            </div>
-          </div>
-
-          {/* Quick Bulk Presets */}
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
-            <span className="font-bold text-slate-600 dark:text-slate-300">إجراءات سريعة للأسئلة:</span>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setAllQuestionsState(true, 100)}
-                className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold text-[11px] cursor-pointer hover:bg-emerald-500"
-              >
-                حل الكل (100%)
-              </button>
-              <button
-                type="button"
-                onClick={() => applyAccuracyToSolved(100)}
-                className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold text-[11px] cursor-pointer"
-              >
-                تعيين 100% للمحلول
-              </button>
-              <button
-                type="button"
-                onClick={() => applyAccuracyToSolved(50)}
-                className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold text-[11px] cursor-pointer"
-              >
-                تعيين 50% للمحلول
-              </button>
-              <button
-                type="button"
-                onClick={() => setAllQuestionsState(false, 0)}
-                className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] cursor-pointer"
-              >
-                تفريغ الكل
-              </button>
-            </div>
-          </div>
-
-          {/* Per-Question List */}
-          <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
-                <tr>
-                  <th className="py-2.5 px-3 w-20 text-center">السؤال</th>
-                  <th className="py-2.5 px-3">حالة الحل</th>
-                  <th className="py-2.5 px-3">نسبة صحة السؤال (0% - 100%)</th>
-                  <th className="py-2.5 px-3 hidden sm:table-cell">تحديد سريع</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-                {questionScores.map((qs) => {
-                  const qMeta = structure.questions?.find(
-                    (item) => item.questionNumber === qs.questionNumber
-                  );
-                  return (
-                    <tr
-                      key={qs.questionNumber}
-                      className={
-                        qs.solved
-                          ? 'bg-emerald-50/20 dark:bg-emerald-950/10'
-                          : 'bg-white dark:bg-slate-900'
-                      }
-                    >
-                      <td className="py-2 px-3 text-center">
-                        <span className="font-mono font-black text-slate-900 dark:text-white">
-                          س{qs.questionNumber}
-                        </span>
-                        {qMeta?.title && (
-                          <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[110px] mx-auto">
-                            {qMeta.title}
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="py-2 px-3">
-                        <button
-                          type="button"
-                          onClick={() => toggleQuestionSolved(qs.questionNumber)}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-[11px] border cursor-pointer transition ${
-                            qs.solved
-                              ? 'bg-emerald-600 text-white border-emerald-600'
-                              : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                          }`}
-                        >
-                          {qs.solved ? (
-                            <>
-                              <CheckSquare className="w-3.5 h-3.5" />
-                              <span>تم الحل</span>
-                            </>
-                          ) : (
-                            <>
-                              <Square className="w-3.5 h-3.5" />
-                              <span>لم يُحل</span>
-                            </>
-                          )}
-                        </button>
-                      </td>
-
-                      <td className="py-2 px-3">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={1}
-                            value={qs.accuracyPercentage}
-                            onChange={(e) =>
-                              updateQuestionAccuracy(qs.questionNumber, Number(e.target.value))
-                            }
-                            className="w-20 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-mono font-bold text-center text-slate-900 dark:text-white"
-                          />
-                          <span className="font-mono font-bold text-slate-500">%</span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            step={5}
-                            value={qs.accuracyPercentage}
-                            onChange={(e) =>
-                              updateQuestionAccuracy(qs.questionNumber, Number(e.target.value))
-                            }
-                            className="hidden md:block w-28 accent-amber-500 cursor-pointer"
-                          />
-                        </div>
-                      </td>
-
-                      <td className="py-2 px-3 hidden sm:table-cell">
-                        <div className="inline-flex items-center gap-1 font-mono">
-                          {[100, 75, 50, 25, 0].map((val) => (
-                            <button
-                              key={val}
-                              type="button"
-                              onClick={() => updateQuestionAccuracy(qs.questionNumber, val)}
-                              className={`px-2 py-1 rounded text-[10px] font-bold border cursor-pointer ${
-                                qs.solved && qs.accuracyPercentage === val
-                                  ? val >= 75
-                                    ? 'bg-emerald-600 text-white border-emerald-600'
-                                    : val >= 50
-                                    ? 'bg-amber-500 text-slate-950 border-amber-500'
-                                    : 'bg-rose-600 text-white border-rose-600'
-                                  : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
-                              }`}
-                            >
-                              {val}%
-                            </button>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-              ملاحظات على أداء الطالب في هذا الهيكل
-            </label>
-            <input
-              type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="مثال: متقن لأسئلة الرسم البياني ويحتاج مراجعة في السؤال 4..."
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
-            />
-          </div>
-
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
-            >
-              إلغاء
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black cursor-pointer disabled:opacity-60"
-            >
-              <Save className="w-4 h-4" />
-              <span>{saving ? 'جاري الحفظ...' : 'حفظ رصد الهيكل للطالب'}</span>
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};

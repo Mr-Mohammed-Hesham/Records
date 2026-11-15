@@ -4,12 +4,14 @@
  */
 
 export interface PlatformLastActivity {
-  view?: 'dashboard' | 'students' | 'exams' | 'reports' | 'settings' | 'profile';
+  view?: 'dashboard' | 'students' | 'exams' | 'structures' | 'exam-generator' | 'reports' | 'settings' | 'profile';
   tab?: string;
   studentId?: string;
   studentName?: string;
   examId?: string;
   examTitle?: string;
+  structureId?: string;
+  structureTitle?: string;
   studentsTab?: 'all' | 'active' | 'completed' | 'inactive';
   reportType?: string;
   description?: string;
@@ -24,13 +26,18 @@ const KEYS: Record<string, string> = {
   STUDENTS_VIEW_STATE: 'mh_students_view_state_v1',
   EXAMS_VIEW: 'mh_exams_view_state_v1',
   EXAMS_VIEW_STATE: 'mh_exams_view_state_v1',
+  STRUCTURES_VIEW: 'mh_structures_view_state_v1',
+  STRUCTURES_VIEW_STATE: 'mh_structures_view_state_v1',
   REPORTS_VIEW: 'mh_reports_view_state_v1',
   REPORTS_VIEW_STATE: 'mh_reports_view_state_v1',
   HONOR_BOARD_CONFIG: 'mh_honor_board_config_v1',
   EXCEL_EXPORT_CONFIG: 'mh_excel_export_config_v1',
   STUDENT_FORM_DRAFT: 'mh_student_form_draft_v1',
   EXAM_FORM_DRAFT: 'mh_exam_form_draft_v1',
+  STRUCTURE_FORM_DRAFT: 'mh_structure_form_draft_v1_',
   SCORE_DRAFT_PREFIX: 'mh_score_entry_draft_v1_',
+  STRUCTURE_SCORING_DRAFT_PREFIX: 'mh_structure_scoring_draft_v1_',
+  STRUCTURE_BATCH_DRAFT_PREFIX: 'mh_structure_batch_draft_v1_',
   PROFILE_CHART_TYPE: 'mh_profile_chart_type_v1',
 };
 
@@ -149,18 +156,107 @@ export function clearScoreEntryDraft(examId: string): void {
   }
 }
 
+export function saveStructureScoringDraft<T>(draftKey: string, payload: T): void {
+  if (!draftKey) return;
+  try {
+    localStorage.setItem(
+      `${KEYS.STRUCTURE_SCORING_DRAFT_PREFIX}${draftKey}`,
+      JSON.stringify({
+        payload,
+        updatedAt: new Date().toISOString(),
+      })
+    );
+  } catch {
+    // ignore
+  }
+}
+
+export function loadStructureScoringDraft<T>(
+  draftKey: string
+): { payload: T; updatedAt: string } | null {
+  if (!draftKey) return null;
+  try {
+    const raw = localStorage.getItem(`${KEYS.STRUCTURE_SCORING_DRAFT_PREFIX}${draftKey}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.payload) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function clearStructureScoringDraft(draftKey: string): void {
+  if (!draftKey) return;
+  try {
+    localStorage.removeItem(`${KEYS.STRUCTURE_SCORING_DRAFT_PREFIX}${draftKey}`);
+  } catch {
+    // ignore
+  }
+}
+
+export function saveStructureFormDraft<T>(draftKey: string, payload: T): void {
+  if (!draftKey) return;
+  try {
+    localStorage.setItem(
+      `${KEYS.STRUCTURE_FORM_DRAFT}${draftKey}`,
+      JSON.stringify({
+        payload,
+        updatedAt: new Date().toISOString(),
+      })
+    );
+  } catch {
+    // ignore
+  }
+}
+
+export function loadStructureFormDraft<T>(
+  draftKey: string
+): { payload: T; updatedAt: string } | null {
+  if (!draftKey) return null;
+  try {
+    const raw = localStorage.getItem(`${KEYS.STRUCTURE_FORM_DRAFT}${draftKey}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.payload) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function clearStructureFormDraft(draftKey: string): void {
+  if (!draftKey) return;
+  try {
+    localStorage.removeItem(`${KEYS.STRUCTURE_FORM_DRAFT}${draftKey}`);
+  } catch {
+    // ignore
+  }
+}
+
 export function clearAllActivityAndDrafts(): void {
   try {
     Object.values(KEYS).forEach((k) => {
-      if (k !== KEYS.SCORE_DRAFT_PREFIX) {
+      if (
+        k !== KEYS.SCORE_DRAFT_PREFIX &&
+        k !== KEYS.STRUCTURE_SCORING_DRAFT_PREFIX &&
+        k !== KEYS.STRUCTURE_FORM_DRAFT &&
+        k !== KEYS.STRUCTURE_BATCH_DRAFT_PREFIX
+      ) {
         localStorage.removeItem(k);
       }
     });
-    // Also remove any score drafts
+    // Also remove any score and structure drafts
     const toRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith(KEYS.SCORE_DRAFT_PREFIX)) {
+      if (
+        k &&
+        (k.startsWith(KEYS.SCORE_DRAFT_PREFIX) ||
+          k.startsWith(KEYS.STRUCTURE_SCORING_DRAFT_PREFIX) ||
+          k.startsWith(KEYS.STRUCTURE_FORM_DRAFT) ||
+          k.startsWith(KEYS.STRUCTURE_BATCH_DRAFT_PREFIX))
+      ) {
         toRemove.push(k);
       }
     }

@@ -1296,15 +1296,23 @@ export async function getStructureProgressList(): Promise<StudentStructureProgre
 export async function saveStudentStructureProgress(
   progress: Omit<StudentStructureProgress, 'id'> & { id?: string }
 ): Promise<StudentStructureProgress> {
+  const isImp = Boolean(progress.isImprovement) || (progress.attemptNumber !== undefined && progress.attemptNumber > 1);
   const docId =
     progress.id && progress.id.trim() !== ''
       ? progress.id
+      : isImp
+      ? `${progress.structureId}__${progress.studentDocId}__attempt_${progress.attemptNumber || 2}_${Date.now()}`
       : `${progress.structureId}__${progress.studentDocId}`;
 
   const now = new Date().toISOString();
   const fullRecord: StudentStructureProgress = {
     ...progress,
     id: docId,
+    attemptNumber: progress.attemptNumber || 1,
+    attemptLabel:
+      progress.attemptLabel ||
+      (isImp ? `تحسين درجة (محاولة ${progress.attemptNumber || 2})` : 'المحاولة الأساسية'),
+    isImprovement: isImp,
     createdAt: progress.createdAt || now,
     updatedAt: now,
   };
@@ -1312,11 +1320,7 @@ export async function saveStudentStructureProgress(
   const current = getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []);
   const updated = [
     fullRecord,
-    ...current.filter(
-      (p) =>
-        p.id !== docId &&
-        !(p.structureId === fullRecord.structureId && p.studentDocId === fullRecord.studentDocId)
-    ),
+    ...current.filter((p) => p.id !== docId),
   ];
   setCachedData(CACHE_KEYS.STRUCTURE_PROGRESS, updated);
   notifySubscribers();
@@ -1330,6 +1334,64 @@ export async function saveStudentStructureProgress(
   }
 
   return fullRecord;
+}
+
+export async function saveBatchStudentStructureProgress(
+  records: Array<Omit<StudentStructureProgress, 'id'> & { id?: string }>
+): Promise<StudentStructureProgress[]> {
+  if (!records || records.length === 0) return [];
+
+  const now = new Date().toISOString();
+  const fullRecords: StudentStructureProgress[] = records.map((progress, idx) => {
+    const isImp =
+      Boolean(progress.isImprovement) ||
+      (progress.attemptNumber !== undefined && progress.attemptNumber > 1);
+    const docId =
+      progress.id && progress.id.trim() !== ''
+        ? progress.id
+        : isImp
+        ? `${progress.structureId}__${progress.studentDocId}__attempt_${progress.attemptNumber || 2}_${Date.now()}_${idx}`
+        : `${progress.structureId}__${progress.studentDocId}`;
+
+    return {
+      ...progress,
+      id: docId,
+      attemptNumber: progress.attemptNumber || 1,
+      attemptLabel:
+        progress.attemptLabel ||
+        (isImp ? `تحسين درجة (محاولة ${progress.attemptNumber || 2})` : 'المحاولة الأساسية'),
+      isImprovement: isImp,
+      createdAt: progress.createdAt || now,
+      updatedAt: now,
+    };
+  });
+
+  const current = getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []);
+  const savedIdSet = new Set(fullRecords.map((r) => r.id));
+  const updated = [
+    ...fullRecords,
+    ...current.filter((p) => !savedIdSet.has(p.id)),
+  ];
+  setCachedData(CACHE_KEYS.STRUCTURE_PROGRESS, updated);
+  notifySubscribers();
+
+  try {
+    const chunkSize = 400;
+    for (let i = 0; i < fullRecords.length; i += chunkSize) {
+      const chunk = fullRecords.slice(i, i + chunkSize);
+      const batch = writeBatch(db);
+      chunk.forEach((rec) => {
+        const { id, ...payload } = rec;
+        const cleanData = sanitizeForFirestore(payload);
+        batch.set(doc(db, 'structureProgress', id), cleanData, { merge: true });
+      });
+      await batch.commit();
+    }
+  } catch (err) {
+    console.error('Firestore saveBatchStudentStructureProgress error (preserved locally):', err);
+  }
+
+  return fullRecords;
 }
 
 export async function deleteStudentStructureProgress(progressId: string): Promise<void> {

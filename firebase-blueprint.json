@@ -114,6 +114,12 @@
         "completionPercentage": { "type": "number" },
         "overallAccuracyPercentage": { "type": "number" },
         "questionScores": { "type": "array" },
+        "attemptNumber": { "type": "number" },
+        "attemptLabel": { "type": "string" },
+        "isImprovement": { "type": "boolean" },
+        "previousAccuracy": { "type": "number" },
+        "previousSolvedCount": { "type": "number" },
+        "improvementsCount": { "type": "number" },
         "notes": { "type": "string" },
         "createdAt": { "type": "string" },
         "updatedAt": { "type": "string" }

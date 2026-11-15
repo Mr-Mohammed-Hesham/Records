@@ -13,13 +13,24 @@ import {
   Plus,
   Trash2,
   Sparkles,
+  CheckSquare,
+  Square,
+  Users,
+  RotateCcw,
+  History,
 } from 'lucide-react';
 import { Student, Exam, ExamResult, TeacherSettings, ResultAttachment } from '../types';
 import { getGradeRating } from '../utils/grading';
 import { exportExamResultsExcel } from '../utils/excel';
 import { DEFAULT_SETTINGS, saveBatchResults, deleteResult } from '../services/firebase';
+import {
+  saveScoreEntryDraft,
+  loadScoreEntryDraft,
+  clearScoreEntryDraft,
+} from '../utils/activityTracker';
 import { AttachmentModal } from './AttachmentModal';
 import { AttachmentThumbnail } from './AttachmentThumbnail';
+import { ConfirmModal } from './ConfirmModal';
 
 interface ScoreEntryModalProps {
   isOpen: boolean;
@@ -82,6 +93,37 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [attachmentTargetRow, setAttachmentTargetRow] = useState<ScoreRowState | null>(null);
+
+  // Multi-selection & bulk score entry states
+  const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(new Set());
+  const [selectCountInput, setSelectCountInput] = useState<number>(5);
+  const [bulkScoreValue, setBulkScoreValue] = useState<string>('');
+  const [bulkNotesValue, setBulkNotesValue] = useState<string>('');
+
+  // Draft recovery banner state
+  const [pendingDraft, setPendingDraft] = useState<{
+    rows: Record<string, { score: string; notes: string }>;
+    updatedAt: string;
+  } | null>(null);
+
+  // ConfirmModal state for destructive deletes, bulk overwrite & unsaved exit
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText: string;
+    isDestructive: boolean;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'تأكيد',
+    cancelText: 'تراجع',
+    isDestructive: true,
+    onConfirm: () => {},
+  });
 
   const inputRefs = useRef<{
     [key: string]: HTMLInputElement | null;
@@ -247,8 +289,20 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
     });
 
     setRows(initialRows);
+    setSelectedRowKeys(new Set());
+    setBulkScoreValue('');
+    setBulkNotesValue('');
+    setErrorMessage('');
     setSearchTerm(preselectedStudent ? preselectedStudent.name : '');
     setSaveSuccess(false);
+
+    // Check if an unsaved progress draft exists for this exam
+    const draft = loadScoreEntryDraft(exam.id);
+    if (draft && Object.keys(draft.rows).length > 0) {
+      setPendingDraft(draft);
+    } else {
+      setPendingDraft(null);
+    }
   }, [
     exam,
     isOpen,
@@ -257,6 +311,85 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
     showAllStudents,
     preselectedStudent,
   ]);
+
+  const modifiedRowsCount = rows.filter((r) => r.isModified).length;
+  const hasUnsavedChanges = modifiedRowsCount > 0;
+
+  // Auto-save progress draft whenever rows are modified
+  useEffect(() => {
+    if (!isOpen || !exam) return;
+    if (!hasUnsavedChanges) return;
+
+    const draftMap: Record<string, { score: string; notes: string }> = {};
+    rows.forEach((r) => {
+      if (r.isModified) {
+        draftMap[r.rowKey] = { score: r.score, notes: r.notes };
+      }
+    });
+    if (Object.keys(draftMap).length > 0) {
+      saveScoreEntryDraft(exam.id, draftMap);
+    }
+  }, [rows, hasUnsavedChanges, isOpen, exam]);
+
+  // Safe close & safe exam switch guards
+  const requestSafeClose = () => {
+    if (!hasUnsavedChanges) {
+      onClose();
+      return;
+    }
+    setConfirmState({
+      isOpen: true,
+      title: 'تحذير: تعديلات غير محفوظة',
+      message: `يوجد (${modifiedRowsCount}) درجة/تعديل لم يتم حفظه بعد في امتحان "${exam?.title || ''}". في حال الخروج الآن سيتم تجاهل التعديلات غير المحفوظة. هل تريد الخروج دون حفظ؟`,
+      confirmText: 'تجاهل التعديلات والخروج',
+      cancelText: 'البقاء وحفظ الدرجات',
+      isDestructive: true,
+      onConfirm: () => {
+        if (exam) clearScoreEntryDraft(exam.id);
+        setConfirmState((prev) => ({ ...prev, isOpen: false }));
+        onClose();
+      },
+    });
+  };
+
+  const requestSafeSwitchExam = (chosenExam: Exam) => {
+    if (!onSelectExam || !exam || chosenExam.id === exam.id) return;
+    if (!hasUnsavedChanges) {
+      onSelectExam(chosenExam);
+      return;
+    }
+    setConfirmState({
+      isOpen: true,
+      title: 'تحذير: الانتقال لامتحان آخر قبل الحفظ',
+      message: `لديك (${modifiedRowsCount}) تعديل غير محفوظ في امتحان "${exam.title}". الانتقال إلى "${chosenExam.title}" سيتجاهل التعديلات الحالية غير المحفوظة. هل تريد المتابعة؟`,
+      confirmText: 'الانتقال بدون حفظ',
+      cancelText: 'البقاء في الامتحان الحالي',
+      isDestructive: true,
+      onConfirm: () => {
+        clearScoreEntryDraft(exam.id);
+        setConfirmState((prev) => ({ ...prev, isOpen: false }));
+        onSelectExam(chosenExam);
+      },
+    });
+  };
+
+  // Intercept Escape key in capture phase so App.tsx doesn't bypass unsaved warning
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscCapture = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (attachmentTargetRow) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (confirmState.isOpen) {
+        setConfirmState((prev) => ({ ...prev, isOpen: false }));
+      } else {
+        requestSafeClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscCapture, { capture: true });
+    return () => window.removeEventListener('keydown', handleEscCapture, { capture: true });
+  });
 
   if (!isOpen || !exam) return null;
 
@@ -329,9 +462,9 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   };
 
   /*
-   * حذف أو إلغاء محاولة تحسين
+   * حذف أو إلغاء محاولة تحسين (مع رسالة تحذيرية مؤكدة)
    */
-  const handleRemoveAttempt = async (rowKey: string, resultId?: string) => {
+  const executeRemoveAttempt = async (rowKey: string, resultId?: string) => {
     if (resultId) {
       try {
         if (onDeleteResult) {
@@ -344,6 +477,28 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
       }
     }
     setRows((prev) => prev.filter((r) => r.rowKey !== rowKey));
+    setSelectedRowKeys((prev) => {
+      const next = new Set(prev);
+      next.delete(rowKey);
+      return next;
+    });
+  };
+
+  const requestRemoveAttempt = (row: ScoreRowState) => {
+    setConfirmState({
+      isOpen: true,
+      title: row.resultId ? 'حذف محاولة تحسين محفوظة' : 'إلغاء صف محاولة التحسين',
+      message: row.resultId
+        ? `هل أنت متأكد من حذف محاولة التحسين رقم (${row.attemptNumber}) للطالب "${row.studentName}" (${row.score || '-'}/${exam.totalScore}) نهائياً من قاعدة البيانات؟`
+        : `هل تريد إلغاء صف محاولة التحسين رقم (${row.attemptNumber}) للطالب "${row.studentName}"؟`,
+      confirmText: row.resultId ? 'تأكيد الحذف النهائي' : 'إزالة الصف',
+      cancelText: 'تراجع',
+      isDestructive: true,
+      onConfirm: async () => {
+        await executeRemoveAttempt(row.rowKey, row.resultId);
+        setConfirmState((prev) => ({ ...prev, isOpen: false }));
+      },
+    });
   };
 
   /*
@@ -407,24 +562,27 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   };
 
   /*
-   * إعطاء الدرجة الكاملة للجميع
+   * إعطاء الدرجة الكاملة للجميع (بتحذير ConfirmModal بدلاً من window.confirm)
    */
   const handleSetFullScoreForAll = () => {
-    if (
-      !window.confirm(
-        `هل أنت متأكد من رصد الدرجة النهائية (${exam.totalScore}) لجميع الطلاب في القائمة؟`
-      )
-    ) {
-      return;
-    }
-
-    setRows((previousRows) =>
-      previousRows.map((row) => ({
-        ...row,
-        score: String(exam.totalScore),
-        isModified: true,
-      }))
-    );
+    setConfirmState({
+      isOpen: true,
+      title: 'تأكيد رصد الدرجة النهائية للجميع',
+      message: `هل أنت متأكد من رصد الدرجة النهائية (${exam.totalScore}) لجميع الطلاب في القائمة (${rows.length} صف)؟ سيتم تعديل أي درجات مسجلة سابقاً قبل الضغط على حفظ.`,
+      confirmText: `تعيين ${exam.totalScore} للكل`,
+      cancelText: 'إلغاء',
+      isDestructive: false,
+      onConfirm: () => {
+        setRows((previousRows) =>
+          previousRows.map((row) => ({
+            ...row,
+            score: String(exam.totalScore),
+            isModified: true,
+          }))
+        );
+        setConfirmState((prev) => ({ ...prev, isOpen: false }));
+      },
+    });
   };
 
   /*
@@ -480,6 +638,178 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
     (row) =>
       Number(row.score) >= exam.passScore
   ).length;
+
+  /*
+   * دوال التحديد المتعدد وتسجيل الدرجة للمحددين مرة واحدة
+   */
+  const filteredRowKeys = filteredRows.map((r) => r.rowKey);
+  const allFilteredSelected =
+    filteredRows.length > 0 && filteredRowKeys.every((k) => selectedRowKeys.has(k));
+
+  const toggleSelectRow = (rowKey: string) => {
+    setSelectedRowKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      return next;
+    });
+  };
+
+  const handleSelectAllFiltered = () => {
+    setSelectedRowKeys(new Set(filteredRowKeys));
+  };
+
+  const handleSelectUnrecordedFiltered = () => {
+    setSelectedRowKeys(
+      new Set(filteredRows.filter((r) => r.score.trim() === '').map((r) => r.rowKey))
+    );
+  };
+
+  const handleSelectSpecificCount = (countRaw: number) => {
+    const count = Math.max(1, Math.min(filteredRows.length, Math.floor(countRaw || 1)));
+    setSelectedRowKeys(new Set(filteredRows.slice(0, count).map((r) => r.rowKey)));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedRowKeys(new Set());
+  };
+
+  const handleRestoreDraft = () => {
+    if (!pendingDraft) return;
+    setRows((prev) =>
+      prev.map((row) => {
+        const draftEntry = pendingDraft.rows[row.rowKey];
+        if (!draftEntry) return row;
+        return {
+          ...row,
+          score: draftEntry.score,
+          notes: draftEntry.notes,
+          isModified: true,
+        };
+      })
+    );
+    setPendingDraft(null);
+  };
+
+  const handleDiscardDraft = () => {
+    if (exam) clearScoreEntryDraft(exam.id);
+    setPendingDraft(null);
+  };
+
+  const buildExamResultsFromRows = (targetRows: ScoreRowState[]): ExamResult[] => {
+    const out: ExamResult[] = [];
+    for (const row of targetRows) {
+      if (row.score.trim() === '') continue;
+      const numericScore = parseFloat(row.score);
+      if (isNaN(numericScore)) continue;
+      const clampedScore = Math.max(0, Math.min(exam.totalScore, numericScore));
+      const percentage = Math.round((clampedScore / exam.totalScore) * 1000) / 10;
+      const rating = getGradeRating(percentage, settings.gradingScale);
+      const passed = clampedScore >= exam.passScore;
+
+      out.push({
+        id: row.resultId || '',
+        examId: exam.id,
+        studentId: row.studentId,
+        studentDocId: row.studentDocId,
+        studentName: row.studentName,
+        examTitle: exam.title,
+        examDate: exam.date,
+        score: clampedScore,
+        totalScore: exam.totalScore,
+        percentage,
+        gradeRating: rating.label,
+        passed,
+        notes: row.notes,
+        attachment: row.attachment || null,
+        attemptNumber: row.attemptNumber,
+        attemptLabel: row.attemptLabel,
+        isImprovement: row.isImprovement,
+        previousScore: row.previousScore,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    return out;
+  };
+
+  const handleApplyScoreToSelected = () => {
+    if (selectedRowKeys.size === 0) return;
+    if (bulkScoreValue.trim() === '' || isNaN(Number(bulkScoreValue))) {
+      setErrorMessage('يرجى إدخال الدرجة الموحدة أولاً لتطبيقها على الطلاب المحددين.');
+      return;
+    }
+    const clampedVal = String(
+      Math.max(0, Math.min(exam.totalScore, parseFloat(bulkScoreValue)))
+    );
+    setErrorMessage('');
+    setRows((prev) =>
+      prev.map((row) =>
+        selectedRowKeys.has(row.rowKey)
+          ? {
+              ...row,
+              score: clampedVal,
+              notes: bulkNotesValue.trim() !== '' ? bulkNotesValue.trim() : row.notes,
+              isModified: true,
+            }
+          : row
+      )
+    );
+  };
+
+  const handleSaveSelectedOnce = async () => {
+    if (selectedRowKeys.size === 0) return;
+    const hasBulkScore = bulkScoreValue.trim() !== '' && !isNaN(Number(bulkScoreValue));
+    const clampedBulk = hasBulkScore
+      ? String(Math.max(0, Math.min(exam.totalScore, parseFloat(bulkScoreValue))))
+      : null;
+
+    const updatedRows = rows.map((row) => {
+      if (!selectedRowKeys.has(row.rowKey)) return row;
+      return {
+        ...row,
+        score: clampedBulk !== null ? clampedBulk : row.score,
+        notes: bulkNotesValue.trim() !== '' ? bulkNotesValue.trim() : row.notes,
+        isModified: true,
+      };
+    });
+
+    const selectedTargetRows = updatedRows.filter((r) => selectedRowKeys.has(r.rowKey));
+    const toSave = buildExamResultsFromRows(selectedTargetRows);
+
+    if (toSave.length === 0) {
+      setErrorMessage(
+        'يرجى إدخال درجة موحدة في الشريط العلوي أو في خانات الطلاب المحددين قبل الحفظ.'
+      );
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setErrorMessage('');
+      const saveFn = onSaveBatch || onSaveScores;
+      if (saveFn) {
+        await saveFn(toSave);
+      } else {
+        await saveBatchResults(toSave);
+      }
+
+      const savedRowKeys = new Set(selectedTargetRows.filter((r) => r.score.trim() !== '').map((r) => r.rowKey));
+      setRows(
+        updatedRows.map((r) =>
+          savedRowKeys.has(r.rowKey)
+            ? { ...r, isModified: false, isExisting: true }
+            : r
+        )
+      );
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3500);
+    } catch (error) {
+      console.error('Error saving selected rows:', error);
+      setErrorMessage('حدث خطأ أثناء حفظ درجات الطلاب المحددين.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   /*
    * حفظ أو تحديث مرفق إثبات المصداقية للصف فوراً
@@ -635,7 +965,9 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
         await saveBatchResults(toSave);
       }
 
-      // تحديث حالة الصفوف لتعيينها كبيانات محفوظة ومثبتة
+      // تحديث حالة الصفوف لتعيينها كبيانات محفوظة ومثبتة ومسح المسودة
+      clearScoreEntryDraft(exam.id);
+      setPendingDraft(null);
       setRows((prev) =>
         prev.map((r) => {
           if (r.score.trim() !== '') {
@@ -727,7 +1059,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
         className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden"
         onClick={(e) => {
           if (e.target === e.currentTarget) {
-            onClose();
+            requestSafeClose();
           }
         }}
       >
@@ -749,6 +1081,13 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                   رصد درجات الامتحان: {exam.title}
                 </h3>
 
+                {hasUnsavedChanges && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                    <History className="w-3 h-3" />
+                    مسودة غير محفوظة ({modifiedRowsCount})
+                  </span>
+                )}
+
                 {exams && exams.length > 1 && onSelectExam && (
                   <div className="flex items-center gap-1.5 bg-indigo-50/80 dark:bg-indigo-950/60 px-2 py-1 rounded-xl border border-indigo-200 dark:border-indigo-800/80 max-w-full">
                     <span className="text-[11px] text-indigo-700 dark:text-indigo-300 font-bold shrink-0">تغيير الامتحان:</span>
@@ -757,7 +1096,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                       value={exam.id}
                       onChange={(e) => {
                         const chosen = exams.find((x) => x.id === e.target.value);
-                        if (chosen) onSelectExam(chosen);
+                        if (chosen) requestSafeSwitchExam(chosen);
                       }}
                       className="bg-white dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-100 rounded-lg px-2 py-1 border border-slate-200 dark:border-slate-700 focus:outline-hidden cursor-pointer max-w-[150px] sm:max-w-xs truncate"
                     >
@@ -832,8 +1171,10 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
             </button>
 
             <button
-              onClick={onClose}
+              type="button"
+              onClick={requestSafeClose}
               className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title="إغلاق"
             >
               <X className="w-5 h-5" />
             </button>
@@ -899,8 +1240,37 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           </div>
         </div>
 
+        {/* Pending Draft Restore Banner */}
+        {pendingDraft && (
+          <div className="mt-3 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <History className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span className="font-bold text-amber-900 dark:text-amber-100">
+                توجد مسودة تقدم محفوظة تلقائياً ({Object.keys(pendingDraft.rows).length} تعديل غير محفوظ)
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleRestoreDraft}
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black cursor-pointer"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>استعادة التعديلات</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDiscardDraft}
+                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold cursor-pointer"
+              >
+                تجاهل المسودة
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Search & Improvement note */}
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
           <div className="relative flex-1 min-w-[200px]">
             <input
               type="text"
@@ -932,8 +1302,135 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           </div>
         </div>
 
+        {/* Multi-Selection Controls Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5 p-2.5 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1 ml-1">
+              <Users className="w-3.5 h-3.5 text-amber-500" />
+              <span>تحديد الطلاب:</span>
+            </span>
+
+            <button
+              type="button"
+              onClick={handleSelectAllFiltered}
+              disabled={filteredRows.length === 0}
+              className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] hover:border-amber-500 cursor-pointer disabled:opacity-40"
+            >
+              تحديد الكل ({filteredRows.length})
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSelectUnrecordedFiltered}
+              disabled={filteredRows.length === 0}
+              className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] hover:border-amber-500 cursor-pointer disabled:opacity-40"
+            >
+              تحديد غير المرصودين
+            </button>
+
+            <div className="inline-flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-0.5">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">تحديد عدد:</span>
+              <input
+                type="number"
+                min={1}
+                max={Math.max(1, filteredRows.length)}
+                value={selectCountInput}
+                onChange={(e) => setSelectCountInput(Math.max(1, Number(e.target.value) || 1))}
+                className="w-12 px-1 py-0.5 text-center font-mono font-bold text-[11px] bg-slate-50 dark:bg-slate-800 rounded text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700"
+              />
+              <button
+                type="button"
+                onClick={() => handleSelectSpecificCount(selectCountInput)}
+                disabled={filteredRows.length === 0}
+                className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] cursor-pointer disabled:opacity-40"
+              >
+                تحديد
+              </button>
+            </div>
+
+            {selectedRowKeys.size > 0 && (
+              <button
+                type="button"
+                onClick={handleClearSelection}
+                className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-bold text-[11px] cursor-pointer hover:bg-rose-100"
+              >
+                إلغاء التحديد ({selectedRowKeys.size})
+              </button>
+            )}
+          </div>
+
+          <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 font-mono">
+            المحدد: <strong className="text-amber-600 dark:text-amber-400">{selectedRowKeys.size}</strong>
+          </span>
+        </div>
+
+        {/* Bulk Score Entry Action Bar (visible when >= 1 selected) */}
+        {selectedRowKeys.size > 0 && (
+          <div className="mb-2.5 p-3 rounded-xl bg-amber-50/90 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 flex flex-wrap items-center justify-between gap-2.5 text-xs animate-in fade-in duration-150">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-black text-amber-900 dark:text-amber-200">
+                رصد درجة مرة واحدة للمحددين ({selectedRowKeys.size}):
+              </span>
+
+              <div className="inline-flex items-center gap-1">
+                <input
+                  type="number"
+                  step="0.5"
+                  min={0}
+                  max={exam.totalScore}
+                  value={bulkScoreValue}
+                  onChange={(e) => setBulkScoreValue(e.target.value)}
+                  placeholder={`الدرجة / ${exam.totalScore}`}
+                  className="w-28 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 font-mono font-bold text-center text-slate-900 dark:text-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => setBulkScoreValue(String(exam.totalScore))}
+                  className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 cursor-pointer hover:bg-emerald-50"
+                >
+                  كاملة ({exam.totalScore})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBulkScoreValue(String(exam.passScore))}
+                  className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-amber-700 dark:text-amber-300 cursor-pointer hover:bg-amber-50"
+                >
+                  نجاح ({exam.passScore})
+                </button>
+              </div>
+
+              <input
+                type="text"
+                value={bulkNotesValue}
+                onChange={(e) => setBulkNotesValue(e.target.value)}
+                placeholder="ملاحظة موحدة (اختياري)..."
+                className="w-44 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleApplyScoreToSelected}
+                className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-amber-400 dark:border-amber-700 text-amber-800 dark:text-amber-200 font-bold text-[11px] cursor-pointer hover:bg-amber-100/70"
+              >
+                تعبئة للمحددين
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleSaveSelectedOnce}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] cursor-pointer shadow-xs disabled:opacity-50"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>رصد وحفظ المحددين فوراً ({selectedRowKeys.size})</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {errorMessage && (
-          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center justify-between animate-in fade-in">
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center justify-between animate-in fade-in mb-2">
             <span>{errorMessage}</span>
             <button
               onClick={() => setErrorMessage('')}
@@ -949,7 +1446,23 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           <table className="w-full text-right text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10">
               <tr>
-                <th className="py-2.5 px-3 w-10 text-center">#</th>
+                <th className="py-2.5 px-2.5 w-10 text-center">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      allFilteredSelected ? handleClearSelection() : handleSelectAllFiltered()
+                    }
+                    className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-amber-600 dark:text-amber-400 cursor-pointer inline-flex items-center justify-center"
+                    title={allFilteredSelected ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+                  >
+                    {allFilteredSelected ? (
+                      <CheckSquare className="w-4 h-4" />
+                    ) : (
+                      <Square className="w-4 h-4 text-slate-400" />
+                    )}
+                  </button>
+                </th>
+                <th className="py-2.5 px-2 w-9 text-center">#</th>
                 <th className="py-2.5 px-3">اسم الطالب والمحاولة</th>
                 <th className="py-2.5 px-3 w-24">الصف</th>
                 <th className="py-2.5 px-3 w-32 text-center">
@@ -971,7 +1484,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
               {filteredRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={11}
                     className="py-10 text-center text-slate-400 dark:text-slate-500"
                   >
                     لا يوجد طلاب مسجلون في مادة{' '}
@@ -995,19 +1508,40 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                   const isInvalid = isEntered && scoreNum > exam.totalScore;
 
                   const isImprovement = row.attemptNumber > 1 || row.isImprovement;
+                  const isRowSelected = selectedRowKeys.has(row.rowKey);
 
                   return (
                     <tr
                       key={row.rowKey}
                       className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors ${
-                        isImprovement
+                        isRowSelected
+                          ? 'bg-amber-100/50 dark:bg-amber-900/25'
+                          : isImprovement
                           ? 'bg-amber-50/40 dark:bg-amber-950/20 border-r-4 border-r-amber-500'
                           : row.isModified
                           ? 'bg-amber-500/10 dark:bg-amber-950/20'
                           : ''
                       }`}
                     >
-                      <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
+                      <td className="py-2.5 px-2.5 text-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSelectRow(row.rowKey);
+                          }}
+                          className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer inline-flex items-center justify-center"
+                          title={isRowSelected ? 'إلغاء تحديد الطالب' : 'تحديد الطالب'}
+                        >
+                          {isRowSelected ? (
+                            <CheckSquare className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-400" />
+                          )}
+                        </button>
+                      </td>
+
+                      <td className="py-2.5 px-2 text-center text-slate-400 font-mono text-[11px]">
                         {index + 1}
                       </td>
 
@@ -1206,7 +1740,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                           {isImprovement && (
                             <button
                               type="button"
-                              onClick={() => handleRemoveAttempt(row.rowKey, row.resultId)}
+                              onClick={() => requestRemoveAttempt(row)}
                               className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded cursor-pointer transition-colors"
                               title="حذف محاولة التحسين"
                             >
@@ -1244,7 +1778,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           <div className="flex items-center gap-2.5">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestSafeClose}
               className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
             >
               إغلاق
@@ -1280,6 +1814,19 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           onClose={() => setAttachmentTargetRow(null)}
         />
       )}
+
+      {/* Confirm Warning Dialog layered above ScoreEntryModal */}
+      <ConfirmModal
+        isOpen={confirmState.isOpen}
+        zIndexClass="z-[70]"
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmText={confirmState.confirmText}
+        cancelText={confirmState.cancelText}
+        isDestructive={confirmState.isDestructive}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState((prev) => ({ ...prev, isOpen: false }))}
+      />
     </>
   );
 };

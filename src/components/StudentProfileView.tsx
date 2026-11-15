@@ -32,7 +32,7 @@ import {
   Check,
   Layers,
 } from 'lucide-react';
-import { Student, Exam, ExamResult, TeacherSettings, ResultAttachment, StudentEnrollmentStatus, StudentStructureProgress } from '../types';
+import { Student, Exam, ExamResult, TeacherSettings, ResultAttachment, StudentEnrollmentStatus, StudentStructureProgress, ExamStructure } from '../types';
 import { calculateStudentStats, getGradeRating } from '../utils/grading';
 import {
   exportSingleStudentAcademicReport,
@@ -47,15 +47,19 @@ import {
   getEffectiveEnrollmentNote,
   saveLocalStudentStatus,
 } from '../utils/studentStatus';
+import { UAE_GRADES, ACADEMIC_YEARS, ACADEMIC_TRACKS } from '../services/firebase';
 import { DynamicGradesChart } from './DynamicGradesChart';
 import { StudentAcademicReportModal } from './StudentAcademicReportModal';
 import { AttachmentModal } from './AttachmentModal';
 import { AttachmentThumbnail } from './AttachmentThumbnail';
+import { StudentStructureScoringModal } from './StudentStructureScoringModal';
+import { ConfirmModal } from './ConfirmModal';
 
 interface StudentProfileViewProps {
   student: Student;
   exams: Exam[];
   results: ExamResult[];
+  structures?: ExamStructure[];
   structureProgress?: StudentStructureProgress[];
   settings: TeacherSettings;
   onBack: () => void;
@@ -65,6 +69,10 @@ interface StudentProfileViewProps {
   onUpdateResult: (resultId: string, updatedScore: number, notes: string) => Promise<void>;
   onUpdateResultAttachment?: (resultId: string, attachment: ResultAttachment | null) => Promise<void>;
   onAddScoreForStudent: (student: Student, specificExam?: Exam) => void;
+  onSaveStructureProgress?: (
+    record: Omit<StudentStructureProgress, 'id'> & { id?: string }
+  ) => Promise<StudentStructureProgress>;
+  onDeleteStructureProgress?: (progress: StudentStructureProgress) => void;
   onOpenStructures?: () => void;
 }
 
@@ -72,6 +80,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   student,
   exams,
   results,
+  structures = [],
   structureProgress = [],
   settings,
   onBack,
@@ -81,6 +90,8 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   onUpdateResult,
   onUpdateResultAttachment,
   onAddScoreForStudent,
+  onSaveStructureProgress,
+  onDeleteStructureProgress,
   onOpenStructures,
 }) => {
   const [editingResultId, setEditingResultId] = useState<string | null>(null);
@@ -88,6 +99,22 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   const [editNotesVal, setEditNotesVal] = useState<string>('');
   const [showAcademicReportModal, setShowAcademicReportModal] = useState(false);
   const [activeAttachmentResult, setActiveAttachmentResult] = useState<ExamResult | null>(null);
+  const [pendingDeleteResult, setPendingDeleteResult] = useState<ExamResult | null>(null);
+  const [structureModalState, setStructureModalState] = useState<{
+    isOpen: boolean;
+    structure: ExamStructure | null;
+    existingProgress: StudentStructureProgress | null;
+    isNewImprovementAttempt: boolean;
+    baselineProgress: StudentStructureProgress | null;
+    nextAttemptNumber: number;
+  }>({
+    isOpen: false,
+    structure: null,
+    existingProgress: null,
+    isNewImprovementAttempt: false,
+    baselineProgress: null,
+    nextAttemptNumber: 2,
+  });
 
   // Enrollment Status Tool State
   const [currentEnrollmentStatus, setCurrentEnrollmentStatus] = useState<StudentEnrollmentStatus>(
@@ -1036,11 +1063,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
                               <button
-                                onClick={() => {
-                                  if (window.confirm(`هل أنت متأكد من حذف نتيجة امتحان "${res.examTitle}" لهذا الطالب؟`)) {
-                                    onDeleteResult(res.id);
-                                  }
-                                }}
+                                onClick={() => setPendingDeleteResult(res)}
                                 className="p-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
                                 title="حذف النتيجة"
                               >
@@ -1113,50 +1136,207 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             <table className="w-full text-right text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="py-2.5 px-3">الهيكل</th>
+                  <th className="py-2.5 px-3">الهيكل والمحاولة</th>
                   <th className="py-2.5 px-3">الصف / الفصل / المسار / السنة / المادة</th>
                   <th className="py-2.5 px-3 text-center">الأسئلة المحلولة</th>
                   <th className="py-2.5 px-3 text-center">متوسط الصحة %</th>
                   <th className="py-2.5 px-3">نسبة صحة كل سؤال</th>
+                  {onSaveStructureProgress && (
+                    <th className="py-2.5 px-3 text-center">التحسين والإجراءات</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {structureProgress.map((rec) => (
-                  <tr key={rec.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
-                    <td className="py-2.5 px-3 font-extrabold text-slate-900 dark:text-white">
-                      {rec.structureTitle}
-                    </td>
-                    <td className="py-2.5 px-3 text-[11px] text-slate-600 dark:text-slate-300">
-                      {rec.grade} • {rec.term} • {rec.track} • {rec.academicYear} • {rec.subject}
-                    </td>
-                    <td className="py-2.5 px-3 text-center font-mono tabular-nums font-bold text-slate-900 dark:text-white">
-                      {rec.solvedCount} / {rec.totalQuestions} ({rec.completionPercentage}%)
-                    </td>
-                    <td className="py-2.5 px-3 text-center font-mono tabular-nums font-black text-emerald-600 dark:text-emerald-400">
-                      {rec.overallAccuracyPercentage}%
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <div className="flex flex-wrap gap-1 font-mono tabular-nums">
-                        {(rec.questionScores || []).map((qs) => (
-                          <span
-                            key={qs.questionNumber}
-                            className={`px-1.5 py-0.5 rounded text-[10px] border ${
-                              !qs.solved
-                                ? 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
-                                : qs.accuracyPercentage >= 80
-                                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                                : qs.accuracyPercentage >= 50
-                                ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                                : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
-                            }`}
-                          >
-                            س{qs.questionNumber}:{qs.solved ? `${qs.accuracyPercentage}%` : '—'}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {[...structureProgress]
+                  .sort((a, b) => {
+                    const cmp = a.structureTitle.localeCompare(b.structureTitle, 'ar');
+                    if (cmp !== 0) return cmp;
+                    return (a.attemptNumber || 1) - (b.attemptNumber || 1);
+                  })
+                  .map((rec) => {
+                    const isImp =
+                      Boolean(rec.isImprovement) || (rec.attemptNumber !== undefined && rec.attemptNumber > 1);
+                    const prevAcc = rec.previousAccuracy;
+                    const accDiff =
+                      isImp && prevAcc !== undefined
+                        ? Math.round((rec.overallAccuracyPercentage - prevAcc) * 10) / 10
+                        : null;
+                    const qImpCount =
+                      rec.improvementsCount ??
+                      (rec.questionScores || []).filter(
+                        (qs) => qs.isImprovement || (qs.attemptNumber !== undefined && qs.attemptNumber > 1)
+                      ).length;
+
+                    const resolveStructureObj = (): ExamStructure => {
+                      const found = structures.find((s) => s.id === rec.structureId);
+                      if (found) return found;
+                      return {
+                        id: rec.structureId,
+                        title: rec.structureTitle,
+                        grade: rec.grade,
+                        term: rec.term,
+                        track: rec.track,
+                        academicYear: rec.academicYear,
+                        subject: rec.subject,
+                        group: rec.group,
+                        date: rec.date,
+                        totalQuestions: rec.totalQuestions,
+                        questions: Array.from({ length: rec.totalQuestions || 1 }, (_, i) => ({
+                          questionNumber: i + 1,
+                          title: '',
+                          topic: '',
+                        })),
+                        createdAt: rec.createdAt,
+                      };
+                    };
+
+                    const sameStructRecords = structureProgress.filter((sp) => sp.structureId === rec.structureId);
+                    const maxAttemptForStruct = Math.max(
+                      ...sameStructRecords.map((sp) => sp.attemptNumber || 1),
+                      1
+                    );
+                    const latestForStruct =
+                      [...sameStructRecords].sort((a, b) => (a.attemptNumber || 1) - (b.attemptNumber || 1)).pop() || rec;
+
+                    return (
+                      <tr
+                        key={rec.id}
+                        className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/40 ${
+                          isImp ? 'bg-amber-50/40 dark:bg-amber-950/20 border-r-4 border-r-amber-500' : ''
+                        }`}
+                      >
+                        <td className="py-2.5 px-3 font-extrabold text-slate-900 dark:text-white">
+                          <div className="flex flex-col gap-1">
+                            <span>{rec.structureTitle}</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {isImp && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                                  <Sparkles className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
+                                  {rec.attemptLabel || `تحسين (محاولة ${rec.attemptNumber || 2})`}
+                                </span>
+                              )}
+                              {prevAcc !== undefined && (
+                                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                                  (السابقة: {prevAcc}%)
+                                </span>
+                              )}
+                              {accDiff !== null && (
+                                <span
+                                  className={`text-[10px] font-mono font-bold ${
+                                    accDiff > 0
+                                      ? 'text-emerald-600 dark:text-emerald-400'
+                                      : accDiff < 0
+                                      ? 'text-rose-600 dark:text-rose-400'
+                                      : 'text-slate-500 dark:text-slate-400'
+                                  }`}
+                                >
+                                  {accDiff > 0 ? `+${accDiff}% ↑` : `${accDiff}%`}
+                                </span>
+                              )}
+                              {qImpCount > 0 && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                                  <Sparkles className="w-2.5 h-2.5" />
+                                  {qImpCount} سؤال محسّن
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-[11px] text-slate-600 dark:text-slate-300">
+                          {rec.grade} • {rec.term} • {rec.track} • {rec.academicYear} • {rec.subject}
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono tabular-nums font-bold text-slate-900 dark:text-white">
+                          {rec.solvedCount} / {rec.totalQuestions} ({rec.completionPercentage}%)
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono tabular-nums font-black text-emerald-600 dark:text-emerald-400">
+                          {rec.overallAccuracyPercentage}%
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex flex-wrap gap-1 font-mono tabular-nums">
+                            {(rec.questionScores || []).map((qs) => {
+                              const isQImp =
+                                Boolean(qs.isImprovement) ||
+                                (qs.attemptNumber !== undefined && qs.attemptNumber > 1);
+                              return (
+                                <span
+                                  key={qs.questionNumber}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] border ${
+                                    isQImp ? 'ring-1 ring-amber-400 dark:ring-amber-600 ' : ''
+                                  }${
+                                    !qs.solved
+                                      ? 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                                      : qs.accuracyPercentage >= 80
+                                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                      : qs.accuracyPercentage >= 50
+                                      ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                                      : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                                  }`}
+                                  title={
+                                    isQImp && qs.previousAccuracy !== undefined
+                                      ? `سؤال ${qs.questionNumber}: ${qs.accuracyPercentage}% (تحسين من ${qs.previousAccuracy}% • محاولة ${qs.attemptNumber || 2})`
+                                      : `سؤال ${qs.questionNumber}: ${qs.solved ? `${qs.accuracyPercentage}%` : 'لم يُحل'}`
+                                  }
+                                >
+                                  س{qs.questionNumber}:{qs.solved ? `${qs.accuracyPercentage}%${isQImp ? '↑' : ''}` : '—'}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </td>
+                        {onSaveStructureProgress && (
+                          <td className="py-2.5 px-3 text-center">
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setStructureModalState({
+                                    isOpen: true,
+                                    structure: resolveStructureObj(),
+                                    existingProgress: null,
+                                    isNewImprovementAttempt: true,
+                                    baselineProgress: latestForStruct,
+                                    nextAttemptNumber: maxAttemptForStruct + 1,
+                                  })
+                                }
+                                className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 rounded-lg border border-amber-200 transition cursor-pointer"
+                                title="إضافة محاولة تحسين جديدة لهذا الهيكل"
+                              >
+                                <Plus className="w-3 h-3" />
+                                تحسين
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setStructureModalState({
+                                    isOpen: true,
+                                    structure: resolveStructureObj(),
+                                    existingProgress: rec,
+                                    isNewImprovementAttempt: false,
+                                    baselineProgress: null,
+                                    nextAttemptNumber: maxAttemptForStruct + 1,
+                                  })
+                                }
+                                className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
+                                title="تعديل / تحسين أسئلة هذا السجل"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              {onDeleteStructureProgress && (
+                                <button
+                                  type="button"
+                                  onClick={() => onDeleteStructureProgress(rec)}
+                                  className="p-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                                  title="حذف السجل"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
@@ -1188,6 +1368,65 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           onClose={() => setActiveAttachmentResult(null)}
         />
       )}
+
+      {structureModalState.isOpen && structureModalState.structure && onSaveStructureProgress && (
+        <StudentStructureScoringModal
+          isOpen={structureModalState.isOpen}
+          structure={structureModalState.structure}
+          student={student}
+          existingProgress={structureModalState.existingProgress}
+          isNewImprovementAttempt={structureModalState.isNewImprovementAttempt}
+          baselineProgress={structureModalState.baselineProgress}
+          nextAttemptNumber={structureModalState.nextAttemptNumber}
+          settings={settings}
+          gradesList={settings.grades && settings.grades.length > 0 ? settings.grades : UAE_GRADES}
+          subjectsList={settings.subjects && settings.subjects.length > 0 ? settings.subjects : ['Mathematics']}
+          tracksList={ACADEMIC_TRACKS}
+          yearsList={ACADEMIC_YEARS}
+          onClose={() =>
+            setStructureModalState({
+              isOpen: false,
+              structure: null,
+              existingProgress: null,
+              isNewImprovementAttempt: false,
+              baselineProgress: null,
+              nextAttemptNumber: 2,
+            })
+          }
+          onSave={async (record) => {
+            await onSaveStructureProgress(record);
+            setStructureModalState({
+              isOpen: false,
+              structure: null,
+              existingProgress: null,
+              isNewImprovementAttempt: false,
+              baselineProgress: null,
+              nextAttemptNumber: 2,
+            });
+          }}
+        />
+      )}
+
+      <ConfirmModal
+        isOpen={!!pendingDeleteResult}
+        zIndexClass="z-[70]"
+        title="حذف نتيجة الامتحان"
+        message={
+          pendingDeleteResult
+            ? `هل أنت متأكد من حذف نتيجة امتحان "${pendingDeleteResult.examTitle}" (${pendingDeleteResult.score}/${pendingDeleteResult.totalScore}) للطالب "${student.name}" نهائياً؟`
+            : ''
+        }
+        confirmText="تأكيد الحذف"
+        cancelText="تراجع"
+        isDestructive={true}
+        onConfirm={async () => {
+          if (pendingDeleteResult) {
+            await onDeleteResult(pendingDeleteResult.id);
+          }
+          setPendingDeleteResult(null);
+        }}
+        onCancel={() => setPendingDeleteResult(null)}
+      />
     </div>
   );
 };

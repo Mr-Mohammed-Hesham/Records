@@ -45,6 +45,7 @@ import {
   getLastActivity,
   recordLastActivity,
   clearLastActivity,
+  clearAllActivityAndDrafts,
 } from './utils/activityTracker';
 
 import {
@@ -68,6 +69,7 @@ import {
   updateStructure,
   deleteStructure,
   saveStudentStructureProgress,
+  saveBatchStudentStructureProgress,
   deleteStudentStructureProgress,
   seedSampleData,
   clearAllData,
@@ -1480,15 +1482,43 @@ export default function App() {
     }
   };
 
+  const handleSaveBatchStructureProgress = async (
+    records: Array<Omit<StudentStructureProgress, 'id'> & { id?: string }>
+  ): Promise<StudentStructureProgress[]> => {
+    try {
+      const saved = await saveBatchStudentStructureProgress(records);
+      addToast(
+        `تم رصد وحفظ حل الهيكل لعدد ${saved.length} طالب دفعة واحدة بنجاح!`
+      );
+      return saved;
+    } catch (err) {
+      console.error('Save batch structure progress error:', err);
+      addToast('حدث خطأ أثناء الحفظ الجماعي لسجلات الهيكل', 'error');
+      throw err;
+    }
+  };
+
   const handleDeleteStructureProgress = (progress: StudentStructureProgress) => {
+    const isImp =
+      Boolean(progress.isImprovement) ||
+      (progress.attemptNumber !== undefined && progress.attemptNumber > 1);
     setConfirmModalConfig({
       isOpen: true,
-      title: 'حذف سجل الطالب في الهيكل',
-      message: `هل تريد حذف سجل الطالب "${progress.studentName}" من هيكل "${progress.structureTitle}"؟`,
+      title: isImp ? 'حذف محاولة تحسين من الهيكل' : 'حذف سجل الطالب في الهيكل',
+      message: isImp
+        ? `هل أنت متأكد من حذف محاولة التحسين رقم (${progress.attemptNumber || 2}) للطالب "${progress.studentName}" في هيكل "${progress.structureTitle}"؟ سيتم حذف هذه المحاولة نهائياً مع الإبقاء على المحاولات السابقة.`
+        : `هل أنت متأكد من حذف سجل الطالب "${progress.studentName}" من هيكل "${progress.structureTitle}"؟ سيتم حذف كافة درجات الأسئلة المسجلة في هذا السجل.`,
+      confirmText: isImp ? 'حذف المحاولة' : 'تأكيد الحذف',
+      cancelText: 'تراجع',
+      isDestructive: true,
       onConfirm: async () => {
         try {
           await deleteStudentStructureProgress(progress.id);
-          addToast('تم حذف سجل الطالب من الهيكل بنجاح');
+          addToast(
+            isImp
+              ? 'تم حذف محاولة التحسين من الهيكل بنجاح'
+              : 'تم حذف سجل الطالب من الهيكل بنجاح'
+          );
         } catch (err) {
           console.error('Delete structure progress error:', err);
           addToast('تعذر حذف سجل الهيكل', 'error');
@@ -1878,10 +1908,12 @@ export default function App() {
   };
 
   const handleStartAllFresh = () => {
+    clearAllActivityAndDrafts();
     clearLastActivity();
     clearViewState('MAIN_NAV_STATE');
     clearViewState('STUDENTS_VIEW');
     clearViewState('EXAMS_VIEW');
+    clearViewState('STRUCTURES_VIEW_STATE');
     clearViewState('REPORTS_VIEW');
     setSelectedStudent(null);
     setCurrentView('dashboard');
@@ -2743,6 +2775,7 @@ export default function App() {
                     result.studentDocId ===
                     selectedStudent.id
                 )}
+                structures={structures}
                 structureProgress={structureProgress.filter(
                   (sp) => sp.studentDocId === selectedStudent.id
                 )}
@@ -2772,6 +2805,8 @@ export default function App() {
                 onUpdateResultAttachment={
                   handleUpdateResultAttachment
                 }
+                onSaveStructureProgress={handleSaveStructureProgress}
+                onDeleteStructureProgress={handleDeleteStructureProgress}
                 onOpenStructures={() => navigateTo('structures')}
               />
             )}
@@ -2820,6 +2855,7 @@ export default function App() {
               onUpdateStructure={handleUpdateStructure}
               onDeleteStructure={handleDeleteStructure}
               onSaveProgress={handleSaveStructureProgress}
+              onSaveBatchProgress={handleSaveBatchStructureProgress}
               onDeleteProgress={handleDeleteStructureProgress}
               onOpenStudentProfile={handleOpenStudentProfile}
             />

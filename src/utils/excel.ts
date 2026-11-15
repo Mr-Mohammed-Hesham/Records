@@ -1050,7 +1050,25 @@ function buildStructureChartRows(
     chartType === 'bars_and_columns' || chartType === 'both' || chartType === 'columns';
   const showBars = chartType !== 'distribution';
 
-  // تجميع بيانات كل سؤال لكل هيكل
+  // تجميع بيانات كل سؤال لكل هيكل (اعتماد أحدث محاولة لكل طالب ولكل هيكل لمنع تكرار الحساب)
+  const latestMap = new Map<string, StudentStructureProgress>();
+  progressRecords.forEach((rec) => {
+    const key = `${rec.structureId}__${rec.studentDocId}`;
+    const existing = latestMap.get(key);
+    const currAtt = rec.attemptNumber || 1;
+    const prevAtt = existing?.attemptNumber || 1;
+    if (
+      !existing ||
+      currAtt > prevAtt ||
+      (currAtt === prevAtt &&
+        new Date(rec.updatedAt || rec.date || 0).getTime() >=
+          new Date(existing.updatedAt || existing.date || 0).getTime())
+    ) {
+      latestMap.set(key, rec);
+    }
+  });
+  const effectiveProgressRecords = Array.from(latestMap.values());
+
   interface QuestionChartEntry {
     label: string;
     shortLabel: string;
@@ -1062,7 +1080,7 @@ function buildStructureChartRows(
   const allQuestionEntries: QuestionChartEntry[] = [];
   const allSolvedQuestionAccuracies: number[] = [];
 
-  progressRecords.forEach((rec) => {
+  effectiveProgressRecords.forEach((rec) => {
     (rec.questionScores || []).forEach((qs) => {
       if (qs.solved) {
         allSolvedQuestionAccuracies.push(Number(qs.accuracyPercentage) || 0);
@@ -1072,7 +1090,7 @@ function buildStructureChartRows(
 
   if (fallbackStructs.length > 0) {
     fallbackStructs.forEach((struct) => {
-      const structProgress = progressRecords.filter((p) => p.structureId === struct.id);
+      const structProgress = effectiveProgressRecords.filter((p) => p.structureId === struct.id);
       if (structProgress.length === 0) return;
       const qCount = Math.max(1, struct.totalQuestions || struct.questions?.length || 1);
       for (let q = 1; q <= qCount; q++) {
@@ -1097,7 +1115,7 @@ function buildStructureChartRows(
       }
     });
   } else {
-    progressRecords.forEach((rec) => {
+    effectiveProgressRecords.forEach((rec) => {
       const qCount = Math.max(1, rec.totalQuestions || rec.questionScores?.length || 1);
       for (let q = 1; q <= qCount; q++) {
         const qs = (rec.questionScores || []).find((item) => item.questionNumber === q);
@@ -1124,7 +1142,7 @@ function buildStructureChartRows(
     ]);
 
     if (allQuestionEntries.length === 0) {
-      progressRecords.forEach((rec) => {
+      effectiveProgressRecords.forEach((rec) => {
         rows.push([
           `${rec.structureTitle} (${rec.studentName})`,
           `${rec.solvedCount} / ${rec.totalQuestions}`,
@@ -1179,7 +1197,7 @@ function buildStructureChartRows(
   const samplePool =
     allSolvedQuestionAccuracies.length > 0
       ? allSolvedQuestionAccuracies
-      : progressRecords.map((p) => p.overallAccuracyPercentage);
+      : effectiveProgressRecords.map((p) => p.overallAccuracyPercentage);
 
   const ratingCounts = [
     { label: 'ممتاز (90% فأعلى)', count: samplePool.filter((v) => v >= 90).length, icon: '🟩' },
@@ -1209,6 +1227,74 @@ function buildStructureChartRows(
 }
 
 /**
+ * مساعد لتنسيق بيانات محاولة التحسين على مستوى الطالب والهيكل
+ */
+function formatStructureAttemptSummary(rec: StudentStructureProgress): string {
+  const isImp = Boolean(rec.isImprovement || (rec.attemptNumber && rec.attemptNumber > 1));
+  const baseLabel =
+    rec.attemptLabel || (isImp ? `تحسين (محاولة ${rec.attemptNumber || 2})` : 'المحاولة الأساسية');
+  const qImpCount = (rec.questionScores || []).filter(
+    (qs) => qs.isImprovement || (qs.attemptNumber && qs.attemptNumber > 1)
+  ).length;
+
+  const parts = [baseLabel];
+  if (isImp && rec.previousAccuracy !== undefined) {
+    const diff = rec.overallAccuracyPercentage - rec.previousAccuracy;
+    parts.push(`السابقة: ${rec.previousAccuracy}% (${diff >= 0 ? '+' : ''}${diff}%${diff > 0 ? ' ↑' : ''})`);
+  }
+  if (qImpCount > 0) {
+    parts.push(`${qImpCount} سؤال محسّن`);
+  }
+  return parts.join(' | ');
+}
+
+/**
+ * مساعد لتنسيق نسبة صحة السؤال الفردي مع علامة التحسين إن وجدت
+ */
+function formatQuestionScoreWithImprovement(
+  qs: NonNullable<StudentStructureProgress['questionScores']>[number] | undefined
+): string {
+  if (!qs || !qs.solved) return 'غير محلول بعد';
+  const pct = Number(qs.accuracyPercentage) || 0;
+  const rating = getStructureAccuracyRating(pct);
+  const isQImp = Boolean(qs.isImprovement || (qs.attemptNumber && qs.attemptNumber > 1));
+  if (!isQImp) {
+    return `${pct}% (${rating})`;
+  }
+  if (qs.previousAccuracy !== undefined) {
+    const diff = pct - qs.previousAccuracy;
+    const sign = diff > 0 ? `+${diff}% ↑` : `${diff}%`;
+    return `${pct}% (تحسين م${qs.attemptNumber || 2} من ${qs.previousAccuracy}% ${sign}) — ${rating}`;
+  }
+  return `${pct}% (تحسين م${qs.attemptNumber || 2} ↑) — ${rating}`;
+}
+
+/**
+ * تجميع أحدث محاولة لكل طالب ولكل هيكل لإحصائيات الإكسيل
+ */
+function getLatestStructureProgressRecords(
+  records: StudentStructureProgress[]
+): StudentStructureProgress[] {
+  const map = new Map<string, StudentStructureProgress>();
+  records.forEach((rec) => {
+    const key = `${rec.structureId}__${rec.studentDocId}`;
+    const existing = map.get(key);
+    const currAtt = rec.attemptNumber || 1;
+    const prevAtt = existing?.attemptNumber || 1;
+    if (
+      !existing ||
+      currAtt > prevAtt ||
+      (currAtt === prevAtt &&
+        new Date(rec.updatedAt || rec.date || 0).getTime() >=
+          new Date(existing.updatedAt || existing.date || 0).getTime())
+    ) {
+      map.set(key, rec);
+    }
+  });
+  return Array.from(map.values());
+}
+
+/**
  * تصدير تقرير الهياكل لطالب واحد مع دعم كامل للرسم البياني وتنسيق الهاتف المحمول أو الكمبيوتر
  * بنفس تكنيك exportSingleStudentAcademicReport
  */
@@ -1228,20 +1314,24 @@ export function exportSingleStudentStructuresReport(
   const statusNote = getEffectiveEnrollmentNote(student);
   const structMap = new Map(structures.map((s) => [s.id, s]));
 
-  const sortedRecords = [...progressRecords].sort(
-    (a, b) => new Date(b.updatedAt || b.date || 0).getTime() - new Date(a.updatedAt || a.date || 0).getTime()
-  );
+  const sortedRecords = [...progressRecords].sort((a, b) => {
+    if (a.structureId === b.structureId) {
+      return (a.attemptNumber || 1) - (b.attemptNumber || 1);
+    }
+    return new Date(b.updatedAt || b.date || 0).getTime() - new Date(a.updatedAt || a.date || 0).getTime();
+  });
 
-  const totalStructuresCount = sortedRecords.length;
-  const totalQuestionsSum = sortedRecords.reduce((acc, r) => acc + (r.totalQuestions || 0), 0);
-  const totalSolvedSum = sortedRecords.reduce((acc, r) => acc + (r.solvedCount || 0), 0);
+  const latestRecords = getLatestStructureProgressRecords(sortedRecords);
+  const totalStructuresCount = latestRecords.length;
+  const totalQuestionsSum = latestRecords.reduce((acc, r) => acc + (r.totalQuestions || 0), 0);
+  const totalSolvedSum = latestRecords.reduce((acc, r) => acc + (r.solvedCount || 0), 0);
   const avgCompletionPct =
     totalStructuresCount > 0
-      ? Math.round(sortedRecords.reduce((acc, r) => acc + (r.completionPercentage || 0), 0) / totalStructuresCount)
+      ? Math.round(latestRecords.reduce((acc, r) => acc + (r.completionPercentage || 0), 0) / totalStructuresCount)
       : 0;
   const avgAccuracyPct =
     totalStructuresCount > 0
-      ? Math.round(sortedRecords.reduce((acc, r) => acc + (r.overallAccuracyPercentage || 0), 0) / totalStructuresCount)
+      ? Math.round(latestRecords.reduce((acc, r) => acc + (r.overallAccuracyPercentage || 0), 0) / totalStructuresCount)
       : 0;
   const overallRating = totalStructuresCount > 0 ? getStructureAccuracyRating(avgAccuracyPct) : 'لا توجد سجلات';
 
@@ -1265,14 +1355,14 @@ export function exportSingleStudentStructuresReport(
       ['حالة ملف الطالب:', statusLabel, 'ملاحظة الحالة:', statusNote || 'منتظم'],
       [''],
       ['📐 ثانياً: ملخص مؤشرات الهياكل للطالب', '', '', ''],
-      ['عدد الهياكل المسجلة:', `${totalStructuresCount} هيكل`, 'إجمالي الأسئلة المحلولة:', `${totalSolvedSum} / ${totalQuestionsSum} سؤال`],
+      ['عدد الهياكل المسجلة:', `${totalStructuresCount} هيكل (${sortedRecords.length} سجل/محاولة)`, 'إجمالي الأسئلة المحلولة:', `${totalSolvedSum} / ${totalQuestionsSum} سؤال`],
       ['متوسط نسبة الإنجاز:', `${avgCompletionPct}%`, 'متوسط الصحة العامة:', `${avgAccuracyPct}%`],
       ['التقييم العام للهياكل:', overallRating, 'مستوى السيطرة:', buildVisualScoreBar(avgAccuracyPct, true)],
       [''],
     ];
 
     if (includeChart) {
-      sheetRows.push(...buildStructureChartRows(structures, sortedRecords, true, prefs.chartType));
+      sheetRows.push(...buildStructureChartRows(structures, latestRecords, true, prefs.chartType));
     }
 
     sheetRows.push(['📝 تفاصيل الهياكل ونسبة صحة كل سؤال', '', '', '']);
@@ -1282,17 +1372,18 @@ export function exportSingleStudentStructuresReport(
     } else {
       sortedRecords.forEach((rec, idx) => {
         const structMeta = structMap.get(rec.structureId);
+        const attemptSummary = formatStructureAttemptSummary(rec);
         sheetRows.push([
           `══════ [ ${idx + 1}. الهيكل: ${rec.structureTitle} ] ══════`,
-          `${rec.grade} • ${rec.term}`,
-          `${rec.track} • ${rec.academicYear}`,
+          attemptSummary,
+          `${rec.grade} • ${rec.term} • ${rec.track}`,
           `المحلول: ${rec.solvedCount}/${rec.totalQuestions} (${rec.overallAccuracyPercentage}%)`,
         ]);
         sheetRows.push([
           'السؤال وعنوانه',
           'حالة الحل',
           'المؤشر البصري لصحة السؤال',
-          'نسبة الصحة والملاحظات',
+          'نسبة الصحة والتحسين',
         ]);
 
         const qCount = Math.max(1, rec.totalQuestions || rec.questionScores?.length || 1);
@@ -1302,11 +1393,12 @@ export function exportSingleStudentStructuresReport(
           const qTitle = qItem?.title ? `س${q}: ${qItem.title}` : `السؤال ${q}`;
           const solved = Boolean(qs && qs.solved);
           const pct = solved ? Number(qs?.accuracyPercentage) || 0 : 0;
+          const isQImp = Boolean(qs?.isImprovement || (qs?.attemptNumber && qs.attemptNumber > 1));
           sheetRows.push([
-            qTitle,
+            isQImp ? `${qTitle} ✨ (محاولة ${qs?.attemptNumber || 2})` : qTitle,
             solved ? 'تم الحل ✔' : 'لم يُحل ✖',
             solved ? buildVisualScoreBar(pct, true) : '⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%',
-            solved ? `${pct}% (${getStructureAccuracyRating(pct)})` : 'غير محلول بعد',
+            formatQuestionScoreWithImprovement(qs),
           ]);
         }
         sheetRows.push(['ملاحظات الهيكل:', rec.notes || getStructurePerformanceNote(rec.solvedCount, rec.totalQuestions, rec.overallAccuracyPercentage), '', '']);
@@ -1350,38 +1442,42 @@ export function exportSingleStudentStructuresReport(
     ];
 
     if (includeChart) {
-      headerData.push(...buildStructureChartRows(structures, sortedRecords, false, prefs.chartType));
+      headerData.push(...buildStructureChartRows(structures, latestRecords, false, prefs.chartType));
     }
 
     headerData.push(['تفاصيل الهياكل ونسبة صحة كل سؤال على حدة', '', '', '', '', '', '', '']);
     const tableHeader = [
-      'اسم الهيكل',
+      'اسم الهيكل ونوع المحاولة',
       'الصف / الفصل / المسار',
       'السنة / المادة',
       'السؤال',
       'حالة الحل',
       'الرسم البياني لنسبة الصحة',
-      'نسبة الصحة % والتقدير',
+      'نسبة الصحة % والتحسين',
       'ملاحظات الهيكل',
     ];
 
     const detailRows: any[][] = [];
     sortedRecords.forEach((rec) => {
       const structMeta = structMap.get(rec.structureId);
+      const attemptSummary = formatStructureAttemptSummary(rec);
       const qCount = Math.max(1, rec.totalQuestions || rec.questionScores?.length || 1);
       for (let q = 1; q <= qCount; q++) {
         const qs = (rec.questionScores || []).find((item) => item.questionNumber === q);
         const qItem = structMeta?.questions?.find((item) => item.questionNumber === q);
         const solved = Boolean(qs && qs.solved);
         const pct = solved ? Number(qs?.accuracyPercentage) || 0 : 0;
+        const isQImp = Boolean(qs?.isImprovement || (qs?.attemptNumber && qs.attemptNumber > 1));
         detailRows.push([
-          rec.structureTitle,
+          q === 1 ? `${rec.structureTitle} (${attemptSummary})` : rec.structureTitle,
           `${rec.grade} • ${rec.term} • ${rec.track}`,
           `${rec.academicYear} • ${rec.subject}`,
-          qItem?.title ? `س${q} (${qItem.title})` : `سؤال ${q}`,
+          qItem?.title
+            ? `س${q} (${qItem.title})${isQImp ? ` ✨ م${qs?.attemptNumber || 2}` : ''}`
+            : `سؤال ${q}${isQImp ? ` ✨ م${qs?.attemptNumber || 2}` : ''}`,
           solved ? 'تم الحل ✔' : 'لم يُحل ✖',
           solved ? buildVisualScoreBar(pct, false) : '⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%',
-          solved ? `${pct}% (${getStructureAccuracyRating(pct)})` : '0% - غير محلول',
+          solved ? formatQuestionScoreWithImprovement(qs) : '0% - غير محلول',
           q === 1 ? rec.notes || '-' : '-',
         ]);
       }
@@ -1400,12 +1496,12 @@ export function exportSingleStudentStructuresReport(
   }
 
   // إضافة شيت مستقل للرسم البياني التفصيلي عند تفعيل خيار الرسم البياني
-  if (includeChart && sortedRecords.length > 0) {
+  if (includeChart && latestRecords.length > 0) {
     const chartSheetRows = [
       [`📊 لوحة الرسم البياني للهياكل ونسب الأسئلة - الطالب: ${student.name}`, '', '', ''],
       [`الصف: ${student.grade} | متوسط الصحة: ${avgAccuracyPct}% | إجمالي المحلول: ${totalSolvedSum}/${totalQuestionsSum}`, '', '', ''],
       [''],
-      ...buildStructureChartRows(structures, sortedRecords, isMobile, prefs.chartType || 'bars_and_columns'),
+      ...buildStructureChartRows(structures, latestRecords, isMobile, prefs.chartType || 'bars_and_columns'),
     ];
     const wsChart = XLSX.utils.aoa_to_sheet(chartSheetRows);
     applyWorksheetFormatting(
@@ -1552,11 +1648,19 @@ export function exportStructuresReportExcel(
     [''],
   ];
 
+  const sortedFilteredProgress = [...filteredProgress].sort((a, b) => {
+    if (a.structureId === b.structureId && a.studentDocId === b.studentDocId) {
+      return (a.attemptNumber || 1) - (b.attemptNumber || 1);
+    }
+    return a.studentName.localeCompare(b.studentName, 'ar');
+  });
+  const latestFilteredProgress = getLatestStructureProgressRecords(sortedFilteredProgress);
+
   const summaryHeader = isMobile
     ? [
         'م',
         'اسم الطالب والصف/المسار',
-        'حالة الملف',
+        'حالة الملف والمحاولة',
         'الهيكل والمحلول %',
         'الرسم البياني لنسبة الصحة',
         'التقييم وملاحظات الهيكل',
@@ -1567,6 +1671,7 @@ export function exportStructuresReportExcel(
         'الصف / المسار',
         'حالة الملف بالكورس',
         'اسم الهيكل',
+        'نوع المحاولة / التحسين',
         'الفصل / السنة / المادة',
         'الأسئلة المحلولة والإنجاز %',
         'متوسط نسبة الصحة %',
@@ -1575,17 +1680,18 @@ export function exportStructuresReportExcel(
       ];
 
   const summaryRows: any[][] =
-    filteredProgress.length === 0
+    sortedFilteredProgress.length === 0
       ? [
           isMobile
             ? ['-', 'لا توجد سجلات طلاب مرصودة ضمن الفلاتر المحددة', '-', '-', '⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%', 'يرجى رصد حلول الطلاب في قسم الهياكل']
-            : ['-', 'لا توجد سجلات طلاب مرصودة ضمن الفلاتر المحددة', '-', '-', '-', '-', '0 / 0', '0%', '⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%', '-'],
+            : ['-', 'لا توجد سجلات طلاب مرصودة ضمن الفلاتر المحددة', '-', '-', '-', '-', '-', '0 / 0', '0%', '⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%', '-'],
         ]
-      : filteredProgress.map((rec, idx) => {
+      : sortedFilteredProgress.map((rec, idx) => {
           const st = studentMap.get(rec.studentDocId);
           const stStatus = st
             ? ENROLLMENT_STATUS_META[getEffectiveEnrollmentStatus(st)]?.shortLabel || 'فعال'
             : 'فعال';
+          const attemptText = formatStructureAttemptSummary(rec);
           const rating = getStructureAccuracyRating(rec.overallAccuracyPercentage);
           const perfNote = getStructurePerformanceNote(
             rec.solvedCount,
@@ -1598,7 +1704,7 @@ export function exportStructuresReportExcel(
             return [
               idx + 1,
               `${rec.studentName} (${rec.grade} • ${rec.track})`,
-              stStatus,
+              `${stStatus} | ${attemptText}`,
               `${rec.structureTitle} | ${rec.solvedCount}/${rec.totalQuestions} (${rec.completionPercentage}%)`,
               buildVisualScoreBar(rec.overallAccuracyPercentage, true),
               `${rating} - ${perfNote}`,
@@ -1611,6 +1717,7 @@ export function exportStructuresReportExcel(
             `${rec.grade} (${rec.track})`,
             stStatus,
             rec.structureTitle,
+            attemptText,
             `${rec.term} • ${rec.academicYear} • ${rec.subject}`,
             `${rec.solvedCount} / ${rec.totalQuestions} (${rec.completionPercentage}%)`,
             `${rec.overallAccuracyPercentage}%`,
@@ -1624,7 +1731,7 @@ export function exportStructuresReportExcel(
   applyWorksheetFormatting(
     wsSummary,
     allSummaryRows.length,
-    isMobile ? [5, 26, 14, 24, 26, 36] : [6, 24, 20, 16, 24, 24, 18, 16, 28, 40],
+    isMobile ? [5, 26, 22, 24, 26, 36] : [6, 24, 20, 16, 24, 28, 24, 18, 16, 28, 40],
     [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }],
     isMobile
   );
@@ -1639,15 +1746,16 @@ export function exportStructuresReportExcel(
     [''],
   ];
 
-  if (filteredProgress.length === 0) {
+  if (sortedFilteredProgress.length === 0) {
     detailedReportRows.push(['لا توجد سجلات حل طلاب مطابقة للفلاتر المختارة', '-', '-', '-']);
   } else {
-    filteredProgress.forEach((rec, idx) => {
+    sortedFilteredProgress.forEach((rec, idx) => {
       const st = studentMap.get(rec.studentDocId);
       const stStatus = st
         ? ENROLLMENT_STATUS_META[getEffectiveEnrollmentStatus(st)]?.label || 'ملف فعال'
         : 'ملف فعال';
       const structMeta = structMap.get(rec.structureId);
+      const attemptSummary = formatStructureAttemptSummary(rec);
       const rating = getStructureAccuracyRating(rec.overallAccuracyPercentage);
       const perfNote = getStructurePerformanceNote(
         rec.solvedCount,
@@ -1659,7 +1767,7 @@ export function exportStructuresReportExcel(
       detailedReportRows.push([
         `══════ [ ${idx + 1}. الطالب: ${rec.studentName} ] ══════`,
         `الهيكل: ${rec.structureTitle}`,
-        `حالة الملف: ${stStatus}`,
+        `${attemptSummary} | حالة الملف: ${stStatus}`,
         `متوسط الصحة: ${rec.overallAccuracyPercentage}%`,
       ]);
       detailedReportRows.push([
@@ -1682,34 +1790,36 @@ export function exportStructuresReportExcel(
           'السؤال وعنوانه',
           'حالة الحل',
           'الرسم البياني لصحة السؤال (0% ⟵ 100%)',
-          'نسبة الصحة والتقدير',
+          'نسبة الصحة والتحسين',
         ]);
         for (let q = 1; q <= qCount; q++) {
           const qs = (rec.questionScores || []).find((item) => item.questionNumber === q);
           const qItem = structMeta?.questions?.find((item) => item.questionNumber === q);
           const qTitle = qItem?.title ? `س${q} - ${qItem.title}` : `السؤال ${q}`;
+          const isQImp = Boolean(qs?.isImprovement || (qs?.attemptNumber && qs.attemptNumber > 1));
           const solved = Boolean(qs && qs.solved);
           const pct = solved ? Number(qs?.accuracyPercentage) || 0 : 0;
           detailedReportRows.push([
-            qTitle,
+            isQImp ? `${qTitle} ✨ (م${qs?.attemptNumber || 2})` : qTitle,
             solved ? 'تم الحل ✔' : 'لم يُحل ✖',
             solved ? buildVisualScoreBar(pct, isMobile) : '⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%',
-            solved ? `${pct}% (${getStructureAccuracyRating(pct)})` : '0% - لم يُحل بعد',
+            solved ? formatQuestionScoreWithImprovement(qs) : '0% - لم يُحل بعد',
           ]);
         }
       } else {
-        detailedReportRows.push(['السؤال وعنوانه', 'حالة الحل', 'نسبة الصحة %', 'التقدير والملاحظات']);
+        detailedReportRows.push(['السؤال وعنوانه', 'حالة الحل', 'نسبة الصحة %', 'التقدير والتحسين']);
         for (let q = 1; q <= qCount; q++) {
           const qs = (rec.questionScores || []).find((item) => item.questionNumber === q);
           const qItem = structMeta?.questions?.find((item) => item.questionNumber === q);
           const qTitle = qItem?.title ? `س${q} - ${qItem.title}` : `السؤال ${q}`;
+          const isQImp = Boolean(qs?.isImprovement || (qs?.attemptNumber && qs.attemptNumber > 1));
           const solved = Boolean(qs && qs.solved);
           const pct = solved ? Number(qs?.accuracyPercentage) || 0 : 0;
           detailedReportRows.push([
-            qTitle,
+            isQImp ? `${qTitle} ✨ (م${qs?.attemptNumber || 2})` : qTitle,
             solved ? 'تم الحل ✔' : 'لم يُحل ✖',
             `${pct}%`,
-            solved ? getStructureAccuracyRating(pct) : 'غير محلول',
+            solved ? formatQuestionScoreWithImprovement(qs) : 'غير محلول',
           ]);
         }
       }
@@ -1743,9 +1853,10 @@ export function exportStructuresReportExcel(
     let maxColsCount = 7;
 
     structuresForSheet.forEach((struct) => {
-      const structProgress = filteredProgress.filter((p) => p.structureId === struct.id);
+      const structProgress = sortedFilteredProgress.filter((p) => p.structureId === struct.id);
+      const structLatestProgress = latestFilteredProgress.filter((p) => p.structureId === struct.id);
       const qCount = Math.max(1, struct.totalQuestions || struct.questions?.length || 1);
-      maxColsCount = Math.max(maxColsCount, 7 + qCount);
+      maxColsCount = Math.max(maxColsCount, 8 + qCount);
 
       detailMatrixRows.push([
         `الهيكل: ${struct.title}`,
@@ -1766,6 +1877,7 @@ export function exportStructuresReportExcel(
       detailMatrixRows.push([
         'اسم الطالب',
         'كود الطالب',
+        'نوع المحاولة / التحسين',
         'الصف / المسار',
         'الفصل / السنة',
         'المحلول من الهيكل',
@@ -1784,6 +1896,12 @@ export function exportStructuresReportExcel(
             const qs = scoreMap.get(q);
             if (!qs || !qs.solved) {
               qCells.push('لم يُحل');
+            } else if (qs.isImprovement || (qs.attemptNumber && qs.attemptNumber > 1)) {
+              qCells.push(
+                qs.previousAccuracy !== undefined
+                  ? `${qs.accuracyPercentage}% (من ${qs.previousAccuracy}% ↑)`
+                  : `${qs.accuracyPercentage}% (م${qs.attemptNumber || 2} ↑)`
+              );
             } else {
               qCells.push(`${qs.accuracyPercentage}%`);
             }
@@ -1791,6 +1909,7 @@ export function exportStructuresReportExcel(
           detailMatrixRows.push([
             p.studentName,
             p.studentId || '-',
+            formatStructureAttemptSummary(p),
             `${p.grade} (${p.track})`,
             `${p.term} • ${p.academicYear}`,
             `${p.solvedCount} / ${p.totalQuestions}`,
@@ -1802,7 +1921,7 @@ export function exportStructuresReportExcel(
 
         const qAverages: string[] = [];
         for (let q = 1; q <= qCount; q++) {
-          const solvedEntries = structProgress
+          const solvedEntries = structLatestProgress
             .map((p) => (p.questionScores || []).find((qs) => qs.questionNumber === q))
             .filter((qs): qs is NonNullable<typeof qs> => Boolean(qs && qs.solved));
           if (solvedEntries.length === 0) {
@@ -1816,7 +1935,8 @@ export function exportStructuresReportExcel(
           }
         }
         detailMatrixRows.push([
-          'متوسط صحة كل سؤال للدفعة',
+          'متوسط صحة كل سؤال للدفعة (أحدث محاولة)',
+          '-',
           '-',
           '-',
           '-',
@@ -1831,7 +1951,7 @@ export function exportStructuresReportExcel(
     });
 
     const wsDetails = XLSX.utils.aoa_to_sheet(detailMatrixRows);
-    const colWidths = [24, 14, 22, 20, 16, 14, 15, ...Array(Math.max(1, maxColsCount - 7)).fill(14)];
+    const colWidths = [24, 14, 28, 22, 20, 16, 14, 15, ...Array(Math.max(1, maxColsCount - 8)).fill(18)];
     applyWorksheetFormatting(
       wsDetails,
       detailMatrixRows.length,
@@ -1845,15 +1965,15 @@ export function exportStructuresReportExcel(
   // ═══════════════════════════════════════════════════════════════════
   // SHEET 4: لوحة الرسم البياني للهياكل (مستقل - نفس "الرسم البياني للدرجات")
   // ═══════════════════════════════════════════════════════════════════
-  if (includeChart && structuresForSheet.length > 0 && filteredProgress.length > 0) {
+  if (includeChart && structuresForSheet.length > 0 && latestFilteredProgress.length > 0) {
     const overallAvgAcc = Math.round(
-      filteredProgress.reduce((a, b) => a + (b.overallAccuracyPercentage || 0), 0) / filteredProgress.length
+      latestFilteredProgress.reduce((a, b) => a + (b.overallAccuracyPercentage || 0), 0) / latestFilteredProgress.length
     );
     const chartSheetRows = [
       [`📊 لوحة الرسم البياني للهياكل ونسب الأسئلة (${structuresForSheet.length} هيكل)`, '', '', ''],
-      [`سجلات الطلاب: ${filteredProgress.length} | متوسط الصحة العام: ${overallAvgAcc}% | الفصل: ${termLabel}`, '', '', ''],
+      [`الطلاب (أحدث محاولة): ${latestFilteredProgress.length} | متوسط الصحة العام: ${overallAvgAcc}% | الفصل: ${termLabel}`, '', '', ''],
       [''],
-      ...buildStructureChartRows(structuresForSheet, filteredProgress, isMobile, prefs.chartType),
+      ...buildStructureChartRows(structuresForSheet, latestFilteredProgress, isMobile, prefs.chartType),
     ];
 
     const wsChart = XLSX.utils.aoa_to_sheet(chartSheetRows);
