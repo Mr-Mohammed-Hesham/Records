@@ -420,6 +420,9 @@ export interface ExportFilterOptions extends ExcelLayoutAndChartOptions {
   term?: string; // 'الكل' | 'الفصل الأول' | 'الفصل الثاني' | 'الفصل الثالث'
   enrollmentStatus?: string; // 'الكل' | 'active' | 'exclude_completed' | 'completed' | 'paused' | 'withdrawn'
   excludeCompletedFiles?: boolean; // استبعاد الطلبة منتهي الملف صراحة
+  studentIds?: string[]; // تحديد طالب محدد أو قائمة طلاب محددين (بـ id)
+  studentLimit?: number; // تحديد عدد معين من الطلاب للتصدير
+  filterLabel?: string; // تسمية مخصصة لنطاق التقرير
 }
 
 /**
@@ -472,6 +475,14 @@ export function exportCustomAcademicExcel(
       (s) => getEffectiveEnrollmentStatus(s) !== 'completed'
     );
   }
+  // فلترة حسب طلاب محددين أو عدد معين من الطلاب
+  if (options.studentIds && options.studentIds.length > 0) {
+    const allowedIds = new Set(options.studentIds);
+    filteredStudents = filteredStudents.filter((s) => allowedIds.has(s.id));
+  }
+  if (options.studentLimit && options.studentLimit > 0) {
+    filteredStudents = filteredStudents.slice(0, options.studentLimit);
+  }
 
   const validStudentIds = new Set(filteredStudents.map((s) => s.id));
   const examMap = new Map(exams.map((e) => [e.id, e]));
@@ -513,11 +524,20 @@ export function exportCustomAcademicExcel(
     ? '📊 تقرير الأداء الأكاديمي الشامل للطلاب - Mr Mohammed Hesham (شعار الهوية المعتمد)'
     : '📊 تقرير الأداء الأكاديمي الشامل للطلاب';
 
+  const studentScopeLabel =
+    options.studentIds && options.studentIds.length === 1 && filteredStudents[0]
+      ? `طالب محدد: ${filteredStudents[0].name}`
+      : options.studentIds && options.studentIds.length > 1
+      ? `${filteredStudents.length} طلاب محددين`
+      : options.studentLimit && options.studentLimit > 0
+      ? `أول ${filteredStudents.length} طالب`
+      : `كل المطابقين (${filteredStudents.length} طالب)`;
+
   const filterSummary: any[][] = [
     [customReportTitle, '', '', '', '', ''],
-    ['تاريخ الاستخراج:', new Date().toLocaleDateString('ar-EG'), 'نطاق التقرير:', periodLabel, 'وضع التنسيق:', isMobile ? '📱 وضع الهاتف المدمج' : '💻 الوضع المكتبي'],
+    ['تاريخ الاستخراج:', new Date().toLocaleDateString('ar-EG'), 'نطاق التقرير:', options.filterLabel || periodLabel, 'وضع التنسيق:', isMobile ? '📱 وضع الهاتف المدمج' : '💻 الوضع المكتبي'],
     ['الصف المحدد:', options.grade || 'كافة الصفوف', 'المادة المحددة:', options.subject || 'كافة المواد', 'الفصل الدراسي (الترم):', termLabel],
-    ['حالة ملفات الطلاب:', statusLabel, 'عدد الطلاب المشمولين:', `${filteredStudents.length} طالب`, '', ''],
+    ['حالة ملفات الطلاب:', statusLabel, 'نطاق الطلاب:', studentScopeLabel, 'عدد النتائج:', `${filteredResults.length} نتيجة`],
     [''],
   ];
 
@@ -673,7 +693,14 @@ export function exportCustomAcademicExcel(
       ? `_من_${options.startDate || 'البداية'}_إلى_${options.endDate || 'الآن'}`
       : '';
 
-  const fileName = `تقارير_الطلاب_الأكاديمية${termTag}${statusTag}${gradeTag}${subjTag}${dateTag}.xlsx`;
+  const countTag =
+    options.studentIds && options.studentIds.length === 1 && filteredStudents[0]
+      ? `_${filteredStudents[0].name.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_')}`
+      : (options.studentIds && options.studentIds.length > 0) || (options.studentLimit && options.studentLimit > 0)
+      ? `_${filteredStudents.length}_طالب`
+      : '';
+
+  const fileName = `تقارير_الطلاب_الأكاديمية${termTag}${statusTag}${gradeTag}${subjTag}${countTag}${dateTag}.xlsx`;
   XLSX.writeFile(wb, fileName);
 }
 
@@ -684,7 +711,7 @@ export function exportCompletedCourseStudentsExcel(
   students: Student[],
   allResults: ExamResult[],
   settings?: TeacherSettings,
-  customOptions?: ExcelLayoutAndChartOptions
+  customOptions?: ExportFilterOptions
 ) {
   const prefs = { ...getSavedExcelPreferences(), ...customOptions };
   const completedStudents = students.filter(
@@ -698,6 +725,9 @@ export function exportCompletedCourseStudentsExcel(
       enrollmentStatus: completedStudents.length > 0 ? 'completed' : 'الكل',
       includeChart: prefs.includeChart,
       layoutMode: prefs.layoutMode,
+      includeLogoHeader: prefs.includeLogoHeader,
+      studentIds: customOptions?.studentIds,
+      studentLimit: customOptions?.studentLimit,
     },
     settings?.gradingScale
   );
@@ -713,11 +743,26 @@ export function exportAllDataExcel(
   exams: Exam[],
   allResults: ExamResult[],
   settings?: TeacherSettings,
-  customOptions?: ExcelLayoutAndChartOptions
+  customOptions?: ExportFilterOptions
 ) {
   const prefs = { ...getSavedExcelPreferences(), ...customOptions };
   const isMobile = prefs.layoutMode === 'mobile';
   const wb = XLSX.utils.book_new();
+
+  let targetStudents = [...students];
+  if (customOptions?.studentIds && customOptions.studentIds.length > 0) {
+    const allowedIds = new Set(customOptions.studentIds);
+    targetStudents = targetStudents.filter((s) => allowedIds.has(s.id));
+  }
+  if (customOptions?.studentLimit && customOptions.studentLimit > 0) {
+    targetStudents = targetStudents.slice(0, customOptions.studentLimit);
+  }
+  const allowedStudentIdsSet = new Set(targetStudents.map((s) => s.id));
+  const targetResults =
+    (customOptions?.studentIds && customOptions.studentIds.length > 0) ||
+    (customOptions?.studentLimit && customOptions.studentLimit > 0)
+      ? allResults.filter((r) => allowedStudentIdsSet.has(r.studentDocId))
+      : allResults;
 
   // Sheet 1: Students
   const studentsHeader = [
@@ -734,7 +779,7 @@ export function exportAllDataExcel(
     'تاريخ التسجيل',
     'ملاحظات',
   ];
-  const studentsRows = students.map((s) => {
+  const studentsRows = targetStudents.map((s) => {
     const stStatus = ENROLLMENT_STATUS_META[getEffectiveEnrollmentStatus(s)]?.label || 'ملف فعال';
     const stNote = getEffectiveEnrollmentNote(s);
     return [
@@ -776,8 +821,8 @@ export function exportAllDataExcel(
     'الحالة',
     'ملاحظات',
   ];
-  const resultsRows = allResults.map((r) => {
-    const st = students.find((s) => s.id === r.studentDocId);
+  const resultsRows = targetResults.map((r) => {
+    const st = targetStudents.find((s) => s.id === r.studentDocId) || students.find((s) => s.id === r.studentDocId);
     return [
       r.studentName,
       st ? st.studentId : '',
@@ -848,8 +893,8 @@ export function exportAllDataExcel(
     'الحالة العامة',
     'مسار التطور',
   ];
-  const statsRows = students.map((s) => {
-    const stResults = allResults.filter((r) => r.studentDocId === s.id);
+  const statsRows = targetStudents.map((s) => {
+    const stResults = targetResults.filter((r) => r.studentDocId === s.id);
     const stats = calculateStudentStats(stResults, settings?.gradingScale);
     const stStatus = ENROLLMENT_STATUS_META[getEffectiveEnrollmentStatus(s)]?.shortLabel || 'فعال';
     return [
@@ -885,11 +930,26 @@ export function exportExamResultsExcel(
   exam: Exam,
   results: ExamResult[],
   students: Student[],
-  customOptions?: ExcelLayoutAndChartOptions
+  customOptions?: ExportFilterOptions
 ) {
   const prefs = { ...getSavedExcelPreferences(), ...customOptions };
   const isMobile = prefs.layoutMode === 'mobile';
   const includeChart = prefs.includeChart !== false;
+
+  let filteredResults = [...results];
+  if (customOptions?.studentIds && customOptions.studentIds.length > 0) {
+    const allowedIds = new Set(customOptions.studentIds);
+    filteredResults = filteredResults.filter((r) => allowedIds.has(r.studentDocId));
+  }
+  if (customOptions?.studentLimit && customOptions.studentLimit > 0) {
+    const keptStudentIds = new Set<string>();
+    filteredResults.forEach((r) => {
+      if (keptStudentIds.size < customOptions.studentLimit!) {
+        keptStudentIds.add(r.studentDocId);
+      }
+    });
+    filteredResults = filteredResults.filter((r) => keptStudentIds.has(r.studentDocId));
+  }
 
   const wb = XLSX.utils.book_new();
 
@@ -897,24 +957,24 @@ export function exportExamResultsExcel(
     [`📊 تقرير نتائج امتحان: ${exam.title} - سجلات مستر محمد هشام`, '', '', ''],
     ['المادة:', exam.subject, 'الصف الدراسي:', exam.grade],
     ['التاريخ:', exam.date, 'الدرجة الكلية / النجاح:', `${exam.totalScore} (النجاح من ${exam.passScore})`],
-    ['عدد المتقدمين:', `${results.length} طالب`, 'نسبة النجاح العامة:', results.length > 0 ? `${Math.round((results.filter((r) => r.passed).length / results.length) * 100)}%` : '0%'],
+    ['عدد النتائج المصدرة:', `${filteredResults.length} نتيجة`, 'نسبة النجاح العامة:', filteredResults.length > 0 ? `${Math.round((filteredResults.filter((r) => r.passed).length / filteredResults.length) * 100)}%` : '0%'],
     [''],
   ];
 
-  if (includeChart && results.length > 0) {
+  if (includeChart && filteredResults.length > 0) {
     const bands = [
-      { label: 'ممتاز (90% - 100%)', count: results.filter((r) => r.percentage >= 90).length, icon: '🟩' },
-      { label: 'جيد جداً (80% - 89%)', count: results.filter((r) => r.percentage >= 80 && r.percentage < 90).length, icon: '🟦' },
-      { label: 'جيد (70% - 79%)', count: results.filter((r) => r.percentage >= 70 && r.percentage < 80).length, icon: '🟨' },
-      { label: 'مقبول (60% - 69%)', count: results.filter((r) => r.percentage >= 60 && r.percentage < 70).length, icon: '🟧' },
-      { label: 'يحتاج تحسين (<60%)', count: results.filter((r) => r.percentage < 60).length, icon: '🟥' },
+      { label: 'ممتاز (90% - 100%)', count: filteredResults.filter((r) => r.percentage >= 90).length, icon: '🟩' },
+      { label: 'جيد جداً (80% - 89%)', count: filteredResults.filter((r) => r.percentage >= 80 && r.percentage < 90).length, icon: '🟦' },
+      { label: 'جيد (70% - 79%)', count: filteredResults.filter((r) => r.percentage >= 70 && r.percentage < 80).length, icon: '🟨' },
+      { label: 'مقبول (60% - 69%)', count: filteredResults.filter((r) => r.percentage >= 60 && r.percentage < 70).length, icon: '🟧' },
+      { label: 'يحتاج تحسين (<60%)', count: filteredResults.filter((r) => r.percentage < 60).length, icon: '🟥' },
     ];
 
     examInfo.push(['📈 الرسم البياني لتوزيع شرائح درجات الطلاب في الامتحان', '', '', '']);
     examInfo.push(['شريحة التقدير', 'عدد الطلاب', 'المخطط البياني للتوزيع', 'النسبة المئوية من الطلاب']);
 
     bands.forEach((b) => {
-      const pct = Math.round((b.count / results.length) * 100);
+      const pct = Math.round((b.count / filteredResults.length) * 100);
       const blocks = Math.round((pct / 100) * 10);
       examInfo.push([
         b.label,
@@ -941,7 +1001,7 @@ export function exportExamResultsExcel(
         'ملاحظات',
       ];
 
-  const tableRows = results.map((r, idx) => {
+  const tableRows = filteredResults.map((r, idx) => {
     const student = students.find((s) => s.id === r.studentDocId);
     const attemptText =
       r.attemptLabel || (r.isImprovement ? `تحسين (محاولة ${r.attemptNumber || 2})` : 'المحاولة الأساسية');
@@ -1525,7 +1585,8 @@ export interface StructuresExportFilterOptions extends ExportFilterOptions {
   track?: string;
   academicYear?: string;
   structureId?: string;
-  filterLabel?: string;
+  structureIds?: string[]; // تحديد هيكل معين أو مجموعة هياكل محددة
+  structureLimit?: number; // تحديد عدد معين من الهياكل
 }
 
 /**
@@ -1548,6 +1609,10 @@ export function exportStructuresReportExcel(
   if (customOptions.structureId && customOptions.structureId !== 'الكل') {
     filteredStructures = filteredStructures.filter((s) => s.id === customOptions.structureId);
   }
+  if (customOptions.structureIds && customOptions.structureIds.length > 0) {
+    const allowedStructIds = new Set(customOptions.structureIds);
+    filteredStructures = filteredStructures.filter((s) => allowedStructIds.has(s.id));
+  }
   if (customOptions.grade && customOptions.grade !== 'الكل') {
     filteredStructures = filteredStructures.filter((s) => s.grade === customOptions.grade);
   }
@@ -1563,8 +1628,16 @@ export function exportStructuresReportExcel(
   if (customOptions.subject && customOptions.subject !== 'الكل') {
     filteredStructures = filteredStructures.filter((s) => s.subject === customOptions.subject);
   }
+  if (customOptions.structureLimit && customOptions.structureLimit > 0) {
+    filteredStructures = filteredStructures.slice(0, customOptions.structureLimit);
+  }
+
+  const allowedStructureIdsSet = new Set(filteredStructures.map((s) => s.id));
 
   let filteredProgress = [...progressRecords].filter((rec) => {
+    if (!allowedStructureIdsSet.has(rec.structureId)) {
+      return false;
+    }
     if (customOptions.structureId && customOptions.structureId !== 'الكل' && rec.structureId !== customOptions.structureId) {
       return false;
     }
@@ -1611,6 +1684,17 @@ export function exportStructuresReportExcel(
 
     return true;
   });
+
+  // تطبيق تحديد طلاب معينين أو عدد معين من الطلاب في تقرير الهياكل
+  if (customOptions.studentIds && customOptions.studentIds.length > 0) {
+    const allowedStudentIds = new Set(customOptions.studentIds);
+    filteredProgress = filteredProgress.filter((rec) => allowedStudentIds.has(rec.studentDocId));
+  }
+  if (customOptions.studentLimit && customOptions.studentLimit > 0) {
+    const orderedStudents = Array.from(new Set(filteredProgress.map((r) => r.studentDocId)));
+    const limitedIds = new Set(orderedStudents.slice(0, customOptions.studentLimit));
+    filteredProgress = filteredProgress.filter((rec) => limitedIds.has(rec.studentDocId));
+  }
 
   const periodLabel =
     customOptions.startDate || customOptions.endDate
@@ -2005,9 +2089,21 @@ export function exportStructuresReportExcel(
       ? `_من_${customOptions.startDate || 'البداية'}_إلى_${customOptions.endDate || 'الآن'}`
       : '';
 
+  const uniqueExportedStudentsCount = new Set(filteredProgress.map((p) => p.studentDocId)).size;
+  const structCountTag =
+    (customOptions.structureIds && customOptions.structureIds.length > 0) ||
+    (customOptions.structureLimit && customOptions.structureLimit > 0)
+      ? `_${structuresForSheet.length}_هيكل`
+      : '';
+  const studCountTag =
+    (customOptions.studentIds && customOptions.studentIds.length > 0) ||
+    (customOptions.studentLimit && customOptions.studentLimit > 0)
+      ? `_${uniqueExportedStudentsCount}_طالب`
+      : '';
+
   XLSX.writeFile(
     wb,
-    `تقارير_الهياكل_ونسب_الأسئلة${termTag}${statusTag}${gradeTag}${trackTag}${subjTag}${dateTag}.xlsx`
+    `تقارير_الهياكل_ونسب_الأسئلة${termTag}${statusTag}${gradeTag}${trackTag}${subjTag}${structCountTag}${studCountTag}${dateTag}.xlsx`
   );
 }
 

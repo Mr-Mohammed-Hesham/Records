@@ -12,6 +12,10 @@ import {
   Monitor,
   RotateCcw,
   Sparkles,
+  Users,
+  Layers,
+  Search,
+  Hash,
 } from 'lucide-react';
 import {
   Student,
@@ -28,10 +32,11 @@ import {
   getSavedExcelPreferences,
   saveExcelPreferences,
 } from '../utils/excel';
-import { getEffectiveEnrollmentStatus, ENROLLMENT_STATUS_LIST } from '../utils/studentStatus';
+import { getEffectiveEnrollmentStatus } from '../utils/studentStatus';
 import { ACADEMIC_TERMS, ACADEMIC_TRACKS, ACADEMIC_YEARS } from '../services/firebase';
 
 export type ExcelExportModalMode = 'academic_reports' | 'structures_reports' | 'all_data';
+export type SelectionScopeMode = 'all' | 'count' | 'specific';
 
 interface ExcelExportModalProps {
   isOpen: boolean;
@@ -50,6 +55,12 @@ interface ExcelExportModalProps {
   defaultTrack?: string;
   defaultYear?: string;
   defaultStructureId?: string;
+  defaultStudentSelectionMode?: SelectionScopeMode;
+  defaultStudentLimit?: number;
+  defaultSelectedStudentIds?: string[];
+  defaultStructureSelectionMode?: SelectionScopeMode;
+  defaultStructureLimit?: number;
+  defaultSelectedStructureIds?: string[];
 }
 
 const MODAL_STATE_KEY = 'mh_excel_modal_saved_filters_v2';
@@ -71,6 +82,12 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   defaultTrack,
   defaultYear,
   defaultStructureId,
+  defaultStudentSelectionMode,
+  defaultStudentLimit,
+  defaultSelectedStudentIds,
+  defaultStructureSelectionMode,
+  defaultStructureLimit,
+  defaultSelectedStructureIds,
 }) => {
   const initialPrefs = useMemo(() => getSavedExcelPreferences(), []);
 
@@ -155,9 +172,78 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     }
   });
 
-  const [selectedStructureId, setSelectedStructureId] = useState<string>(() => {
-    return defaultStructureId || 'الكل';
+  // Student Selection Scope (All / Count / Specific 1..N)
+  const [studentSelectionMode, setStudentSelectionMode] = useState<SelectionScopeMode>(() => {
+    if (defaultStudentSelectionMode) return defaultStudentSelectionMode;
+    if (defaultSelectedStudentIds && defaultSelectedStudentIds.length > 0) return 'specific';
+    if (defaultStudentLimit && defaultStudentLimit > 0) return 'count';
+    try {
+      const saved = JSON.parse(localStorage.getItem(MODAL_STATE_KEY) || '{}');
+      if (saved.studentSelectionMode === 'count' || saved.studentSelectionMode === 'specific') {
+        return saved.studentSelectionMode;
+      }
+      return 'all';
+    } catch {
+      return 'all';
+    }
   });
+
+  const [studentLimit, setStudentLimit] = useState<number>(() => {
+    if (defaultStudentLimit && defaultStudentLimit > 0) return defaultStudentLimit;
+    try {
+      const saved = JSON.parse(localStorage.getItem(MODAL_STATE_KEY) || '{}');
+      return saved.studentLimit > 0 ? Number(saved.studentLimit) : 5;
+    } catch {
+      return 5;
+    }
+  });
+
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>(() => {
+    if (defaultSelectedStudentIds && defaultSelectedStudentIds.length > 0) {
+      return defaultSelectedStudentIds;
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem(MODAL_STATE_KEY) || '{}');
+      return Array.isArray(saved.selectedStudentIds) ? saved.selectedStudentIds : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [studentQuickSelectCount, setStudentQuickSelectCount] = useState<number>(5);
+
+  // Structure Selection Scope (All / Count / Specific 1..N)
+  const [structureSelectionMode, setStructureSelectionMode] = useState<SelectionScopeMode>(() => {
+    if (defaultStructureSelectionMode) return defaultStructureSelectionMode;
+    if (defaultSelectedStructureIds && defaultSelectedStructureIds.length > 0) return 'specific';
+    if (defaultStructureId && defaultStructureId !== 'الكل') return 'specific';
+    if (defaultStructureLimit && defaultStructureLimit > 0) return 'count';
+    return 'all';
+  });
+
+  const [structureLimit, setStructureLimit] = useState<number>(() => {
+    if (defaultStructureLimit && defaultStructureLimit > 0) return defaultStructureLimit;
+    try {
+      const saved = JSON.parse(localStorage.getItem(MODAL_STATE_KEY) || '{}');
+      return saved.structureLimit > 0 ? Number(saved.structureLimit) : 3;
+    } catch {
+      return 3;
+    }
+  });
+
+  const [selectedStructureIds, setSelectedStructureIds] = useState<string[]>(() => {
+    if (defaultSelectedStructureIds && defaultSelectedStructureIds.length > 0) {
+      return defaultSelectedStructureIds;
+    }
+    if (defaultStructureId && defaultStructureId !== 'الكل') {
+      return [defaultStructureId];
+    }
+    return [];
+  });
+
+  const [structureSearchQuery, setStructureSearchQuery] = useState('');
+  const [structureQuickSelectCount, setStructureQuickSelectCount] = useState<number>(3);
 
   const [exportMode, setExportMode] = useState<ExcelExportModalMode>(() => {
     if (defaultExportMode) return defaultExportMode;
@@ -173,16 +259,40 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   });
 
   useEffect(() => {
-    if (isOpen && defaultExportMode) {
-      setExportMode(defaultExportMode);
+    if (!isOpen) return;
+    if (defaultExportMode) setExportMode(defaultExportMode);
+    if (defaultGrade) setSelectedGrade(defaultGrade);
+    if (defaultTerm) setSelectedTerm(defaultTerm);
+    if (defaultSubject) setSelectedSubject(defaultSubject);
+    if (defaultStatus) setEnrollmentStatusFilter(defaultStatus);
+    if (defaultTrack) setSelectedTrack(defaultTrack);
+    if (defaultYear) setSelectedAcademicYear(defaultYear);
+
+    if (defaultSelectedStudentIds && defaultSelectedStudentIds.length > 0) {
+      setSelectedStudentIds(defaultSelectedStudentIds);
+      setStudentSelectionMode(defaultStudentSelectionMode || 'specific');
+    } else if (defaultStudentSelectionMode) {
+      setStudentSelectionMode(defaultStudentSelectionMode);
     }
-    if (isOpen && defaultGrade) setSelectedGrade(defaultGrade);
-    if (isOpen && defaultTerm) setSelectedTerm(defaultTerm);
-    if (isOpen && defaultSubject) setSelectedSubject(defaultSubject);
-    if (isOpen && defaultStatus) setEnrollmentStatusFilter(defaultStatus);
-    if (isOpen && defaultTrack) setSelectedTrack(defaultTrack);
-    if (isOpen && defaultYear) setSelectedAcademicYear(defaultYear);
-    if (isOpen && defaultStructureId) setSelectedStructureId(defaultStructureId);
+    if (defaultStudentLimit && defaultStudentLimit > 0) {
+      setStudentLimit(defaultStudentLimit);
+    }
+
+    if (defaultSelectedStructureIds && defaultSelectedStructureIds.length > 0) {
+      setSelectedStructureIds(defaultSelectedStructureIds);
+      setStructureSelectionMode(defaultStructureSelectionMode || 'specific');
+    } else if (defaultStructureId && defaultStructureId !== 'الكل') {
+      setSelectedStructureIds([defaultStructureId]);
+      setStructureSelectionMode(defaultStructureSelectionMode || 'specific');
+    } else if (defaultStructureId === 'الكل' && !defaultStructureSelectionMode) {
+      setStructureSelectionMode('all');
+      setSelectedStructureIds([]);
+    } else if (defaultStructureSelectionMode) {
+      setStructureSelectionMode(defaultStructureSelectionMode);
+    }
+    if (defaultStructureLimit && defaultStructureLimit > 0) {
+      setStructureLimit(defaultStructureLimit);
+    }
   }, [
     isOpen,
     defaultExportMode,
@@ -193,6 +303,12 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     defaultTrack,
     defaultYear,
     defaultStructureId,
+    defaultStudentSelectionMode,
+    defaultStudentLimit,
+    defaultSelectedStudentIds,
+    defaultStructureSelectionMode,
+    defaultStructureLimit,
+    defaultSelectedStructureIds,
   ]);
 
   // Chart & Layout preferences
@@ -232,6 +348,12 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
           startDate,
           endDate,
           exportMode,
+          studentSelectionMode,
+          studentLimit,
+          selectedStudentIds,
+          structureSelectionMode,
+          structureLimit,
+          selectedStructureIds,
         })
       );
     } catch {
@@ -248,6 +370,12 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     startDate,
     endDate,
     exportMode,
+    studentSelectionMode,
+    studentLimit,
+    selectedStudentIds,
+    structureSelectionMode,
+    structureLimit,
+    selectedStructureIds,
   ]);
 
   const handleResetAll = () => {
@@ -257,7 +385,14 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     setSelectedGroup('الكل');
     setSelectedTrack('الكل');
     setSelectedAcademicYear('الكل');
-    setSelectedStructureId('الكل');
+    setStudentSelectionMode('all');
+    setStudentLimit(5);
+    setSelectedStudentIds([]);
+    setStudentSearchQuery('');
+    setStructureSelectionMode('all');
+    setStructureLimit(3);
+    setSelectedStructureIds([]);
+    setStructureSearchQuery('');
     setEnrollmentStatusFilter('exclude_completed');
     setStartDate('');
     setEndDate('');
@@ -295,15 +430,14 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     return Array.from(set);
   }, [structures]);
 
-  // Filtered counts for preview
+  // Base filtered students (before count/specific slice)
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
       if (selectedGrade !== 'الكل' && s.grade !== selectedGrade) return false;
       if (selectedTerm !== 'الكل' && s.term && s.term !== selectedTerm) return false;
       if (selectedSubject !== 'الكل' && s.subject !== selectedSubject && !(Array.isArray(s.subjects) && s.subjects.includes(selectedSubject))) return false;
       if (selectedGroup !== 'الكل' && s.group !== selectedGroup) return false;
-      
-      // فلترة حالة الملف للطالب
+
       const effStatus = getEffectiveEnrollmentStatus(s);
       if (enrollmentStatusFilter === 'exclude_completed') {
         if (effStatus === 'completed') return false;
@@ -314,27 +448,12 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     });
   }, [students, selectedGrade, selectedTerm, selectedSubject, selectedGroup, enrollmentStatusFilter]);
 
-  const studentIdsSet = useMemo(() => new Set(filteredStudents.map(s => s.id)), [filteredStudents]);
   const studentByIdMap = useMemo(() => new Map(students.map(s => [s.id, s])), [students]);
   const examMap = useMemo(() => new Map(exams.map(e => [e.id, e])), [exams]);
 
-  const filteredResults = useMemo(() => {
-    return allResults.filter(r => {
-      if (!studentIdsSet.has(r.studentDocId)) return false;
-      if (startDate && r.examDate < startDate) return false;
-      if (endDate && r.examDate > endDate) return false;
-      if (selectedTerm !== 'الكل') {
-        const ex = examMap.get(r.examId);
-        if (ex && ex.term && ex.term !== selectedTerm) return false;
-      }
-      return true;
-    });
-  }, [allResults, studentIdsSet, startDate, endDate, selectedTerm, examMap]);
-
-  // Filtered Structures & Structure Progress for preview
-  const filteredStructuresList = useMemo(() => {
+  // Base structures matching metadata filters (before structure count/specific selection)
+  const baseMatchingStructures = useMemo(() => {
     return structures.filter(st => {
-      if (selectedStructureId !== 'الكل' && st.id !== selectedStructureId) return false;
       if (selectedGrade !== 'الكل' && st.grade !== selectedGrade) return false;
       if (selectedTerm !== 'الكل' && st.term !== selectedTerm) return false;
       if (selectedTrack !== 'الكل' && st.track !== selectedTrack) return false;
@@ -342,11 +461,30 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
       if (selectedSubject !== 'الكل' && st.subject !== selectedSubject) return false;
       return true;
     });
-  }, [structures, selectedStructureId, selectedGrade, selectedTerm, selectedTrack, selectedAcademicYear, selectedSubject]);
+  }, [structures, selectedGrade, selectedTerm, selectedTrack, selectedAcademicYear, selectedSubject]);
 
-  const filteredStructureProgressList = useMemo(() => {
+  // Effective structures after applying structureSelectionMode (all / count / specific)
+  const effectiveStructuresList = useMemo(() => {
+    let list = baseMatchingStructures;
+    if (structureSelectionMode === 'specific') {
+      const idSet = new Set(selectedStructureIds);
+      list = list.filter(st => idSet.has(st.id));
+    } else if (structureSelectionMode === 'count') {
+      const limit = Math.max(1, Math.floor(structureLimit || 1));
+      list = list.slice(0, limit);
+    }
+    return list;
+  }, [baseMatchingStructures, structureSelectionMode, selectedStructureIds, structureLimit]);
+
+  const effectiveStructureIdsSet = useMemo(
+    () => new Set(effectiveStructuresList.map(st => st.id)),
+    [effectiveStructuresList]
+  );
+
+  // Base structure progress matching metadata filters + effective structures
+  const baseMatchingStructureProgress = useMemo(() => {
     return structureProgress.filter(rec => {
-      if (selectedStructureId !== 'الكل' && rec.structureId !== selectedStructureId) return false;
+      if (!effectiveStructureIdsSet.has(rec.structureId)) return false;
       if (selectedGrade !== 'الكل' && rec.grade !== selectedGrade) return false;
       if (selectedTerm !== 'الكل' && rec.term !== selectedTerm) return false;
       if (selectedTrack !== 'الكل' && rec.track !== selectedTrack) return false;
@@ -370,7 +508,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     });
   }, [
     structureProgress,
-    selectedStructureId,
+    effectiveStructureIdsSet,
     selectedGrade,
     selectedTerm,
     selectedTrack,
@@ -383,21 +521,159 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     enrollmentStatusFilter,
   ]);
 
-  const uniqueStructureStudentsCount = useMemo(
-    () => new Set(filteredStructureProgressList.map(p => p.studentDocId)).size,
-    [filteredStructureProgressList]
+  // Candidate students for checklist picker (sorted so structure-recorded students come first in structures mode)
+  const candidateStudentsForPicker = useMemo(() => {
+    if (exportMode !== 'structures_reports') return filteredStudents;
+    const recordedSet = new Set(baseMatchingStructureProgress.map(p => p.studentDocId));
+    const list = [...filteredStudents];
+    // Include any recorded student even if track/term differs slightly on profile
+    baseMatchingStructureProgress.forEach(p => {
+      if (!list.some(s => s.id === p.studentDocId)) {
+        const stObj = studentByIdMap.get(p.studentDocId);
+        if (stObj) {
+          const eff = getEffectiveEnrollmentStatus(stObj);
+          if (enrollmentStatusFilter === 'exclude_completed' && eff === 'completed') return;
+          if (enrollmentStatusFilter !== 'الكل' && enrollmentStatusFilter !== 'exclude_completed' && eff !== enrollmentStatusFilter) return;
+          list.push(stObj);
+        }
+      }
+    });
+    return list.sort((a, b) => {
+      const aHas = recordedSet.has(a.id) ? 0 : 1;
+      const bHas = recordedSet.has(b.id) ? 0 : 1;
+      if (aHas !== bHas) return aHas - bHas;
+      return a.name.localeCompare(b.name, 'ar');
+    });
+  }, [exportMode, filteredStudents, baseMatchingStructureProgress, studentByIdMap, enrollmentStatusFilter]);
+
+  const searchableStudentsList = useMemo(() => {
+    const q = studentSearchQuery.trim().toLowerCase();
+    if (!q) return candidateStudentsForPicker;
+    return candidateStudentsForPicker.filter(
+      s =>
+        s.name.toLowerCase().includes(q) ||
+        s.studentId.toLowerCase().includes(q) ||
+        (s.grade || '').toLowerCase().includes(q) ||
+        (s.group || '').toLowerCase().includes(q)
+    );
+  }, [candidateStudentsForPicker, studentSearchQuery]);
+
+  const searchableStructuresList = useMemo(() => {
+    const q = structureSearchQuery.trim().toLowerCase();
+    if (!q) return baseMatchingStructures;
+    return baseMatchingStructures.filter(
+      st =>
+        st.title.toLowerCase().includes(q) ||
+        (st.grade || '').toLowerCase().includes(q) ||
+        (st.subject || '').toLowerCase().includes(q) ||
+        (st.track || '').toLowerCase().includes(q)
+    );
+  }, [baseMatchingStructures, structureSearchQuery]);
+
+  // Effective filteredStudents after applying studentSelectionMode (all / count / specific)
+  const effectiveStudentsList = useMemo(() => {
+    let list = filteredStudents;
+    if (studentSelectionMode === 'specific') {
+      const idSet = new Set(selectedStudentIds);
+      list = list.filter(s => idSet.has(s.id));
+    } else if (studentSelectionMode === 'count') {
+      const limit = Math.max(1, Math.floor(studentLimit || 1));
+      list = list.slice(0, limit);
+    }
+    return list;
+  }, [filteredStudents, studentSelectionMode, selectedStudentIds, studentLimit]);
+
+  const effectiveStudentIdsSet = useMemo(
+    () => new Set(effectiveStudentsList.map(s => s.id)),
+    [effectiveStudentsList]
   );
+
+  const filteredResults = useMemo(() => {
+    return allResults.filter(r => {
+      if (!effectiveStudentIdsSet.has(r.studentDocId)) return false;
+      if (startDate && r.examDate < startDate) return false;
+      if (endDate && r.examDate > endDate) return false;
+      if (selectedTerm !== 'الكل') {
+        const ex = examMap.get(r.examId);
+        if (ex && ex.term && ex.term !== selectedTerm) return false;
+      }
+      return true;
+    });
+  }, [allResults, effectiveStudentIdsSet, startDate, endDate, selectedTerm, examMap]);
+
+  // Effective Structure Progress after applying studentSelectionMode
+  const effectiveStructureProgressList = useMemo(() => {
+    let list = baseMatchingStructureProgress;
+    if (studentSelectionMode === 'specific') {
+      const idSet = new Set(selectedStudentIds);
+      list = list.filter(p => idSet.has(p.studentDocId));
+    } else if (studentSelectionMode === 'count') {
+      const limit = Math.max(1, Math.floor(studentLimit || 1));
+      const allowedUniqueStudentIds: string[] = [];
+      const seen = new Set<string>();
+      for (const rec of list) {
+        if (!seen.has(rec.studentDocId)) {
+          seen.add(rec.studentDocId);
+          allowedUniqueStudentIds.push(rec.studentDocId);
+          if (allowedUniqueStudentIds.length >= limit) break;
+        }
+      }
+      const allowedSet = new Set(allowedUniqueStudentIds);
+      list = list.filter(p => allowedSet.has(p.studentDocId));
+    }
+    return list;
+  }, [baseMatchingStructureProgress, studentSelectionMode, selectedStudentIds, studentLimit]);
+
+  const uniqueStructureStudentsCount = useMemo(
+    () => new Set(effectiveStructureProgressList.map(p => p.studentDocId)).size,
+    [effectiveStructureProgressList]
+  );
+
+  // Selection toggles & batch helpers
+  const toggleStudentSelection = (id: string) => {
+    setSelectedStudentIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleStructureSelection = (id: string) => {
+    setSelectedStructureIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
 
   if (!isOpen) return null;
 
+  const hasValidStudentSelection =
+    studentSelectionMode !== 'specific' || selectedStudentIds.length > 0;
+  const hasValidStructureSelection =
+    exportMode !== 'structures_reports' ||
+    structureSelectionMode !== 'specific' ||
+    selectedStructureIds.length > 0;
+
   const canExport =
-    exportMode === 'structures_reports'
-      ? filteredStructuresList.length > 0 || filteredStructureProgressList.length > 0
-      : filteredStudents.length > 0;
+    hasValidStudentSelection &&
+    hasValidStructureSelection &&
+    (exportMode === 'structures_reports'
+      ? effectiveStructuresList.length > 0 || effectiveStructureProgressList.length > 0
+      : effectiveStudentsList.length > 0);
 
   const handleExport = () => {
+    if (!canExport) return;
     setIsExporting(true);
     try {
+      const exportStudentIds =
+        studentSelectionMode === 'specific' ? selectedStudentIds : undefined;
+      const exportStudentLimit =
+        studentSelectionMode === 'count' ? Math.max(1, Math.floor(studentLimit || 1)) : undefined;
+
+      const exportStructureIds =
+        structureSelectionMode === 'specific' ? selectedStructureIds : undefined;
+      const exportStructureLimit =
+        structureSelectionMode === 'count'
+          ? Math.max(1, Math.floor(structureLimit || 1))
+          : undefined;
+
       if (exportMode === 'academic_reports') {
         exportCustomAcademicExcel(
           students,
@@ -411,6 +687,8 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
             enrollmentStatus: enrollmentStatusFilter,
             startDate: startDate || undefined,
             endDate: endDate || undefined,
+            studentIds: exportStudentIds,
+            studentLimit: exportStudentLimit,
             includeChart,
             layoutMode,
             chartType,
@@ -426,7 +704,14 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
           academicYear: selectedAcademicYear,
           subject: selectedSubject,
           group: selectedGroup,
-          structureId: selectedStructureId,
+          structureId:
+            exportStructureIds && exportStructureIds.length === 1
+              ? exportStructureIds[0]
+              : 'الكل',
+          structureIds: exportStructureIds,
+          structureLimit: exportStructureLimit,
+          studentIds: exportStudentIds,
+          studentLimit: exportStudentLimit,
           enrollmentStatus: enrollmentStatusFilter,
           startDate: startDate || undefined,
           endDate: endDate || undefined,
@@ -436,7 +721,12 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
           includeLogoHeader,
         });
       } else {
-        exportAllDataExcel(filteredStudents, exams, filteredResults, settings, {
+        exportAllDataExcel(filteredStudents, exams, allResults, settings, {
+          studentIds: exportStudentIds,
+          studentLimit: exportStudentLimit,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+          term: selectedTerm,
           includeChart,
           layoutMode,
           chartType,
@@ -822,9 +1112,9 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
               </div>
             </div>
 
-            {/* Extra Filters for Structures (Track, Year, Specific Structure) */}
+            {/* Extra Filters for Structures (Track, Year) */}
             {exportMode === 'structures_reports' && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
                     المسار الدراسي:
@@ -856,26 +1146,383 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                     ))}
                   </select>
                 </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    الهيكل المحدد:
-                  </label>
-                  <select
-                    value={selectedStructureId}
-                    onChange={(e) => setSelectedStructureId(e.target.value)}
-                    className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-bold cursor-pointer"
-                  >
-                    <option value="الكل">جميع الهياكل المطابقة ({structures.length})</option>
-                    {structures.map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.title} ({st.grade} - {st.term})
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </div>
             )}
+
+            {/* Structure Selection Scope (All / Specific Count / Specific One or Multiple Structures) */}
+            {exportMode === 'structures_reports' && (
+              <div className="pt-3 border-t border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-xs font-extrabold text-slate-800 dark:text-white flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-amber-500" />
+                    <span>نطاق الهياكل المشمولة بالتصدير ({baseMatchingStructures.length} مطابق):</span>
+                  </label>
+                  <div className="inline-flex bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setStructureSelectionMode('all')}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
+                        structureSelectionMode === 'all'
+                          ? 'bg-amber-500 text-slate-950 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      كل الهياكل ({baseMatchingStructures.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStructureSelectionMode('count')}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
+                        structureSelectionMode === 'count'
+                          ? 'bg-amber-500 text-slate-950 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      عدد معين من الهياكل
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStructureSelectionMode('specific')}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
+                        structureSelectionMode === 'specific'
+                          ? 'bg-amber-500 text-slate-950 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      هيكل محدد / عدة هياكل ({selectedStructureIds.length})
+                    </button>
+                  </div>
+                </div>
+
+                {structureSelectionMode === 'count' && (
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-amber-300/70 dark:border-amber-800/70 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Hash className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span className="font-bold text-slate-700 dark:text-slate-200">
+                        تصدير أول
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={Math.max(1, baseMatchingStructures.length)}
+                        value={structureLimit}
+                        onChange={(e) => setStructureLimit(Math.max(1, Number(e.target.value) || 1))}
+                        className="w-16 px-2 py-1 text-center font-mono tabular-nums font-black bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                      />
+                      <span className="font-bold text-slate-700 dark:text-slate-200">
+                        هيكل من أصل {baseMatchingStructures.length}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1">
+                      {[1, 2, 3, 5, 10].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setStructureLimit(preset)}
+                          className={`px-2 py-1 rounded-lg font-mono font-bold text-[11px] border transition cursor-pointer ${
+                            structureLimit === preset
+                              ? 'bg-amber-500 text-slate-950 border-amber-600'
+                              : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-amber-400'
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {structureSelectionMode === 'specific' && (
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-amber-300/70 dark:border-amber-800/70 space-y-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="relative flex-1 min-w-[160px]">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={structureSearchQuery}
+                          onChange={(e) => setStructureSearchQuery(e.target.value)}
+                          placeholder="بحث باسم الهيكل أو الصف أو المادة..."
+                          className="w-full pr-8 pl-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white"
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedStructureIds(searchableStructuresList.map(s => s.id))}
+                          className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-amber-500/20 text-slate-700 dark:text-slate-200 font-bold cursor-pointer whitespace-nowrap"
+                        >
+                          تحديد الكل ({searchableStructuresList.length})
+                        </button>
+
+                        <div className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-0.5">
+                          <input
+                            type="number"
+                            min={1}
+                            max={Math.max(1, searchableStructuresList.length)}
+                            value={structureQuickSelectCount}
+                            onChange={(e) => setStructureQuickSelectCount(Math.max(1, Number(e.target.value) || 1))}
+                            className="w-10 text-center font-mono font-bold text-[11px] bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedStructureIds(
+                                searchableStructuresList.slice(0, Math.max(1, structureQuickSelectCount)).map(s => s.id)
+                              )
+                            }
+                            className="px-1.5 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-black cursor-pointer whitespace-nowrap"
+                          >
+                            تحديد عدد
+                          </button>
+                        </div>
+
+                        {selectedStructureIds.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStructureIds([])}
+                            className="px-2 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-bold cursor-pointer whitespace-nowrap"
+                          >
+                            إلغاء التحديد
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="max-h-40 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg">
+                      {searchableStructuresList.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-slate-400">
+                          لا توجد هياكل مطابقة للبحث والفلاتر
+                        </div>
+                      ) : (
+                        searchableStructuresList.map((st) => {
+                          const checked = selectedStructureIds.includes(st.id);
+                          return (
+                            <label
+                              key={st.id}
+                              className={`flex items-center justify-between gap-2 px-3 py-2 text-xs cursor-pointer transition ${
+                                checked
+                                  ? 'bg-amber-500/10 dark:bg-amber-500/15'
+                                  : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleStructureSelection(st.id)}
+                                  className="w-4 h-4 rounded accent-amber-500 cursor-pointer shrink-0"
+                                />
+                                <span className="font-bold text-slate-900 dark:text-white truncate">
+                                  {st.title}
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400 shrink-0">
+                                {st.grade} • {st.track} • {st.term}
+                              </span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {selectedStructureIds.length === 0 && (
+                      <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400">
+                        يرجى تحديد هيكل واحد على الأقل أو اختيار «كل الهياكل» أو «عدد معين».
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Student Selection Scope (All / Specific Count / Specific One or Multiple Students) - ALL MODES */}
+            <div className="pt-3 border-t border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="text-xs font-extrabold text-slate-800 dark:text-white flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-emerald-500" />
+                  <span>نطاق الطلاب المشمولين بالتصدير ({candidateStudentsForPicker.length} متاح):</span>
+                </label>
+
+                <div className="inline-flex bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setStudentSelectionMode('all')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
+                      studentSelectionMode === 'all'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    كل الطلاب ({candidateStudentsForPicker.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStudentSelectionMode('count')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
+                      studentSelectionMode === 'count'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    عدد معين من الطلاب
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStudentSelectionMode('specific')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
+                      studentSelectionMode === 'specific'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    طالب محدد / طلاب ({selectedStudentIds.length})
+                  </button>
+                </div>
+              </div>
+
+              {studentSelectionMode === 'count' && (
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-emerald-300/70 dark:border-emerald-800/70 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                  <div className="flex items-center gap-2">
+                    <Hash className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span className="font-bold text-slate-700 dark:text-slate-200">
+                      تصدير أول
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={Math.max(1, candidateStudentsForPicker.length)}
+                      value={studentLimit}
+                      onChange={(e) => setStudentLimit(Math.max(1, Number(e.target.value) || 1))}
+                      className="w-16 px-2 py-1 text-center font-mono tabular-nums font-black bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    />
+                    <span className="font-bold text-slate-700 dark:text-slate-200">
+                      طالب من أصل {candidateStudentsForPicker.length}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1">
+                    {[1, 3, 5, 10, 15, 20].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setStudentLimit(preset)}
+                        className={`px-2 py-1 rounded-lg font-mono font-bold text-[11px] border transition cursor-pointer ${
+                          studentLimit === preset
+                            ? 'bg-emerald-600 text-white border-emerald-700'
+                            : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-emerald-400'
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {studentSelectionMode === 'specific' && (
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-emerald-300/70 dark:border-emerald-800/70 space-y-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative flex-1 min-w-[160px]">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={studentSearchQuery}
+                        onChange={(e) => setStudentSearchQuery(e.target.value)}
+                        placeholder="ابحث باسم الطالب أو الكود أو الصف..."
+                        className="w-full pr-8 pl-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedStudentIds(searchableStudentsList.map(s => s.id))}
+                        className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-500/20 text-slate-700 dark:text-slate-200 font-bold cursor-pointer whitespace-nowrap"
+                      >
+                        تحديد الكل ({searchableStudentsList.length})
+                      </button>
+
+                      <div className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-0.5">
+                        <input
+                          type="number"
+                          min={1}
+                          max={Math.max(1, searchableStudentsList.length)}
+                          value={studentQuickSelectCount}
+                          onChange={(e) => setStudentQuickSelectCount(Math.max(1, Number(e.target.value) || 1))}
+                          className="w-10 text-center font-mono font-bold text-[11px] bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedStudentIds(
+                              searchableStudentsList.slice(0, Math.max(1, studentQuickSelectCount)).map(s => s.id)
+                            )
+                          }
+                          className="px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-black cursor-pointer whitespace-nowrap"
+                        >
+                          تحديد عدد
+                        </button>
+                      </div>
+
+                      {selectedStudentIds.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedStudentIds([])}
+                          className="px-2 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-bold cursor-pointer whitespace-nowrap"
+                        >
+                          إلغاء التحديد
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="max-h-44 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg">
+                    {searchableStudentsList.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-slate-400">
+                        لا يوجد طلاب مطابقين للبحث والفلاتر الحالية
+                      </div>
+                    ) : (
+                      searchableStudentsList.map((st) => {
+                        const checked = selectedStudentIds.includes(st.id);
+                        return (
+                          <label
+                            key={st.id}
+                            className={`flex items-center justify-between gap-2 px-3 py-2 text-xs cursor-pointer transition ${
+                              checked
+                                ? 'bg-emerald-500/10 dark:bg-emerald-500/15'
+                                : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleStudentSelection(st.id)}
+                                className="w-4 h-4 rounded accent-emerald-600 cursor-pointer shrink-0"
+                              />
+                              <span className="font-bold text-slate-900 dark:text-white truncate">
+                                {st.name}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 shrink-0">
+                              {st.grade}{st.group ? ` • ${st.group}` : ''} • #{st.studentId}
+                            </span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {selectedStudentIds.length === 0 && (
+                    <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400">
+                      يرجى تحديد طالب واحد على الأقل أو اختيار «كل الطلاب» أو «عدد معين».
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Date Range Filtering */}
             <div>
@@ -947,18 +1594,18 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
               <span>بيانات التقرير المستخرج:</span>
             </div>
             {exportMode === 'structures_reports' ? (
-              <div className="flex flex-wrap items-center gap-3 font-mono font-bold text-amber-800 dark:text-amber-300">
-                <span>{filteredStructuresList.length} هيكل</span>
+              <div className="flex flex-wrap items-center gap-3 font-mono tabular-nums font-bold text-amber-800 dark:text-amber-300">
+                <span>{effectiveStructuresList.length} هيكل</span>
                 <span>•</span>
                 <span>{uniqueStructureStudentsCount} طالب</span>
                 <span>•</span>
-                <span>{filteredStructureProgressList.length} سجل رصد</span>
+                <span>{effectiveStructureProgressList.length} سجل رصد</span>
                 <span>•</span>
                 <span>{layoutMode === 'mobile' ? '📱 مقاس الهاتف' : '💻 مقاس الكمبيوتر'}</span>
               </div>
             ) : (
-              <div className="flex items-center gap-3 font-mono font-bold text-amber-800 dark:text-amber-300">
-                <span>{filteredStudents.length} طالب</span>
+              <div className="flex flex-wrap items-center gap-3 font-mono tabular-nums font-bold text-amber-800 dark:text-amber-300">
+                <span>{effectiveStudentsList.length} طالب</span>
                 <span>•</span>
                 <span>{filteredResults.length} نتيجة امتحان</span>
                 <span>•</span>

@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 import { TeacherSettings, GradingScaleItem, Student, Exam, ExamResult } from '../types';
 import { DEFAULT_SETTINGS, saveTeacherSettings } from '../services/firebase';
-import { exportAllDataExcel } from '../utils/excel';
 
 interface SettingsViewProps {
   settings: TeacherSettings;

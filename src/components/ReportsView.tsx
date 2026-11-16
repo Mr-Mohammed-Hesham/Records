@@ -21,6 +21,7 @@ import {
   Monitor,
   Layers,
   Sparkles,
+  Hash,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -178,6 +179,33 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [startDate, setStartDate] = useState<string>(savedReportState.startDate || '');
   const [endDate, setEndDate] = useState<string>(savedReportState.endDate || '');
 
+  // Export Multi-Selection & Count Scope (Students & Structures)
+  const [selectedExportStudentIds, setSelectedExportStudentIds] = useState<string[]>([]);
+  const [studentQuickCountInput, setStudentQuickCountInput] = useState<number>(5);
+  const [selectedExportStructureIds, setSelectedExportStructureIds] = useState<string[]>([]);
+  const [structureQuickCountInput, setStructureQuickCountInput] = useState<number>(3);
+
+  const toggleExportStudentId = (id: string) => {
+    setSelectedExportStudentIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const selectAllExportStudents = (list: Student[]) => {
+    setSelectedExportStudentIds(list.map((s) => s.id));
+  };
+
+  const selectCountExportStudents = (list: Student[], countRaw: number) => {
+    const cnt = Math.max(1, Math.min(list.length, Math.floor(countRaw || 1)));
+    setSelectedExportStudentIds(list.slice(0, cnt).map((s) => s.id));
+  };
+
+  const toggleExportStructureId = (id: string) => {
+    setSelectedExportStructureIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
   // 1. فلترة قائمة الطلاب حسب الفصل الدراسي وحالة الملف لمنع ظهور منتهي الملف عند طلب الفعالين فقط
   const filteredStudents = useMemo(() => {
     return students.filter((s) => {
@@ -247,6 +275,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     setCompareExamIds([]);
     setStartDate('');
     setEndDate('');
+    setSelectedExportStudentIds([]);
+    setSelectedExportStructureIds([]);
   };
 
   const examMap = useMemo(() => new Map(exams.map(e => [e.id, e])), [exams]);
@@ -562,11 +592,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </button>
 
           <button
-            onClick={() => exportAllDataExcel(filteredStudents, filteredExams, dateFilteredResults, settings, getExportOptions())}
+            onClick={() =>
+              exportAllDataExcel(filteredStudents, filteredExams, dateFilteredResults, settings, {
+                ...getExportOptions(),
+                studentIds:
+                  selectedExportStudentIds.length > 0 ? selectedExportStudentIds : undefined,
+              })
+            }
             className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700 rounded-xl transition-all cursor-pointer"
           >
             <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            تصدير الكل ({filteredStudents.length} طالب)
+            {selectedExportStudentIds.length > 0
+              ? `تصدير المحددين (${selectedExportStudentIds.length} طالب)`
+              : `تصدير الكل (${filteredStudents.length} طالب)`}
           </button>
 
           {/* Quick Logo Toggle for Reports */}
@@ -1209,19 +1247,114 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </p>
             </div>
 
-            <button
-              onClick={() => setShowExportModal(true)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-all cursor-pointer shadow-xs"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              تصدير تقرير شامل للطلاب (Excel)
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() =>
+                  exportCustomAcademicExcel(
+                    students,
+                    exams,
+                    allResults,
+                    {
+                      ...getExportOptions(),
+                      term: selectedTerm,
+                      enrollmentStatus: selectedEnrollmentStatus,
+                      startDate: startDate || undefined,
+                      endDate: endDate || undefined,
+                      studentIds:
+                        selectedExportStudentIds.length > 0 ? selectedExportStudentIds : undefined,
+                    },
+                    settings.gradingScale
+                  )
+                }
+                disabled={filteredStudents.length === 0}
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-all cursor-pointer shadow-xs disabled:opacity-50"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                {selectedExportStudentIds.length > 0
+                  ? `تصدير المحددين Excel (${selectedExportStudentIds.length})`
+                  : `تصدير جميع الظاهرين Excel (${filteredStudents.length})`}
+              </button>
+
+              <button
+                onClick={() => setShowExportModal(true)}
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition-all cursor-pointer"
+              >
+                <Filter className="w-3.5 h-3.5 text-amber-500" />
+                <span>تصدير مخصص / عدد معين</span>
+              </button>
+            </div>
           </div>
+
+          {/* Multi-Selection Toolbar for Export */}
+          {filteredStudents.length > 0 && (
+            <div className="p-2.5 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1 ml-1">
+                  <Users className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>تحديد للتصدير:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => selectAllExportStudents(filteredStudents)}
+                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold text-[11px] hover:border-emerald-500 cursor-pointer"
+                >
+                  تحديد الكل ({filteredStudents.length})
+                </button>
+                <div className="inline-flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-0.5">
+                  <Hash className="w-3 h-3 text-slate-400" />
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">عدد:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.max(1, filteredStudents.length)}
+                    value={studentQuickCountInput}
+                    onChange={(e) => setStudentQuickCountInput(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-12 text-center font-mono font-bold text-[11px] bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => selectCountExportStudents(filteredStudents, studentQuickCountInput)}
+                    className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[11px] cursor-pointer"
+                  >
+                    تحديد
+                  </button>
+                </div>
+                {selectedExportStudentIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedExportStudentIds([])}
+                    className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-bold text-[11px] cursor-pointer"
+                  >
+                    إلغاء التحديد ({selectedExportStudentIds.length})
+                  </button>
+                )}
+              </div>
+              <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400">
+                المحدد للتصدير: <strong className="text-emerald-600 dark:text-emerald-400">{selectedExportStudentIds.length}</strong>
+              </span>
+            </div>
+          )}
 
           <div className="overflow-x-auto border border-slate-200 dark:border-slate-700/80 rounded-2xl">
             <table className="w-full text-right text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
                 <tr>
+                  <th className="py-3 px-2.5 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={
+                        filteredStudents.length > 0 &&
+                        filteredStudents.every((s) => selectedExportStudentIds.includes(s.id))
+                      }
+                      onChange={(e) =>
+                        e.target.checked
+                          ? selectAllExportStudents(filteredStudents)
+                          : setSelectedExportStudentIds([])
+                      }
+                      className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
+                      title="تحديد / إلغاء تحديد الكل"
+                    />
+                  </th>
                   <th className="py-3 px-3 w-10 text-center">#</th>
                   <th className="py-3 px-3">اسم الطالب</th>
                   <th className="py-3 px-3">الصف</th>
@@ -1237,7 +1370,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
                 {filteredStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-8 text-center text-slate-400 text-xs">
+                    <td colSpan={11} className="py-8 text-center text-slate-400 text-xs">
                       لا يوجد طلاب يطابقون الفلاتر المحددة (يمكنك تغيير الفصل الدراسي أو حالة الملف)
                     </td>
                   </tr>
@@ -1246,12 +1379,26 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     const res = dateFilteredResults.filter(r => r.studentDocId === st.id);
                     const stStats = calculateStudentStats(res, settings.gradingScale);
                     const stMeta = ENROLLMENT_STATUS_META[getEffectiveEnrollmentStatus(st)];
+                    const isChecked = selectedExportStudentIds.includes(st.id);
                     return (
                       <tr
                         key={st.id}
                         onClick={() => onOpenStudentProfile(st)}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
+                        className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors ${
+                          isChecked ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : ''
+                        }`}
                       >
+                        <td
+                          className="py-2.5 px-2.5 text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleExportStudentId(st.id)}
+                            className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
+                          />
+                        </td>
                         <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">{i + 1}</td>
                         <td className="py-2.5 px-3 font-extrabold text-slate-900 dark:text-slate-50">{st.name}</td>
                         <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{st.grade}</td>
@@ -1297,11 +1444,23 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </p>
             </div>
             <button
-              onClick={() => exportExamResultsExcel(currentExam, currentExamResults, students, getExportOptions())}
+              onClick={() =>
+                exportExamResultsExcel(currentExam, currentExamResults, students, {
+                  ...getExportOptions(),
+                  studentIds:
+                    selectedExportStudentIds.length > 0 ? selectedExportStudentIds : undefined,
+                })
+              }
               className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-all cursor-pointer"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              تصدير نتائج الامتحان إلى Excel (مع الرسم البياني)
+              {selectedExportStudentIds.length > 0
+                ? `تصدير نتائج المحددين Excel (${
+                    currentExamResults.filter((r) =>
+                      selectedExportStudentIds.includes(r.studentDocId)
+                    ).length
+                  })`
+                : 'تصدير نتائج الامتحان إلى Excel (مع الرسم البياني)'}
             </button>
           </div>
 
@@ -1460,10 +1619,92 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             </div>
           )}
 
+          {currentExamResults.length > 0 && (
+            <div className="p-2.5 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1 ml-1">
+                  <Users className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>تحديد طلاب للتصدير:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedExportStudentIds(
+                      Array.from(new Set(currentExamResults.map((r) => r.studentDocId)))
+                    )
+                  }
+                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold text-[11px] hover:border-emerald-500 cursor-pointer"
+                >
+                  تحديد الكل ({currentExamResults.length})
+                </button>
+                <div className="inline-flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-0.5">
+                  <Hash className="w-3 h-3 text-slate-400" />
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">عدد:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.max(1, currentExamResults.length)}
+                    value={studentQuickCountInput}
+                    onChange={(e) => setStudentQuickCountInput(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-12 text-center font-mono font-bold text-[11px] bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedExportStudentIds(
+                        Array.from(
+                          new Set(
+                            currentExamResults
+                              .slice(0, Math.max(1, studentQuickCountInput))
+                              .map((r) => r.studentDocId)
+                          )
+                        )
+                      )
+                    }
+                    className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[11px] cursor-pointer"
+                  >
+                    تحديد
+                  </button>
+                </div>
+                {selectedExportStudentIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedExportStudentIds([])}
+                    className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-bold text-[11px] cursor-pointer"
+                  >
+                    إلغاء التحديد ({selectedExportStudentIds.length})
+                  </button>
+                )}
+              </div>
+              <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400">
+                المحدد: <strong className="text-emerald-600 dark:text-emerald-400">{selectedExportStudentIds.length}</strong>
+              </span>
+            </div>
+          )}
+
           <div className="overflow-x-auto border border-slate-200 dark:border-slate-700/80 rounded-2xl">
             <table className="w-full text-right text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
                 <tr>
+                  <th className="py-2.5 px-2.5 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={
+                        currentExamResults.length > 0 &&
+                        currentExamResults.every((r) =>
+                          selectedExportStudentIds.includes(r.studentDocId)
+                        )
+                      }
+                      onChange={(e) =>
+                        e.target.checked
+                          ? setSelectedExportStudentIds(
+                              Array.from(new Set(currentExamResults.map((r) => r.studentDocId)))
+                            )
+                          : setSelectedExportStudentIds([])
+                      }
+                      className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
+                    />
+                  </th>
                   <th className="py-2.5 px-3 w-10 text-center">#</th>
                   <th className="py-2.5 px-3">اسم الطالب</th>
                   <th className="py-2.5 px-3 text-center">الدرجة</th>
@@ -1475,8 +1716,23 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-                {currentExamResults.map((r, i) => (
-                  <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                {currentExamResults.map((r, i) => {
+                  const isChecked = selectedExportStudentIds.includes(r.studentDocId);
+                  return (
+                  <tr
+                    key={r.id}
+                    className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${
+                      isChecked ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : ''
+                    }`}
+                  >
+                    <td className="py-2 px-2.5 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleExportStudentId(r.studentDocId)}
+                        className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
+                      />
+                    </td>
                     <td className="py-2 px-3 text-center text-slate-400 font-mono text-[11px]">{i + 1}</td>
                     <td className="py-2 px-3 font-extrabold text-slate-900 dark:text-slate-50">{r.studentName}</td>
                     <td className="py-2 px-3 text-center font-mono font-bold text-slate-800 dark:text-slate-100">{r.score}/{r.totalScore}</td>
@@ -1504,7 +1760,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     </td>
                     <td className="py-2 px-3 text-slate-500 dark:text-slate-400">{r.notes || '-'}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1512,21 +1769,130 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       )}
 
       {/* 4. Grade & Group Reports */}
-      {(reportType === 'by_grade' || reportType === 'by_group') && (
+      {(reportType === 'by_grade' || reportType === 'by_group') && (() => {
+        const listForTab = reportType === 'by_grade' ? gradeStudents : groupStudents;
+        const selectedForTab = listForTab
+          .filter((s) => selectedExportStudentIds.includes(s.id))
+          .map((s) => s.id);
+        return (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-7 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-4">
-          <div className="pb-3 border-b border-slate-100 dark:border-slate-800">
-            <h3 className="font-bold text-slate-900 dark:text-white text-base">
-              {reportType === 'by_grade' ? `تقرير طلاب صف: ${selectedGrade}` : `تقرير طلاب شعبة: ${selectedGroup}`}
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              إجمالي الطلاب في هذا التصنيف: {reportType === 'by_grade' ? gradeStudents.length : groupStudents.length} طالب
-            </p>
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                {reportType === 'by_grade' ? `تقرير طلاب صف: ${selectedGrade}` : `تقرير طلاب شعبة: ${selectedGroup}`}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                إجمالي الطلاب في هذا التصنيف: {listForTab.length} طالب
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={listForTab.length === 0}
+                onClick={() =>
+                  exportCustomAcademicExcel(
+                    students,
+                    exams,
+                    allResults,
+                    {
+                      ...getExportOptions(),
+                      grade: reportType === 'by_grade' ? selectedGrade : 'الكل',
+                      group: reportType === 'by_group' ? selectedGroup : 'الكل',
+                      startDate: startDate || undefined,
+                      endDate: endDate || undefined,
+                      studentIds: selectedForTab.length > 0 ? selectedForTab : undefined,
+                    },
+                    settings.gradingScale
+                  )
+                }
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition cursor-pointer disabled:opacity-50"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span>
+                  {selectedForTab.length > 0
+                    ? `تصدير المحددين Excel (${selectedForTab.length})`
+                    : `تصدير القائمة Excel (${listForTab.length})`}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowExportModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition cursor-pointer"
+              >
+                <Filter className="w-3.5 h-3.5 text-amber-500" />
+                <span>تصدير مخصص</span>
+              </button>
+            </div>
           </div>
+
+          {listForTab.length > 0 && (
+            <div className="p-2.5 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1 ml-1">
+                  <Users className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>تحديد طلاب للتصدير:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => selectAllExportStudents(listForTab)}
+                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold text-[11px] hover:border-emerald-500 cursor-pointer"
+                >
+                  تحديد الكل ({listForTab.length})
+                </button>
+                <div className="inline-flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-0.5">
+                  <Hash className="w-3 h-3 text-slate-400" />
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">عدد:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.max(1, listForTab.length)}
+                    value={studentQuickCountInput}
+                    onChange={(e) => setStudentQuickCountInput(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-12 text-center font-mono font-bold text-[11px] bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => selectCountExportStudents(listForTab, studentQuickCountInput)}
+                    className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[11px] cursor-pointer"
+                  >
+                    تحديد
+                  </button>
+                </div>
+                {selectedExportStudentIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedExportStudentIds([])}
+                    className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-bold text-[11px] cursor-pointer"
+                  >
+                    إلغاء التحديد ({selectedExportStudentIds.length})
+                  </button>
+                )}
+              </div>
+              <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400">
+                المحدد: <strong className="text-emerald-600 dark:text-emerald-400">{selectedForTab.length}</strong>
+              </span>
+            </div>
+          )}
 
           <div className="overflow-x-auto border border-slate-200 dark:border-slate-700/80 rounded-2xl">
             <table className="w-full text-right text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
                 <tr>
+                  <th className="py-2.5 px-2.5 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={
+                        listForTab.length > 0 &&
+                        listForTab.every((s) => selectedExportStudentIds.includes(s.id))
+                      }
+                      onChange={(e) =>
+                        e.target.checked
+                          ? selectAllExportStudents(listForTab)
+                          : setSelectedExportStudentIds([])
+                      }
+                      className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
+                    />
+                  </th>
                   <th className="py-2.5 px-3">اسم الطالب</th>
                   <th className="py-2.5 px-3">الرقم التعريفي</th>
                   <th className="py-2.5 px-3 text-center">عدد الامتحانات</th>
@@ -1536,15 +1902,26 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-                {(reportType === 'by_grade' ? gradeStudents : groupStudents).map((st) => {
+                {listForTab.map((st) => {
                   const res = dateFilteredResults.filter(r => r.studentDocId === st.id);
                   const stStats = calculateStudentStats(res, settings.gradingScale);
+                  const isChecked = selectedExportStudentIds.includes(st.id);
                   return (
                     <tr
                       key={st.id}
                       onClick={() => onOpenStudentProfile(st)}
-                      className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
+                      className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors ${
+                        isChecked ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : ''
+                      }`}
                     >
+                      <td className="py-2.5 px-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleExportStudentId(st.id)}
+                          className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
+                        />
+                      </td>
                       <td className="py-2.5 px-3 font-extrabold text-slate-900 dark:text-slate-50">{st.name}</td>
                       <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400 font-mono">{st.studentId}</td>
                       <td className="py-2.5 px-3 text-center font-mono text-slate-700 dark:text-slate-200">{stStats.totalExams}</td>
@@ -1566,10 +1943,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             </table>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* 4.5 Completed Course Students Report */}
-      {reportType === 'completed_course' && (
+      {reportType === 'completed_course' && (() => {
+        const completedList = students.filter(s => getEffectiveEnrollmentStatus(s) === 'completed');
+        const selectedCompletedIds = completedList
+          .filter(s => selectedExportStudentIds.includes(s.id))
+          .map(s => s.id);
+        return (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-7 shadow-sm border border-sky-200 dark:border-sky-800/70 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
             <div>
@@ -1578,19 +1961,79 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 <span>قائمة وسجل الطلبة الذين انتهى الكورس لهم</span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                إجمالي الخريجين ومنتهي الكورس: {students.filter(s => getEffectiveEnrollmentStatus(s) === 'completed').length} طالب — محفوظة سجلاتهم بالكامل
+                إجمالي الخريجين ومنتهي الكورس: {completedList.length} طالب — محفوظة سجلاتهم بالكامل
               </p>
             </div>
             <button
-              onClick={() => exportCompletedStudentsExcel(students, allResults, settings, getExportOptions())}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 rounded-xl transition-all cursor-pointer shadow-sm"
+              onClick={() =>
+                exportCompletedStudentsExcel(students, allResults, settings, {
+                  ...getExportOptions(),
+                  studentIds:
+                    selectedCompletedIds.length > 0 ? selectedCompletedIds : undefined,
+                })
+              }
+              disabled={completedList.length === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 rounded-xl transition-all cursor-pointer shadow-sm disabled:opacity-50"
             >
               <FileSpreadsheet className="w-4 h-4" />
-              <span>تصدير قائمة منتهي الكورس Excel (مع الرسم البياني)</span>
+              <span>
+                {selectedCompletedIds.length > 0
+                  ? `تصدير المحددين Excel (${selectedCompletedIds.length})`
+                  : 'تصدير قائمة منتهي الكورس Excel (مع الرسم البياني)'}
+              </span>
             </button>
           </div>
 
-          {students.filter(s => getEffectiveEnrollmentStatus(s) === 'completed').length === 0 ? (
+          {completedList.length > 0 && (
+            <div className="p-2.5 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1 ml-1">
+                  <Users className="w-3.5 h-3.5 text-sky-500" />
+                  <span>تحديد للتصدير:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => selectAllExportStudents(completedList)}
+                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold text-[11px] hover:border-sky-500 cursor-pointer"
+                >
+                  تحديد الكل ({completedList.length})
+                </button>
+                <div className="inline-flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-0.5">
+                  <Hash className="w-3 h-3 text-slate-400" />
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">عدد:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.max(1, completedList.length)}
+                    value={studentQuickCountInput}
+                    onChange={(e) => setStudentQuickCountInput(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-12 text-center font-mono font-bold text-[11px] bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => selectCountExportStudents(completedList, studentQuickCountInput)}
+                    className="px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-black text-[11px] cursor-pointer"
+                  >
+                    تحديد
+                  </button>
+                </div>
+                {selectedExportStudentIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedExportStudentIds([])}
+                    className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-bold text-[11px] cursor-pointer"
+                  >
+                    إلغاء التحديد ({selectedExportStudentIds.length})
+                  </button>
+                )}
+              </div>
+              <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400">
+                المحدد: <strong className="text-sky-600 dark:text-sky-400">{selectedCompletedIds.length}</strong>
+              </span>
+            </div>
+          )}
+
+          {completedList.length === 0 ? (
             <div className="py-12 text-center text-slate-400 text-xs bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
               لا يوجد طلبة محددة حالتهم كـ «انتهى الكورس» حالياً. يمكنك تحديد حالة الطالب من ملفه الشخصي أو من قائمة الطلاب.
             </div>
@@ -1599,6 +2042,21 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               <table className="w-full text-right text-xs">
                 <thead className="bg-sky-50/70 dark:bg-sky-950/40 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
                   <tr>
+                    <th className="py-3 px-2.5 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={
+                          completedList.length > 0 &&
+                          completedList.every((s) => selectedExportStudentIds.includes(s.id))
+                        }
+                        onChange={(e) =>
+                          e.target.checked
+                            ? selectAllExportStudents(completedList)
+                            : setSelectedExportStudentIds([])
+                        }
+                        className="w-4 h-4 rounded accent-sky-600 cursor-pointer"
+                      />
+                    </th>
                     <th className="py-3 px-3 w-10 text-center">#</th>
                     <th className="py-3 px-3">اسم الطالب</th>
                     <th className="py-3 px-3">الصف الدراسي</th>
@@ -1609,18 +2067,27 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-                  {students
-                    .filter(s => getEffectiveEnrollmentStatus(s) === 'completed')
-                    .map((st, idx) => {
+                  {completedList.map((st, idx) => {
                       const res = dateFilteredResults.filter(r => r.studentDocId === st.id);
                       const stStats = calculateStudentStats(res, settings.gradingScale);
                       const statusMeta = ENROLLMENT_STATUS_META['completed'];
+                      const isChecked = selectedExportStudentIds.includes(st.id);
                       return (
                         <tr
                           key={st.id}
                           onClick={() => onOpenStudentProfile(st)}
-                          className="hover:bg-sky-50/30 dark:hover:bg-sky-950/20 cursor-pointer transition-colors"
+                          className={`hover:bg-sky-50/30 dark:hover:bg-sky-950/20 cursor-pointer transition-colors ${
+                            isChecked ? 'bg-sky-50/50 dark:bg-sky-950/25' : ''
+                          }`}
                         >
+                          <td className="py-2.5 px-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleExportStudentId(st.id)}
+                              className="w-4 h-4 rounded accent-sky-600 cursor-pointer"
+                            />
+                          </td>
                           <td className="py-2.5 px-3 text-center font-mono text-slate-400">{idx + 1}</td>
                           <td className="py-2.5 px-3 font-extrabold text-slate-900 dark:text-white">{st.name}</td>
                           <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{st.grade}</td>
@@ -1640,7 +2107,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* 5. Exam Comparison Tool */}
       {reportType === 'exam_comparison' && (
@@ -1744,7 +2212,20 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     students,
                     {
                       ...getExportOptions(),
-                      structureId: selectedStructureFilterId,
+                      structureId:
+                        selectedExportStructureIds.length === 1
+                          ? selectedExportStructureIds[0]
+                          : selectedStructureFilterId,
+                      structureIds:
+                        selectedExportStructureIds.length > 0
+                          ? selectedExportStructureIds
+                          : selectedStructureFilterId !== 'الكل'
+                          ? [selectedStructureFilterId]
+                          : undefined,
+                      studentIds:
+                        selectedExportStudentIds.length > 0
+                          ? selectedExportStudentIds
+                          : undefined,
                       grade: selectedStructureGrade,
                       track: selectedStructureTrack,
                       academicYear: selectedStructureYear,
@@ -1759,7 +2240,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition cursor-pointer disabled:opacity-50"
               >
                 <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <span>تصدير تقرير الهياكل إلى Excel</span>
+                <span>
+                  {selectedExportStudentIds.length > 0 || selectedExportStructureIds.length > 0
+                    ? `تصدير المحددين Excel (${selectedExportStructureIds.length || 'كل'} هيكل • ${selectedExportStudentIds.length || 'كل'} طالب)`
+                    : 'تصدير تقرير الهياكل إلى Excel'}
+                </span>
               </button>
             </div>
           </div>
@@ -1824,6 +2309,86 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               ))}
             </select>
           </div>
+
+          {/* Multi-Structure Selection & Count Toolbar */}
+          {filteredStructuresForReport.length > 0 && (
+            <div className="p-3 bg-amber-50/50 dark:bg-amber-950/20 rounded-2xl border border-amber-200/80 dark:border-amber-800/50 space-y-2.5 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1 ml-1">
+                    <Layers className="w-3.5 h-3.5 text-amber-500" />
+                    <span>تحديد الهياكل للتصدير:</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedExportStructureIds(filteredStructuresForReport.map((s) => s.id))}
+                    className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold text-[11px] hover:border-amber-500 cursor-pointer"
+                  >
+                    تحديد الكل ({filteredStructuresForReport.length})
+                  </button>
+                  <div className="inline-flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-0.5">
+                    <Hash className="w-3 h-3 text-slate-400" />
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">عدد هياكل:</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={Math.max(1, filteredStructuresForReport.length)}
+                      value={structureQuickCountInput}
+                      onChange={(e) => setStructureQuickCountInput(Math.max(1, Number(e.target.value) || 1))}
+                      className="w-12 text-center font-mono font-bold text-[11px] bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedExportStructureIds(
+                          filteredStructuresForReport
+                            .slice(0, Math.max(1, structureQuickCountInput))
+                            .map((s) => s.id)
+                        )
+                      }
+                      className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] cursor-pointer"
+                    >
+                      تحديد
+                    </button>
+                  </div>
+                  {selectedExportStructureIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedExportStructureIds([])}
+                      className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-bold text-[11px] cursor-pointer"
+                    >
+                      إلغاء تحديد الهياكل ({selectedExportStructureIds.length})
+                    </button>
+                  )}
+                </div>
+                <span className="text-[11px] font-mono font-bold text-amber-700 dark:text-amber-300">
+                  {selectedExportStructureIds.length > 0
+                    ? `${selectedExportStructureIds.length} هيكل محدد`
+                    : 'الكل مشمول'}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {filteredStructuresForReport.map((st) => {
+                  const active = selectedExportStructureIds.includes(st.id);
+                  return (
+                    <button
+                      key={st.id}
+                      type="button"
+                      onClick={() => toggleExportStructureId(st.id)}
+                      className={`px-2.5 py-1 rounded-xl border text-[11px] font-bold transition cursor-pointer ${
+                        active
+                          ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-xs'
+                          : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-amber-400'
+                      }`}
+                    >
+                      {st.title} ({st.grade})
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Summary KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1930,10 +2495,90 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               لا توجد سجلات طلاب مسجلة في قسم الهياكل ضمن الفلاتر الحالية. يمكنك رصد حلول الطلاب من تبويب «قسم الهياكل».
             </div>
           ) : (
+            <div className="space-y-3">
+              <div className="p-2.5 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1 ml-1">
+                    <Users className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>تحديد الطلاب للتصدير:</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedExportStudentIds(
+                        Array.from(new Set(filteredStructureProgressForReport.map((r) => r.studentDocId)))
+                      )
+                    }
+                    className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold text-[11px] hover:border-emerald-500 cursor-pointer"
+                  >
+                    تحديد الكل ({new Set(filteredStructureProgressForReport.map((r) => r.studentDocId)).size})
+                  </button>
+                  <div className="inline-flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-0.5">
+                    <Hash className="w-3 h-3 text-slate-400" />
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">عدد:</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={Math.max(1, new Set(filteredStructureProgressForReport.map((r) => r.studentDocId)).size)}
+                      value={studentQuickCountInput}
+                      onChange={(e) => setStudentQuickCountInput(Math.max(1, Number(e.target.value) || 1))}
+                      className="w-12 text-center font-mono font-bold text-[11px] bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const uniqIds = Array.from(
+                          new Set(filteredStructureProgressForReport.map((r) => r.studentDocId))
+                        );
+                        setSelectedExportStudentIds(
+                          uniqIds.slice(0, Math.max(1, studentQuickCountInput))
+                        );
+                      }}
+                      className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[11px] cursor-pointer"
+                    >
+                      تحديد
+                    </button>
+                  </div>
+                  {selectedExportStudentIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedExportStudentIds([])}
+                      className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-bold text-[11px] cursor-pointer"
+                    >
+                      إلغاء التحديد ({selectedExportStudentIds.length})
+                    </button>
+                  )}
+                </div>
+                <span className="text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400">
+                  المحدد: <strong className="text-emerald-600 dark:text-emerald-400">{selectedExportStudentIds.length}</strong>
+                </span>
+              </div>
+
             <div className="overflow-x-auto border border-slate-200 dark:border-slate-700/80 rounded-2xl">
               <table className="w-full text-right text-xs">
                 <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
                   <tr>
+                    <th className="py-2.5 px-2.5 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={
+                          filteredStructureProgressForReport.length > 0 &&
+                          filteredStructureProgressForReport.every((r) =>
+                            selectedExportStudentIds.includes(r.studentDocId)
+                          )
+                        }
+                        onChange={(e) =>
+                          e.target.checked
+                            ? setSelectedExportStudentIds(
+                                Array.from(
+                                  new Set(filteredStructureProgressForReport.map((r) => r.studentDocId))
+                                )
+                              )
+                            : setSelectedExportStudentIds([])
+                        }
+                        className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
+                      />
+                    </th>
                     <th className="py-2.5 px-3 w-10 text-center">#</th>
                     <th className="py-2.5 px-3">اسم الطالب</th>
                     <th className="py-2.5 px-3">الهيكل والمادة</th>
@@ -1963,15 +2608,28 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       (rec.questionScores || []).filter(
                         (qs) => qs.isImprovement || (qs.attemptNumber !== undefined && qs.attemptNumber > 1)
                       ).length;
+                    const isChecked = selectedExportStudentIds.includes(rec.studentDocId);
 
                     return (
                       <tr
                         key={rec.id}
                         onClick={() => studentObj && onOpenStudentProfile(studentObj)}
                         className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors ${
-                          isImp ? 'bg-amber-50/40 dark:bg-amber-950/20 border-r-4 border-r-amber-500' : ''
+                          isChecked
+                            ? 'bg-emerald-50/40 dark:bg-emerald-950/20'
+                            : isImp
+                            ? 'bg-amber-50/40 dark:bg-amber-950/20 border-r-4 border-r-amber-500'
+                            : ''
                         }`}
                       >
+                        <td className="py-2.5 px-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleExportStudentId(rec.studentDocId)}
+                            className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
+                          />
+                        </td>
                         <td className="py-2.5 px-3 text-center font-mono text-slate-400">{idx + 1}</td>
                         <td className="py-2.5 px-3 font-extrabold text-slate-900 dark:text-white">
                           {rec.studentName}
@@ -2071,6 +2729,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 </tbody>
               </table>
             </div>
+            </div>
           )}
         </div>
       )}
@@ -2092,6 +2751,22 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         defaultYear={selectedStructureYear}
         defaultSubject={selectedStructureSubject}
         defaultStructureId={selectedStructureFilterId}
+        defaultSelectedStructureIds={
+          selectedExportStructureIds.length > 0
+            ? selectedExportStructureIds
+            : selectedStructureFilterId !== 'الكل'
+            ? [selectedStructureFilterId]
+            : undefined
+        }
+        defaultStructureSelectionMode={
+          selectedExportStructureIds.length > 0 || selectedStructureFilterId !== 'الكل'
+            ? 'specific'
+            : 'all'
+        }
+        defaultSelectedStudentIds={
+          selectedExportStudentIds.length > 0 ? selectedExportStudentIds : undefined
+        }
+        defaultStudentSelectionMode={selectedExportStudentIds.length > 0 ? 'specific' : 'all'}
         defaultStatus={selectedEnrollmentStatus}
       />
 

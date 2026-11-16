@@ -62,6 +62,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
   const [gradeFilter, setGradeFilter] = useState(savedExamsState.gradeFilter);
   const [typeFilter, setTypeFilter] = useState(savedExamsState.typeFilter);
   const [attachmentExam, setAttachmentExam] = useState<Exam | null>(null);
+  const [exportLimitByExam, setExportLimitByExam] = useState<Record<string, number>>({});
 
   useEffect(() => {
     saveViewState('EXAMS_VIEW', {
@@ -368,15 +369,41 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
 
               {/* Card Footer Actions */}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  onClick={() => exportExamResultsExcel(exam, results, students)}
-                  disabled={attended === 0}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-colors cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
-                  title="تصدير كشف درجات هذا الامتحان إلى Excel"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  تصدير كشف الدرجات (.xlsx)
-                </button>
+                <div className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={Math.max(1, attended)}
+                    value={exportLimitByExam[exam.id] || 0}
+                    disabled={attended === 0}
+                    onChange={(e) =>
+                      setExportLimitByExam((prev) => ({
+                        ...prev,
+                        [exam.id]: Math.max(0, Number(e.target.value) || 0),
+                      }))
+                    }
+                    title="أدخل عدد الطلاب المطلوب تصديرهم (0 = الكل)"
+                    placeholder="الكل"
+                    className="w-11 px-1 py-0.5 text-center font-mono font-bold text-[11px] bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-700 rounded-lg text-slate-900 dark:text-white disabled:opacity-40"
+                  />
+                  <button
+                    onClick={() => {
+                      const limit = exportLimitByExam[exam.id] || 0;
+                      exportExamResultsExcel(exam, results, students, {
+                        ...loadExcelPreferences(),
+                        studentLimit: limit > 0 ? limit : undefined,
+                      });
+                    }}
+                    disabled={attended === 0}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+                    title="تصدير كشف درجات هذا الامتحان إلى Excel (0 = الكل أو حدد العدد)"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    {(exportLimitByExam[exam.id] || 0) > 0
+                      ? `تصدير (${exportLimitByExam[exam.id]})`
+                      : 'تصدير كشف الدرجات (.xlsx)'}
+                  </button>
+                </div>
 
                 <button
                   onClick={() => onOpenScoring(exam)}

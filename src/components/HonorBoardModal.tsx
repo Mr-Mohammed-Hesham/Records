@@ -1616,23 +1616,32 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   </div>
 
                   {includeMostActiveSection && (
-                    <div className="flex items-center justify-between px-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-1">
                       <span className="text-[11px] text-slate-400">عدد فرسان الالتزام باللوحة:</span>
-                      <div className="flex items-center gap-1.5">
-                        {[3, 4, 5].map((cnt) => (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {[3, 4, 5, 10, 0].map((cnt) => (
                           <button
                             key={cnt}
                             type="button"
                             onClick={() => setMostActiveLimit(cnt)}
-                            className={`px-2 py-0.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                            className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
                               mostActiveLimit === cnt
                                 ? 'bg-amber-500 text-slate-950 shadow-xs'
                                 : 'bg-slate-800 text-slate-400 hover:text-white'
                             }`}
                           >
-                            أفضل {cnt}
+                            {cnt === 0 ? 'الكل' : cnt}
                           </button>
                         ))}
+                        <input
+                          type="number"
+                          min={0}
+                          max={200}
+                          value={mostActiveLimit}
+                          onChange={(e) => setMostActiveLimit(Math.max(0, Number(e.target.value) || 0))}
+                          title="أدخل عدداً مخصصاً (0 = الكل)"
+                          className="w-14 px-1.5 py-0.5 text-center font-mono font-bold text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
+                        />
                       </div>
                     </div>
                   )}
@@ -1871,20 +1880,43 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-2 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">عدد الأوائل:</label>
-                  <select
-                    value={limitCount}
-                    onChange={(e) => setLimitCount(Number(e.target.value))}
-                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right cursor-pointer"
-                  >
-                    <option value={3}>أفضل 3 (منصة التتويج)</option>
-                    <option value={5}>أفضل 5 طلاب</option>
-                    <option value={10}>أفضل 10 طلاب</option>
-                    <option value={15}>أفضل 15 طالباً</option>
-                    <option value={0}>جميع المتفوقين</option>
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] text-slate-400">عدد الأوائل (محدد أو الكل):</label>
+                    <span className="text-[10px] font-mono text-amber-400">
+                      {limitCount === 0 ? 'جميع المتفوقين' : `${limitCount} طالب`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={[1, 3, 5, 10, 15, 0].includes(limitCount) ? limitCount : -1}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        if (val >= 0) setLimitCount(val);
+                      }}
+                      className="flex-1 px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right cursor-pointer"
+                    >
+                      <option value={1}>الأول فقط (1)</option>
+                      <option value={3}>أفضل 3 (منصة التتويج)</option>
+                      <option value={5}>أفضل 5 طلاب</option>
+                      <option value={10}>أفضل 10 طلاب</option>
+                      <option value={15}>أفضل 15 طالباً</option>
+                      <option value={0}>جميع المتفوقين (الكل)</option>
+                      {![1, 3, 5, 10, 15, 0].includes(limitCount) && (
+                        <option value={-1}>عدد مخصص ({limitCount})</option>
+                      )}
+                    </select>
+                    <input
+                      type="number"
+                      min={0}
+                      max={500}
+                      value={limitCount}
+                      onChange={(e) => setLimitCount(Math.max(0, Number(e.target.value) || 0))}
+                      title="اكتب أي عدد طلاب (0 = الكل)"
+                      className="w-16 px-2 py-1.5 text-center font-mono font-bold text-xs bg-slate-900 border border-slate-700 rounded-xl text-white"
+                    />
+                  </div>
                 </div>
 
                 <div>

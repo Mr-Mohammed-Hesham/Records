@@ -83,6 +83,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const [sortDirection, setSortDirection] = useState<SortDirection>(savedState.sortDirection);
   const [academicModalStudent, setAcademicModalStudent] = useState<Student | null>(null);
   const [statusVersion, setStatusVersion] = useState(0);
+  const [completedExportCount, setCompletedExportCount] = useState<number>(0);
 
   useEffect(() => {
     if (initialEnrollmentTab) {
@@ -286,13 +287,36 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
           {enrollmentTab === 'completed' && tabCounts.completed > 0 && (
-            <button
-              onClick={() => exportCompletedCourseStudentsExcel(students, allResults, settings)}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-bold text-indigo-800 dark:text-indigo-200 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 rounded-xl transition-all cursor-pointer shadow-xs"
-            >
-              <Award className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              <span>تصدير قائمة منتهي الكورس Excel</span>
-            </button>
+            <div className="flex-1 sm:flex-initial inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 rounded-xl p-1 shadow-xs">
+              <div className="inline-flex items-center gap-1 px-1.5">
+                <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300">العدد:</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={tabCounts.completed}
+                  value={completedExportCount}
+                  onChange={(e) => setCompletedExportCount(Math.max(0, Number(e.target.value) || 0))}
+                  placeholder="الكل"
+                  title="أدخل عدد الطلاب المطلوب تصديره (0 = جميع منتهي الكورس)"
+                  className="w-12 px-1 py-0.5 text-center font-mono font-bold text-[11px] bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-700 rounded-lg text-slate-900 dark:text-white"
+                />
+              </div>
+              <button
+                onClick={() =>
+                  exportCompletedCourseStudentsExcel(students, allResults, settings, {
+                    studentLimit: completedExportCount > 0 ? completedExportCount : undefined,
+                  })
+                }
+                className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-indigo-800 dark:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-lg transition-all cursor-pointer"
+              >
+                <Award className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span>
+                  {completedExportCount > 0
+                    ? `تصدير منتهي الكورس (${completedExportCount} طالب)`
+                    : 'تصدير قائمة منتهي الكورس Excel'}
+                </span>
+              </button>
+            </div>
           )}
 
           <button
@@ -421,11 +445,19 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
           {tabCounts.completed > 0 && (
             <button
               type="button"
-              onClick={() => exportCompletedCourseStudentsExcel(students, allResults, settings)}
+              onClick={() =>
+                exportCompletedCourseStudentsExcel(students, allResults, settings, {
+                  studentLimit: completedExportCount > 0 ? completedExportCount : undefined,
+                })
+              }
               className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition cursor-pointer shrink-0 inline-flex items-center gap-1.5"
             >
               <FileSpreadsheet className="w-4 h-4" />
-              <span>تصدير كشف منتهي الكورس</span>
+              <span>
+                {completedExportCount > 0
+                  ? `تصدير كشف منتهي الكورس (${completedExportCount} طالب)`
+                  : 'تصدير كشف منتهي الكورس'}
+              </span>
             </button>
           )}
         </div>

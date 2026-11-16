@@ -994,12 +994,21 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   };
 
   /*
-   * تصدير نتائج الامتحان إلى Excel مع تفاصيل التحسين
+   * تصدير نتائج الامتحان إلى Excel مع تفاصيل التحسين (يدعم المحددين أو الكل)
    */
   const handleExportExcel = () => {
-    const resultsForExport: ExamResult[] = [];
+    const sourceRows =
+      selectedRowKeys.size > 0
+        ? rows.filter((r) => selectedRowKeys.has(r.rowKey))
+        : rows;
 
-    for (const row of rows) {
+    const resultsForExport: ExamResult[] = [];
+    const selectedStudentDocIds: string[] = [];
+
+    for (const row of sourceRows) {
+      if (selectedRowKeys.size > 0 && !selectedStudentDocIds.includes(row.studentDocId)) {
+        selectedStudentDocIds.push(row.studentDocId);
+      }
       if (row.score.trim() === '') {
         continue;
       }
@@ -1049,7 +1058,10 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
     exportExamResultsExcel(
       exam,
       resultsForExport,
-      students
+      students,
+      selectedRowKeys.size > 0
+        ? { studentIds: selectedStudentDocIds }
+        : undefined
     );
   };
 
@@ -1163,11 +1175,13 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={handleExportExcel}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-all cursor-pointer"
-              title="تصدير نتائج هذا الامتحان إلى ملف Excel"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-all cursor-pointer whitespace-nowrap"
+              title="تصدير نتائج هذا الامتحان (الكل أو المحددين) إلى ملف Excel"
             >
               <FileSpreadsheet className="w-4 h-4" />
-              تصدير Excel
+              {selectedRowKeys.size > 0
+                ? `تصدير المحددين Excel (${selectedRowKeys.size})`
+                : 'تصدير Excel'}
             </button>
 
             <button

@@ -85,8 +85,6 @@ import {
   User,
 } from 'firebase/auth';
 
-import { exportAllDataExcel } from './utils/excel';
-
 /* =========================================================
    VIEWS
    ========================================================= */
@@ -109,6 +107,7 @@ import { ExamFormModal } from './components/ExamFormModal';
 import { ScoreEntryModal } from './components/ScoreEntryModal';
 import { QuickSearchModal } from './components/QuickSearchModal';
 import { ConfirmModal } from './components/ConfirmModal';
+import { ExcelExportModal } from './components/ExcelExportModal';
 import { Footer } from './components/Footer';
 
 import {
@@ -1808,34 +1807,15 @@ export default function App() {
   };
 
   /* =======================================================
-     EXPORT EXCEL
+     EXPORT EXCEL (Opens Unified Selection Export Hub)
      ======================================================= */
 
-  const handleExportAllExcel =
-    () => {
-      try {
-        exportAllDataExcel(
-          students,
-          exams,
-          results,
-          settings
-        );
+  const [isGlobalExcelModalOpen, setIsGlobalExcelModalOpen] =
+    useState(false);
 
-        addToast(
-          'تم تجهيز وتنزيل ملف Excel الشامل بنجاح!'
-        );
-      } catch (err) {
-        console.error(
-          'Export Excel error:',
-          err
-        );
-
-        addToast(
-          'تعذر تصدير ملف Excel',
-          'error'
-        );
-      }
-    };
+  const handleExportAllExcel = () => {
+    setIsGlobalExcelModalOpen(true);
+  };
 
   /* =======================================================
      REFRESH PLATFORM & CLOUD SYNC (مزامنة وتحديث المنصة)
@@ -3041,6 +3021,18 @@ export default function App() {
         onSelectStudent={
           handleOpenStudentProfile
         }
+      />
+
+      <ExcelExportModal
+        isOpen={isGlobalExcelModalOpen}
+        onClose={() => setIsGlobalExcelModalOpen(false)}
+        students={students}
+        exams={exams}
+        allResults={results}
+        settings={settings}
+        structures={structures}
+        structureProgress={structureProgress}
+        defaultExportMode="all_data"
       />
 
       <ConfirmModal

@@ -540,9 +540,13 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
 
   const handleExportCurrentStructuresExcel = () => {
     const prefs = loadExcelPreferences();
+    const chosenStudentIds: string[] | undefined =
+      selectedStudentIds.size > 0 ? Array.from<string>(selectedStudentIds) : undefined;
     exportStructuresReportExcel(structures, structureProgress, students, {
       ...prefs,
       structureId: selectedStructure ? selectedStructure.id : 'الكل',
+      structureIds: selectedStructure ? [selectedStructure.id] : undefined,
+      studentIds: chosenStudentIds,
       grade: filterGrade,
       term: filterTerm,
       track: filterTrack,
@@ -600,7 +604,11 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span>تصدير شيت الهياكل</span>
+            <span>
+              {selectedStudentIds.size > 0
+                ? `تصدير شيت الهياكل (${selectedStudentIds.size} محدد)`
+                : 'تصدير شيت الهياكل'}
+            </span>
           </button>
 
           <button
@@ -1220,16 +1228,27 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                         </span>
 
                         {selectedStudentIds.size > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setIsBatchScoringOpen(true)}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-[11px] shadow-sm cursor-pointer"
-                          >
-                            <Save className="w-3.5 h-3.5" />
-                            <span>
-                              تسجيل ورصد الدرجة للمحددين مرة واحدة ({selectedStudentIds.size})
-                            </span>
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={handleExportCurrentStructuresExcel}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 font-bold text-[11px] cursor-pointer whitespace-nowrap"
+                            >
+                              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                              <span>تصدير المحددين Excel ({selectedStudentIds.size})</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setIsBatchScoringOpen(true)}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-[11px] shadow-sm cursor-pointer whitespace-nowrap"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                              <span>
+                                تسجيل ورصد الدرجة للمحددين مرة واحدة ({selectedStudentIds.size})
+                              </span>
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -1611,6 +1630,10 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
         defaultSubject={filterSubject}
         defaultStatus={filterStatus}
         defaultStructureId={selectedStructure?.id || 'الكل'}
+        defaultSelectedStructureIds={selectedStructure ? [selectedStructure.id] : undefined}
+        defaultStructureSelectionMode={selectedStructure ? 'specific' : 'all'}
+        defaultSelectedStudentIds={selectedStudentIds.size > 0 ? Array.from<string>(selectedStudentIds) : undefined}
+        defaultStudentSelectionMode={selectedStudentIds.size > 0 ? 'specific' : 'all'}
       />
 
       {/* Modal 4: Structures Honor Board Modal */}
