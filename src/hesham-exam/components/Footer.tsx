@@ -3,8 +3,8 @@ import { GraduationCap, Heart, Sparkles, ShieldCheck } from "lucide-react";
 
 export const Footer: React.FC = () => {
   return (
-    <footer className="w-full bg-[#070a12] border-t border-slate-800/80 py-8 mt-12 text-slate-400 text-xs">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
+    <footer className="w-full bg-[#070a12] border-t border-slate-800/80 py-6 mt-8 text-slate-400 text-xs">
+      <div className="max-w-[1600px] mx-auto px-3 sm:px-5 lg:px-6 flex flex-col md:flex-row items-center justify-between gap-4">
         
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg p-0.5 bg-gradient-to-br from-amber-400 via-orange-500 to-amber-600 flex items-center justify-center overflow-hidden shrink-0 shadow-xs">

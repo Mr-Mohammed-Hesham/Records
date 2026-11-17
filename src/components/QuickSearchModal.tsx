@@ -39,14 +39,14 @@ export const QuickSearchModal: React.FC<QuickSearchModalProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-start justify-center pt-20 p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-6 sm:pt-16 p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs overflow-hidden animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div 
-        className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right animate-in zoom-in-95 duration-150"
+        className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right flex flex-col max-h-[82dvh] animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="relative p-3 border-b border-slate-200 dark:border-slate-800">
+        <div className="relative p-3 border-b border-slate-200 dark:border-slate-800 shrink-0">
           <input
             type="text"
             autoFocus
@@ -64,7 +64,7 @@ export const QuickSearchModal: React.FC<QuickSearchModalProps> = ({
           </button>
         </div>
 
-        <div className="max-h-80 overflow-y-auto p-2 divide-y divide-slate-100 dark:divide-slate-800/60">
+        <div className="flex-1 overflow-y-auto p-2 divide-y divide-slate-100 dark:divide-slate-800/60">
           {filtered.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-400 dark:text-slate-500">
               لا يوجد طلاب مطابقين لـ "{query}"

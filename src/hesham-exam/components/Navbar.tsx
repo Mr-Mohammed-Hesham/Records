@@ -46,7 +46,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#090d16]/95 backdrop-blur-md border-b border-slate-800">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div className="max-w-[1600px] mx-auto px-3 sm:px-5 lg:px-6 h-16 flex items-center justify-between gap-2">
         
         {/* Brand / Logo */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
@@ -104,7 +104,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-500/30 hover:border-amber-500/60 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 font-bold text-xs transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
               title="تثبيت التطبيق مباشرة على الهاتف أو سطح المكتب"
             >
-              <Download className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+              <Download className="w-3.5 h-3.5 text-amber-400" />
               <span>تثبيت التطبيق</span>
             </button>
           )}

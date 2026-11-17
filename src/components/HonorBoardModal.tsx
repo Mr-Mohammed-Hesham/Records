@@ -1437,27 +1437,27 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto"
+      className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-hidden"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-6xl max-h-[96vh] flex flex-col shadow-2xl overflow-hidden animate-fadeIn">
+      <div className="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-6xl max-h-[95dvh] sm:max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-fadeIn">
 
         {/* Modal Top Header */}
-        <div className="shrink-0 p-4 sm:px-6 sm:py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90 backdrop-blur-md">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-300 text-slate-950 flex items-center justify-center shadow-md shadow-amber-500/20">
-              <Award className="w-6 h-6" />
+        <div className="shrink-0 p-3.5 sm:px-6 sm:py-4 border-b border-slate-800 flex items-center justify-between gap-2 bg-slate-900/95 backdrop-blur-md">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-300 text-slate-950 flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
+              <Award className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                <span>تصدير لوحة شرف المتفوقين كصورة</span>
-                <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full">
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-lg font-black text-white flex items-center gap-2 flex-wrap">
+                <span className="truncate">تصدير لوحة شرف المتفوقين كصورة</span>
+                <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full shrink-0">
                   Ultra-HD
                 </span>
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-[11px] sm:text-xs text-slate-400 truncate">
                 تصميم وبطاقة رسمية معتمدة بتوقيع الأستاذ جاهزة للمشاركة مع أولياء الأمور
               </p>
             </div>
@@ -1465,14 +1465,14 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Main Content (Controls + Preview) */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
 
           {/* Controls Sidebar (4 cols on lg) */}
           <div className="lg:col-span-4 space-y-4 text-right">

@@ -246,3 +246,65 @@ export interface StudentStructureProgress {
   updatedAt?: string;
 }
 
+/* =========================================================
+   OVERTIME & FINANCIAL MANAGEMENT (قسم الأوفر تايم والمالية)
+   ========================================================= */
+
+export type OvertimeDayType =
+  | 'regular'
+  | 'late_night'
+  | 'weekend'
+  | 'holiday'
+  | 'custom';
+
+export interface OvertimeEntry {
+  id: string;
+  date: string; // YYYY-MM-DD
+  monthKey: string; // YYYY-MM
+  dayNameAr: string; // اسم اليوم بالعربي (مثلاً: الثلاثاء)
+  hours: number; // عدد ساعات الأوفر تايم لهذا اليوم
+  startTime?: string; // وقت البداية الاختياري (HH:mm)
+  endTime?: string; // وقت النهاية الاختياري (HH:mm)
+  dayType: OvertimeDayType;
+  multiplier: number; // معامل احتساب الأوفر تايم (مثلاً 1.25 / 1.5 / 2.0)
+  hourlyRateSnapshot: number; // أجر الساعة الأساسي وقت الحساب
+  calculatedAmount: number; // قيمة الأوفر تايم المستحقة لهذا السجل
+  customFixedAmount?: number; // مبلغ ثابت اختياري بدلاً من الحساب التلقائي
+  category?: string; // تصنيف العمل (تدريس إضافي، تصحيح، تحضير، إشراف...)
+  notes?: string;
+  archived?: boolean; // أرشفة آمنة لحماية السجلات من الفقدان
+  archivedAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface FinancialAdjustmentItem {
+  id: string;
+  type: 'bonus' | 'allowance' | 'deduction'; // مكافأة / بدل / استقطاع
+  title: string;
+  amount: number;
+  date?: string;
+  notes?: string;
+}
+
+export interface OvertimeMonthlyConfig {
+  id: string; // monthKey (YYYY-MM)
+  monthKey: string; // YYYY-MM
+  currency: string; // e.g. AED, SAR, EGP, USD
+  totalSalary: number; // الراتب الكلي للشهر
+  basicSalaryRatioPct?: number; // نسبة الوعاء المحتسب للأوفر تايم (افتراضي 100% من الراتب الكلي)
+  calculationMode: 'from_salary' | 'manual_hourly';
+  workingDaysPerMonth: number; // أيام العمل الشهرية لحساب أجر الساعة (مثلاً 22 أو 26 أو 30)
+  workingHoursPerDay: number; // ساعات العمل اليومية (مثلاً 8)
+  manualHourlyRate?: number;
+  regularMultiplier: number; // معامل الأيام العادية (افتراضي 1.25)
+  weekendMultiplier: number; // معامل نهاية الأسبوع (افتراضي 1.5)
+  holidayMultiplier: number; // معامل العطل الرسمية (افتراضي 2.0)
+  adjustments: FinancialAdjustmentItem[]; // بدلات ومكافآت واستقطاعات الشهر
+  savingsGoalPct?: number; // نسبة الادخار المستهدفة %
+  monthlyTargetIncome?: number; // الهدف المالي الشهري
+  notes?: string;
+  createdAt?: string;
+  updatedAt: string;
+}
+

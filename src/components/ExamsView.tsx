@@ -22,6 +22,7 @@ import { exportExamResultsExcel, loadExcelPreferences } from '../utils/excel';
 import { loadViewState, saveViewState, clearViewState, recordLastActivity } from '../utils/activityTracker';
 import { AttachmentModal } from './AttachmentModal';
 import { AttachmentThumbnail } from './AttachmentThumbnail';
+import { ConfirmModal } from './ConfirmModal';
 
 interface ExamsViewProps {
   exams: Exam[];
@@ -62,6 +63,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
   const [gradeFilter, setGradeFilter] = useState(savedExamsState.gradeFilter);
   const [typeFilter, setTypeFilter] = useState(savedExamsState.typeFilter);
   const [attachmentExam, setAttachmentExam] = useState<Exam | null>(null);
+  const [confirmDeleteExam, setConfirmDeleteExam] = useState<Exam | null>(null);
   const [exportLimitByExam, setExportLimitByExam] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -302,11 +304,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
                       <Edit3 className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => {
-                        if (window.confirm(`هل أنت متأكد من حذف سجل "${exam.title}" وجميع درجات الطلاب المسجلة له؟`)) {
-                          onDeleteExam(exam);
-                        }
-                      }}
+                      onClick={() => setConfirmDeleteExam(exam)}
                       className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer"
                       title="حذف الامتحان"
                     >
@@ -433,6 +431,26 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
           onClose={() => setAttachmentExam(null)}
         />
       )}
+
+      <ConfirmModal
+        isOpen={!!confirmDeleteExam}
+        title="تأكيد حذف الامتحان"
+        message={
+          confirmDeleteExam
+            ? `هل أنت متأكد من حذف سجل "${confirmDeleteExam.title}" وجميع درجات الطلاب المسجلة له؟`
+            : ''
+        }
+        confirmText="تأكيد الحذف"
+        cancelText="إلغاء"
+        isDestructive={true}
+        onConfirm={() => {
+          if (confirmDeleteExam) {
+            onDeleteExam(confirmDeleteExam);
+          }
+          setConfirmDeleteExam(null);
+        }}
+        onCancel={() => setConfirmDeleteExam(null)}
+      />
     </div>
   );
 };

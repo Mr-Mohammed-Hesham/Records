@@ -7,6 +7,8 @@ import {
   TeacherSettings,
   ExamStructure,
   StudentStructureProgress,
+  OvertimeEntry,
+  OvertimeMonthlyConfig,
 } from '../types';
 import { calculateStudentStats } from './grading';
 import { getEffectiveEnrollmentStatus, ENROLLMENT_STATUS_META, getEffectiveEnrollmentNote } from './studentStatus';
@@ -2105,6 +2107,209 @@ export function exportStructuresReportExcel(
     wb,
     `تقارير_الهياكل_ونسب_الأسئلة${termTag}${statusTag}${gradeTag}${trackTag}${subjTag}${structCountTag}${studCountTag}${dateTag}.xlsx`
   );
+}
+
+/* =========================================================
+   تصدير التقرير المالي وساعات الأوفر تايم (Excel)
+   ========================================================= */
+
+const DAY_TYPE_LABELS_AR: Record<string, string> = {
+  regular: 'يوم عمل عادي',
+  late_night: 'عمل إضافي مسائي',
+  weekend: 'عطلة نهاية الأسبوع',
+  holiday: 'عطلة رسمية',
+  custom: 'معامل مخصص',
+};
+
+export function exportOvertimeFinancialExcel(options: {
+  selectedMonthKey: string;
+  monthLabelAr: string;
+  config: OvertimeMonthlyConfig;
+  monthEntries: OvertimeEntry[];
+  allEntries: OvertimeEntry[];
+  allConfigs: OvertimeMonthlyConfig[];
+  effectiveHourlyRate: number;
+}) {
+  const {
+    selectedMonthKey,
+    monthLabelAr,
+    config,
+    monthEntries,
+    allEntries,
+    allConfigs,
+    effectiveHourlyRate,
+  } = options;
+
+  const wb = XLSX.utils.book_new();
+  const currency = config.currency || 'AED';
+
+  const activeMonthEntries = [...monthEntries]
+    .filter((e) => !e.archived)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const totalHours = activeMonthEntries.reduce((acc, e) => acc + (Number(e.hours) || 0), 0);
+  const totalOvertimePay = activeMonthEntries.reduce((acc, e) => acc + (Number(e.calculatedAmount) || 0), 0);
+  const adjustments = config.adjustments || [];
+  const totalBonuses = adjustments
+    .filter((a) => a.type === 'bonus' || a.type === 'allowance')
+    .reduce((acc, a) => acc + (Number(a.amount) || 0), 0);
+  const totalDeductions = adjustments
+    .filter((a) => a.type === 'deduction')
+    .reduce((acc, a) => acc + (Number(a.amount) || 0), 0);
+  const netMonthlyPayout =
+    (Number(config.totalSalary) || 0) + totalOvertimePay + totalBonuses - totalDeductions;
+
+  // Sheet 1: الكشف المالي للشهر
+  const summaryRows: any[][] = [
+    [`كشف الراتب والأوفر تايم والمستحقات المالية - ${monthLabelAr} (${selectedMonthKey})`, '', '', ''],
+    ['البند المالي', 'القيمة', 'الوحدة / التفاصيل', 'ملاحظات'],
+    ['الراتب الكلي للشهر', Number(config.totalSalary || 0).toFixed(2), currency, `وعاء الحساب: ${config.basicSalaryRatioPct ?? 100}%`],
+    ['أجر الساعة الأساسي', effectiveHourlyRate.toFixed(2), `${currency} / ساعة`, config.calculationMode === 'manual_hourly' ? 'إدخال يدوي' : `${config.workingDaysPerMonth} يوم × ${config.workingHoursPerDay} ساعات`],
+    ['عدد أيام الأوفر تايم المسجلة', activeMonthEntries.length, 'يوم', ''],
+    ['إجمالي ساعات الأوفر تايم', totalHours.toFixed(2), 'ساعة', ''],
+    ['إجمالي قيمة الأوفر تايم المستحقة', totalOvertimePay.toFixed(2), currency, 'مجموع مستحقات كافة الأيام المسجلة'],
+    ['إجمالي البدلات والمكافآت الإضافية', totalBonuses.toFixed(2), currency, `${adjustments.filter((a) => a.type !== 'deduction').length} بند`],
+    ['إجمالي الاستقطاعات / السلف', totalDeductions.toFixed(2), currency, `${adjustments.filter((a) => a.type === 'deduction').length} بند`],
+    ['صافي المستحق الكلي للشهر', netMonthlyPayout.toFixed(2), currency, 'الراتب الكلي + الأوفر تايم + البدلات - الاستقطاعات'],
+  ];
+
+  if (adjustments.length > 0) {
+    summaryRows.push(['']);
+    summaryRows.push(['تفصيل البدلات والمكافآت والاستقطاعات', 'النوع', 'المبلغ', 'التاريخ / ملاحظات']);
+    adjustments.forEach((adj) => {
+      summaryRows.push([
+        adj.title,
+        adj.type === 'deduction' ? 'استقطاع' : adj.type === 'bonus' ? 'مكافأة' : 'بدل',
+        `${adj.type === 'deduction' ? '-' : '+'}${Number(adj.amount || 0).toFixed(2)} ${currency}`,
+        `${adj.date || ''} ${adj.notes || ''}`.trim(),
+      ]);
+    });
+  }
+
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+  applyWorksheetFormatting(
+    wsSummary,
+    summaryRows.length,
+    [34, 18, 22, 34],
+    [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }],
+    false
+  );
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'الكشف المالي للشهر');
+
+  // Sheet 2: السجل اليومي لساعات الأوفر تايم
+  const dailyRows: any[][] = [
+    [`سجل ساعات الأوفر تايم اليومي - ${monthLabelAr}`, '', '', '', '', '', '', '', ''],
+    ['التاريخ', 'اليوم', 'الشهر', 'الساعات', 'من - إلى', 'نوع اليوم', 'المعامل', `أجر الساعة (${currency})`, `المستحق (${currency})`, 'التصنيف', 'الملاحظات'],
+  ];
+
+  activeMonthEntries.forEach((e) => {
+    dailyRows.push([
+      e.date,
+      e.dayNameAr,
+      e.monthKey,
+      Number(e.hours || 0),
+      e.startTime && e.endTime ? `${e.startTime} → ${e.endTime}` : '-',
+      DAY_TYPE_LABELS_AR[e.dayType] || e.dayType,
+      `${e.multiplier}x`,
+      Number(e.hourlyRateSnapshot || 0).toFixed(2),
+      Number(e.calculatedAmount || 0).toFixed(2),
+      e.category || '-',
+      e.notes || '',
+    ]);
+  });
+
+  dailyRows.push([
+    'الإجمالي',
+    `${activeMonthEntries.length} يوم`,
+    selectedMonthKey,
+    Number(totalHours.toFixed(2)),
+    '-',
+    '-',
+    '-',
+    '-',
+    Number(totalOvertimePay.toFixed(2)),
+    '-',
+    '',
+  ]);
+
+  const wsDaily = XLSX.utils.aoa_to_sheet(dailyRows);
+  applyWorksheetFormatting(
+    wsDaily,
+    dailyRows.length,
+    [14, 14, 12, 12, 16, 20, 10, 16, 18, 18, 28],
+    [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }],
+    false
+  );
+  XLSX.utils.book_append_sheet(wb, wsDaily, 'السجل اليومي');
+
+  // Sheet 3: ملخص كافة الشهور
+  const monthKeys = Array.from(
+    new Set([
+      ...allEntries.filter((e) => !e.archived).map((e) => e.monthKey),
+      ...allConfigs.map((c) => c.monthKey),
+      selectedMonthKey,
+    ])
+  )
+    .filter(Boolean)
+    .sort();
+
+  const allMonthsRows: any[][] = [
+    ['ملخص المقارنة المالية لكافة الشهور المسجلة', '', '', '', '', '', ''],
+    ['الشهر', 'عدد الأيام', 'ساعات الأوفر تايم', 'الراتب الكلي', 'قيمة الأوفر تايم', 'البدلات (+) / الاستقطاعات (-)', 'الصافي النهائي'],
+  ];
+
+  let grandHours = 0;
+  let grandOvertime = 0;
+  let grandNet = 0;
+
+  monthKeys.forEach((mk) => {
+    const cfg = allConfigs.find((c) => c.monthKey === mk);
+    const mEntries = allEntries.filter((e) => !e.archived && e.monthKey === mk);
+    const hrs = mEntries.reduce((a, b) => a + (Number(b.hours) || 0), 0);
+    const ot = mEntries.reduce((a, b) => a + (Number(b.calculatedAmount) || 0), 0);
+    const sal = Number(cfg?.totalSalary || 0);
+    const adjList = cfg?.adjustments || [];
+    const bon = adjList.filter((a) => a.type !== 'deduction').reduce((a, b) => a + (Number(b.amount) || 0), 0);
+    const ded = adjList.filter((a) => a.type === 'deduction').reduce((a, b) => a + (Number(b.amount) || 0), 0);
+    const net = sal + ot + bon - ded;
+    const cur = cfg?.currency || currency;
+
+    grandHours += hrs;
+    grandOvertime += ot;
+    grandNet += net;
+
+    allMonthsRows.push([
+      mk,
+      mEntries.length,
+      Number(hrs.toFixed(2)),
+      `${sal.toFixed(2)} ${cur}`,
+      `${ot.toFixed(2)} ${cur}`,
+      `+${bon.toFixed(2)} / -${ded.toFixed(2)} ${cur}`,
+      `${net.toFixed(2)} ${cur}`,
+    ]);
+  });
+
+  allMonthsRows.push([
+    'الإجمالي التراكمي',
+    allEntries.filter((e) => !e.archived).length,
+    Number(grandHours.toFixed(2)),
+    '-',
+    `${grandOvertime.toFixed(2)} ${currency}`,
+    '-',
+    `${grandNet.toFixed(2)} ${currency}`,
+  ]);
+
+  const wsMonths = XLSX.utils.aoa_to_sheet(allMonthsRows);
+  applyWorksheetFormatting(
+    wsMonths,
+    allMonthsRows.length,
+    [16, 14, 18, 18, 18, 26, 20],
+    [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }],
+    false
+  );
+  XLSX.utils.book_append_sheet(wb, wsMonths, 'ملخص الشهور');
+
+  XLSX.writeFile(wb, `تقرير_الأوفر_تايم_والمالية_${selectedMonthKey}.xlsx`);
 }
 
 

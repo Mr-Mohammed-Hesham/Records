@@ -54,6 +54,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [showFullImage, setShowFullImage] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [attachmentNotes, setAttachmentNotes] = useState<string>(
     initialAttachment?.notes || ''
   );
@@ -129,9 +130,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
 
   // Remove attachment
   const handleRemove = async () => {
-    if (!window.confirm('هل أنت متأكد من حذف ملف الإثبات المرفق؟')) {
-      return;
-    }
+    setConfirmingRemove(false);
 
     if (pendingFile && !currentAttachment) {
       setPendingFile(null);
@@ -294,14 +293,34 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                         <RefreshCw className="w-4 h-4" />
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={handleRemove}
-                        className="p-1.5 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer"
-                        title="حذف الملف المرفق"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {confirmingRemove ? (
+                        <div className="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-xl px-2 py-1">
+                          <button
+                            type="button"
+                            onClick={handleRemove}
+                            className="text-[11px] font-black text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+                          >
+                            تأكيد الحذف
+                          </button>
+                          <span className="text-slate-300 dark:text-slate-700">|</span>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmingRemove(false)}
+                            className="text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:underline cursor-pointer"
+                          >
+                            إلغاء
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingRemove(true)}
+                          className="p-1.5 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer"
+                          title="حذف الملف المرفق"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </>
                   )}
                 </div>

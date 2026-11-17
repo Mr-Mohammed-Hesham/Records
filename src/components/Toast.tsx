@@ -93,7 +93,7 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({
   return (
     <div
       id="toast-container"
-      className="fixed bottom-5 left-5 z-50 flex flex-col gap-2.5 max-w-sm w-[calc(100vw-2.5rem)] sm:w-full pointer-events-none"
+      className="fixed bottom-20 sm:bottom-5 left-3 sm:left-5 z-[80] flex flex-col gap-2.5 max-w-sm w-[calc(100vw-1.5rem)] sm:w-full pointer-events-none"
     >
       {toasts.map((t) => (
         <ToastItem key={t.id} toast={t} onClose={handleClose} />

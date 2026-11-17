@@ -537,7 +537,7 @@ export default function App({ onBackToRecords, externalUser }: HeshamExamAppProp
   };
 
   const handleClearHistory = () => {
-    alert(
+    setSuccessNotice(
       "لحماية البيانات، يمكنك حذف الامتحانات واحداً تلو الآخر عبر زر الحذف بجانب كل امتحان."
     );
   };
@@ -751,7 +751,7 @@ export default function App({ onBackToRecords, externalUser }: HeshamExamAppProp
         
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.12),rgba(255,255,255,0))] pointer-events-none" />
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-5 lg:px-6 relative">
           
           <div className="text-center max-w-3xl mx-auto space-y-3">
             
@@ -788,7 +788,7 @@ export default function App({ onBackToRecords, externalUser }: HeshamExamAppProp
       </section>
 
       {/* Main Workbench */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-5 lg:px-6 py-5 sm:py-6 space-y-5 sm:space-y-6">
         
         {/* Error */}
         {errorMsg && (

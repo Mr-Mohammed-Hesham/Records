@@ -23,6 +23,7 @@ import {
   RefreshCw,
   GraduationCap,
   Layers,
+  Wallet,
 } from 'lucide-react';
 import { Student, Exam, ExamResult, TeacherSettings, ExamStructure, StudentStructureProgress } from '../types';
 import { calculateStudentStats } from '../utils/grading';
@@ -40,7 +41,7 @@ interface DashboardViewProps {
   structuresCount?: number;
   structures?: ExamStructure[];
   structureProgress?: StudentStructureProgress[];
-  onNavigate: (tab: 'dashboard' | 'students' | 'exams' | 'structures' | 'scoring' | 'reports' | 'settings') => void;
+  onNavigate: (tab: 'dashboard' | 'students' | 'exams' | 'structures' | 'scoring' | 'reports' | 'overtime' | 'settings') => void;
   onOpenStudentProfile: (student: Student) => void;
   onAddStudent: () => void;
   onAddExam: () => void;
@@ -184,59 +185,56 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }, [safeResults]);
 
   return (
-    <div id="dashboard-view" className="space-y-6 text-right transition-colors">
+    <div id="dashboard-view" className="space-y-5 text-right transition-colors">
       {/* Dynamic Vibrant Hero Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-indigo-600/10 dark:from-amber-950/30 dark:via-slate-900 dark:to-indigo-950/40 p-6 sm:p-8 border border-amber-300/30 dark:border-amber-500/20 shadow-sm backdrop-blur-md">
-        <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-          <div className="flex items-center gap-4 sm:gap-5">
-            {/* Teacher Glowing Portrait */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-indigo-600/10 dark:from-amber-950/30 dark:via-slate-900 dark:to-indigo-950/40 p-4 sm:p-6 border border-amber-300/30 dark:border-amber-500/20 shadow-sm backdrop-blur-md">
+        <div className="relative z-10 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 sm:gap-5">
+          <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
+            {/* Teacher Portrait */}
             <div className="relative shrink-0">
-              <div className="absolute -inset-1 rounded-2xl bg-gradient-to-tr from-amber-400 via-orange-500 to-amber-300 blur-sm opacity-70 animate-pulse" />
-              <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl p-0.5 bg-gradient-to-br from-amber-400 to-orange-500 overflow-hidden shadow-lg shadow-amber-500/20">
+              <div className="relative w-14 h-14 sm:w-18 sm:h-18 rounded-2xl p-0.5 bg-gradient-to-br from-amber-400 to-orange-500 overflow-hidden shadow-md shadow-amber-500/20">
                 <img 
-src={safeSettings.customLogoUrl || `${import.meta.env.BASE_URL}teacher-logo.jpg`}
-className="w-full h-full object-cover rounded-[14px]"
+                  src={safeSettings.customLogoUrl || `${import.meta.env.BASE_URL}teacher-logo.jpg`}
+                  alt="Mr. Mohammed Hesham"
+                  className="w-full h-full object-cover rounded-[14px]"
                   referrerPolicy="no-referrer"
                 />
               </div>
-              <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900 flex items-center justify-center text-white" title="سحابي نشط">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-              </div>
             </div>
 
-            <div>
-              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                <span className="px-3 py-0.5 rounded-full text-[11px] font-extrabold tracking-wide bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-400/40 inline-flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-amber-500" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1 flex-wrap text-xs text-slate-600 dark:text-slate-300">
+                <span className="font-extrabold text-amber-700 dark:text-amber-300">
                   منصة السجلات الأكاديمية
                 </span>
-                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  مرحباً بك، <strong className="text-slate-800 dark:text-slate-200">Mr. Mohammed Hesham</strong>
+                <span aria-hidden="true">·</span>
+                <span className="font-medium">
+                  مرحباً بك، <strong className="text-slate-900 dark:text-white">Mr. Mohammed Hesham</strong>
                 </span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-slate-900 dark:text-white truncate">
                 Mr. Mohammed Hesham Records
               </h1>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
             <button
               id="dash-add-student-btn"
               onClick={onAddStudent}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold rounded-xl text-xs sm:text-sm shadow-md shadow-amber-500/20 transition cursor-pointer"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold rounded-xl text-xs sm:text-sm shadow-md shadow-amber-500/20 transition cursor-pointer whitespace-nowrap"
             >
-              <UserPlus className="w-4 h-4" />
+              <UserPlus className="w-4 h-4 shrink-0" />
               <span>+ إضافة طالب</span>
             </button>
 
             <button
               id="dash-add-exam-btn"
               onClick={onAddExam}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-slate-300 dark:border-slate-700 hover:border-amber-400 rounded-xl text-xs sm:text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs text-slate-800 dark:text-slate-200 transition cursor-pointer"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 hover:border-amber-400 rounded-xl text-xs sm:text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs text-slate-800 dark:text-slate-200 transition cursor-pointer whitespace-nowrap"
             >
-              <Plus className="w-4 h-4 text-amber-500" />
+              <Plus className="w-4 h-4 text-amber-500 shrink-0" />
               <span>تسجيل امتحان</span>
             </button>
 
@@ -244,10 +242,10 @@ className="w-full h-full object-cover rounded-[14px]"
               <button
                 id="dash-open-exam-generator-btn"
                 onClick={onOpenExamGenerator}
-                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-slate-900 to-slate-800 dark:from-amber-500/20 dark:to-orange-500/20 hover:from-slate-800 hover:to-slate-700 text-amber-400 dark:text-amber-300 border border-amber-500/40 rounded-xl text-xs sm:text-sm font-black shadow-sm transition cursor-pointer"
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-slate-900 to-slate-800 dark:from-amber-500/20 dark:to-orange-500/20 hover:from-slate-800 hover:to-slate-700 text-amber-400 dark:text-amber-300 border border-amber-500/40 rounded-xl text-xs sm:text-sm font-black shadow-sm transition cursor-pointer whitespace-nowrap"
                 title="فتح منصة صناعة وتوليد الامتحانات الذكية (Hesham-Exam)"
               >
-                <Sparkles className="w-4 h-4 text-amber-400" />
+                <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>توليد امتحان ذكي</span>
               </button>
             )}
@@ -255,20 +253,30 @@ className="w-full h-full object-cover rounded-[14px]"
             <button
               id="dash-quick-grade-btn"
               onClick={() => onNavigate('scoring')}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap"
             >
-              <CheckSquare className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <CheckSquare className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
               <span>رصد النتائج</span>
             </button>
 
             <button
               id="dash-structures-btn"
               onClick={() => onNavigate('structures')}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer whitespace-nowrap"
               title="فتح قسم الهياكل ومتابعة حل الأسئلة ونسب صحتها"
             >
-              <Layers className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <span>قسم الهياكل ({structuresCount})</span>
+              <Layers className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>الهياكل ({structuresCount})</span>
+            </button>
+
+            <button
+              id="dash-finance-btn"
+              onClick={() => onNavigate('overtime')}
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer whitespace-nowrap"
+              title="فتح قسم المالية وحساب ساعات الأوفر تايم"
+            >
+              <Wallet className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>المالية</span>
             </button>
 
             {onRefreshPlatform && (
@@ -276,10 +284,10 @@ className="w-full h-full object-cover rounded-[14px]"
                 id="dash-sync-btn"
                 onClick={onRefreshPlatform}
                 disabled={isRefreshing}
-                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer"
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer whitespace-nowrap"
                 title="مزامنة وجلب كافة السجلات من فايربيز مباشرة"
               >
-                <RefreshCw className={`w-4 h-4 text-amber-500 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-4 h-4 text-amber-500 shrink-0 ${isRefreshing ? 'animate-spin' : ''}`} />
                 <span>{isRefreshing ? 'جاري المزامنة...' : 'مزامنة فايربيز'}</span>
               </button>
             )}
@@ -446,7 +454,7 @@ className="w-full h-full object-cover rounded-[14px]"
             onClick={() => handleOpenStudentsWithTab('active')}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 transition cursor-pointer"
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
             <span>ملف فعال ({enrollmentCounts.active})</span>
           </button>
 
@@ -464,7 +472,7 @@ className="w-full h-full object-cover rounded-[14px]"
             onClick={() => handleOpenStudentsWithTab('inactive')}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100 transition cursor-pointer"
           >
-            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <Clock className="w-3.5 h-3.5 text-amber-500" />
             <span>متوقف / منقطع ({enrollmentCounts.paused + enrollmentCounts.withdrawn})</span>
           </button>
         </div>

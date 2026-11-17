@@ -20,6 +20,7 @@ import {
   History,
   Sparkles,
   Layers,
+  Wallet,
 } from 'lucide-react';
 
 import {
@@ -31,6 +32,8 @@ import {
   StudentEnrollmentStatus,
   ExamStructure,
   StudentStructureProgress,
+  OvertimeEntry,
+  OvertimeMonthlyConfig,
 } from './types';
 
 import {
@@ -73,6 +76,11 @@ import {
   deleteStudentStructureProgress,
   deleteStudentsFromStructure,
   restoreStudentsToStructure,
+  saveOvertimeEntry,
+  archiveOvertimeEntry,
+  deleteOvertimeEntryPermanently,
+  saveOvertimeMonthlyConfig,
+  importOvertimeBackupMerge,
   seedSampleData,
   clearAllData,
   DEFAULT_SETTINGS,
@@ -98,6 +106,7 @@ import { ExamsView } from './components/ExamsView';
 import { StructuresView } from './components/StructuresView';
 import { ReportsView } from './components/ReportsView';
 import { SettingsView } from './components/SettingsView';
+import { OvertimeView } from './components/OvertimeView';
 import HeshamExamApp from './hesham-exam/App';
 
 /* =========================================================
@@ -137,6 +146,7 @@ type ViewMode =
   | 'exam-generator'
   | 'scoring'
   | 'reports'
+  | 'overtime'
   | 'settings';
 
 /* =========================================================
@@ -185,6 +195,12 @@ export default function App() {
 
   const [structureProgress, setStructureProgress] =
     useState<StudentStructureProgress[]>([]);
+
+  const [overtimeEntries, setOvertimeEntries] =
+    useState<OvertimeEntry[]>([]);
+
+  const [overtimeMonthlyConfigs, setOvertimeMonthlyConfigs] =
+    useState<OvertimeMonthlyConfig[]>([]);
 
   const [loading, setLoading] =
     useState(true);
@@ -642,6 +658,8 @@ export default function App() {
           setSettings(data.settings);
           setStructures(data.structures || []);
           setStructureProgress(data.structureProgress || []);
+          setOvertimeEntries(data.overtimeEntries || []);
+          setOvertimeMonthlyConfigs(data.overtimeMonthlyConfigs || []);
           setLoading(false);
         });
 
@@ -653,7 +671,9 @@ export default function App() {
               fresh.exams.length > 0 ||
               fresh.results.length > 0 ||
               (fresh.structures && fresh.structures.length > 0) ||
-              (fresh.structureProgress && fresh.structureProgress.length > 0)
+              (fresh.structureProgress && fresh.structureProgress.length > 0) ||
+              (fresh.overtimeEntries && fresh.overtimeEntries.length > 0) ||
+              (fresh.overtimeMonthlyConfigs && fresh.overtimeMonthlyConfigs.length > 0)
             ) {
               setStudents(fresh.students);
               setExams(fresh.exams);
@@ -661,6 +681,8 @@ export default function App() {
               setSettings(fresh.settings);
               setStructures(fresh.structures || []);
               setStructureProgress(fresh.structureProgress || []);
+              setOvertimeEntries(fresh.overtimeEntries || []);
+              setOvertimeMonthlyConfigs(fresh.overtimeMonthlyConfigs || []);
             }
           })
           .catch((err) => {
@@ -1879,6 +1901,8 @@ export default function App() {
       setSettings(freshData.settings);
       setStructures(freshData.structures || []);
       setStructureProgress(freshData.structureProgress || []);
+      setOvertimeEntries(freshData.overtimeEntries || []);
+      setOvertimeMonthlyConfigs(freshData.overtimeMonthlyConfigs || []);
 
       // Also refresh service worker caches if present
       if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
@@ -1921,6 +1945,7 @@ export default function App() {
       structures: 'قسم الهياكل ومتابعة حل الأسئلة ونسب الصحة',
       'exam-generator': 'منصة صناعة وتوليد الامتحانات الذكية (Hesham-Exam)',
       reports: 'التقارير الأكاديمية والرسوم البيانية',
+      overtime: 'قسم المالية وحساب الأوفر تايم',
       settings: 'إعدادات المنصة',
     };
     if (labels[view]) {
@@ -1987,6 +2012,12 @@ export default function App() {
       label: 'التقارير والإحصائيات',
       icon: BarChart3,
       badge: null,
+    },
+    {
+      id: 'overtime',
+      label: 'المالية',
+      icon: Wallet,
+      badge: overtimeEntries.filter((e) => !e.archived).length || null,
     },
     {
       id: 'settings',
@@ -2057,9 +2088,9 @@ export default function App() {
       {/* =================================================
           UNIFIED PLATFORM SWITCHER BAR
           ================================================= */}
-      <div className="bg-slate-900 dark:bg-slate-950 text-white border-b border-amber-500/30 px-2 sm:px-6 py-1.5 z-50">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 sm:gap-2">
+      <div className="bg-slate-900 dark:bg-slate-950 text-white border-b border-amber-500/30 px-2.5 sm:px-4 lg:px-6 py-1.5 z-50">
+        <div className="w-full max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar max-w-full">
             <button
               type="button"
               onClick={() => {
@@ -2067,7 +2098,7 @@ export default function App() {
                   navigateTo('dashboard');
                 }
               }}
-              className={`px-3 py-1 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-1 rounded-xl text-[11px] sm:text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
                 currentView !== 'exam-generator'
                   ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-sm shadow-amber-500/30'
                   : 'bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-700'
@@ -2080,18 +2111,19 @@ export default function App() {
             <button
               type="button"
               onClick={() => navigateTo('exam-generator')}
-              className={`px-3 py-1 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-1 rounded-xl text-[11px] sm:text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
                 currentView === 'exam-generator'
                   ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-sm shadow-amber-500/30'
                   : 'bg-slate-800/80 text-amber-300 hover:text-amber-200 hover:bg-slate-800 border border-amber-500/30'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>منصة صناعة وتوليد الامتحانات (Hesham-Exam)</span>
+              <span className="hidden xs:inline sm:inline">منصة صناعة وتوليد الامتحانات (Hesham-Exam)</span>
+              <span className="xs:hidden sm:hidden">مولد الامتحانات (AI)</span>
             </button>
           </div>
 
-          <div className="hidden md:flex items-center gap-2 text-[11px] text-slate-400 font-bold">
+          <div className="hidden lg:flex items-center gap-2 text-[11px] text-slate-400 font-bold">
             <span>المنصة الموحدة للمستر محمد هشام (السجلات + مولد الامتحانات الذكي)</span>
           </div>
         </div>
@@ -2111,8 +2143,8 @@ export default function App() {
           HEADER
           ================================================= */}
 
-      <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-xs transition-colors w-full overflow-hidden">
-        <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-1.5 sm:gap-4 w-full">
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-xs transition-colors w-full">
+        <div className="w-full max-w-[1600px] mx-auto px-2.5 sm:px-4 lg:px-6 h-14 sm:h-16 flex items-center justify-between gap-1.5 sm:gap-3">
 
           {/* Brand */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0 min-w-0">
@@ -2187,7 +2219,7 @@ export default function App() {
               className="hidden md:inline-flex px-3 py-2 border border-amber-500/30 dark:border-amber-500/40 rounded-xl text-xs sm:text-sm font-bold hover:bg-amber-500/15 bg-amber-500/10 text-amber-600 dark:text-amber-400 items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
               title="تثبيت التطبيق مباشرة على الهاتف أو سطح المكتب"
             >
-              <Download className="w-4 h-4 text-amber-500 animate-pulse" />
+              <Download className="w-4 h-4 text-amber-500" />
               <span>تثبيت</span>
             </button>
 
@@ -2309,11 +2341,11 @@ export default function App() {
           MAIN
           ================================================= */}
 
-      <div className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 flex gap-6 overflow-x-hidden">
+      <div className="flex-1 w-full max-w-[1600px] mx-auto px-2.5 sm:px-4 lg:px-6 py-3 sm:py-5 flex gap-4 lg:gap-5 overflow-x-clip items-start">
 
         {/* Desktop Sidebar */}
-        <aside className="w-64 shrink-0 hidden lg:block">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm border border-slate-200 dark:border-slate-800 sticky top-24 space-y-6 transition-colors max-h-[calc(100vh-7rem)] overflow-y-auto scroll-smooth">
+        <aside className="w-56 xl:w-64 shrink-0 hidden lg:block sticky top-20">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 space-y-5 transition-colors max-h-[calc(100vh-6rem)] overflow-y-auto scroll-smooth">
 
             <div className="pb-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl p-0.5 bg-gradient-to-br from-amber-400 via-orange-500 to-amber-600 shadow-md shadow-amber-500/20 shrink-0 overflow-hidden">
@@ -2481,7 +2513,7 @@ export default function App() {
             }
           >
             <div
-              className="w-72 bg-white dark:bg-slate-900 h-full p-5 shadow-2xl flex flex-col justify-between"
+              className="w-72 max-w-[85vw] bg-white dark:bg-slate-900 h-full p-4 shadow-2xl flex flex-col justify-between overflow-y-auto"
               onClick={(event) =>
                 event.stopPropagation()
               }
@@ -2589,12 +2621,12 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-col gap-2.5 mt-4">
                 <button
                   onClick={
                     toggleTheme
                   }
-                  className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="w-full flex items-center justify-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60 cursor-pointer"
                 >
                   {theme ===
                   'dark' ? (
@@ -2630,7 +2662,7 @@ export default function App() {
         )}
 
         {/* Content */}
-        <main className="flex-1 min-w-0 pb-20 lg:pb-8 space-y-4">
+        <main className="flex-1 min-w-0 pb-20 lg:pb-6 space-y-4">
           {/* Global Activity Persistence & Start Fresh Bar */}
           {!lastActivityBannerDismissed && (currentView !== 'dashboard' || getLastActivity()) && (
             <div className="bg-white dark:bg-slate-900 px-4 py-2.5 rounded-2xl border border-amber-500/30 shadow-xs flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -2908,6 +2940,19 @@ export default function App() {
             />
           )}
 
+          {currentView === 'overtime' && (
+            <OvertimeView
+              entries={overtimeEntries}
+              monthlyConfigs={overtimeMonthlyConfigs}
+              onSaveEntry={saveOvertimeEntry}
+              onArchiveEntry={archiveOvertimeEntry}
+              onDeleteEntryPermanently={deleteOvertimeEntryPermanently}
+              onSaveMonthlyConfig={saveOvertimeMonthlyConfig}
+              onImportBackupMerge={importOvertimeBackupMerge}
+              onNotify={addToast}
+            />
+          )}
+
           {currentView ===
             'settings' && (
             <SettingsView
@@ -3147,7 +3192,7 @@ export default function App() {
       {/* Mobile Bottom Navigation Bar (lg:hidden) */}
       <nav
         id="mobile-bottom-nav"
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-1 py-1.5 pb-safe flex items-center justify-around overflow-x-auto shadow-lg"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-1.5 py-1 pb-safe flex items-center justify-start md:justify-around gap-1 overflow-x-auto no-scrollbar shadow-lg"
       >
         {[
           { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard },
@@ -3156,6 +3201,12 @@ export default function App() {
           { id: 'structures', label: 'الهياكل', icon: Layers, badge: structures.length },
           { id: 'exam-generator', label: 'مولد امتحان', icon: Sparkles },
           { id: 'reports', label: 'التقارير', icon: BarChart3 },
+          {
+            id: 'overtime',
+            label: 'المالية',
+            icon: Wallet,
+            badge: overtimeEntries.filter((e) => !e.archived).length || undefined,
+          },
           { id: 'settings', label: 'الإعدادات', icon: SettingsIcon },
         ].map((item) => {
           const Icon = item.icon;
@@ -3164,21 +3215,21 @@ export default function App() {
             <button
               key={item.id}
               onClick={() => navigateTo(item.id as ViewMode)}
-              className={`flex flex-col items-center justify-center py-1 px-1.5 rounded-xl text-[10px] font-bold transition-all relative cursor-pointer min-w-[48px] ${
+              className={`shrink-0 flex-1 min-w-[60px] min-h-[44px] flex flex-col items-center justify-center py-1 px-1.5 rounded-xl text-[10px] font-bold transition-all relative cursor-pointer ${
                 isActive
                   ? 'text-amber-600 dark:text-amber-400 bg-amber-500/10'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
               }`}
             >
               <div className="relative">
-                <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
+                <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
                 {item.badge !== undefined && item.badge !== null && item.badge > 0 && (
                   <span className="absolute -top-1 -right-2 px-1 text-[9px] font-black bg-amber-500 text-slate-950 rounded-full min-w-[14px] h-[14px] flex items-center justify-center">
                     {item.badge > 99 ? '99+' : item.badge}
                   </span>
                 )}
               </div>
-              <span className="mt-0.5 tracking-tight truncate max-w-[50px]">{item.label}</span>
+              <span className="mt-0.5 tracking-tight whitespace-nowrap">{item.label}</span>
             </button>
           );
         })}

@@ -212,14 +212,14 @@ git push -u origin main`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto animate-fade-in">
-      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-auto">
+    <div className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-hidden animate-fade-in">
+      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-y-auto max-h-[93dvh]">
         
         {/* Modal Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 bg-gradient-to-r from-indigo-950/90 via-slate-900 to-amber-950/60 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <Rocket className="w-5 h-5 animate-pulse" />
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+              <Rocket className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">

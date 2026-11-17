@@ -665,9 +665,9 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
       </div>
 
       {/* Filters Toolbar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="relative flex-1 min-w-[200px]">
+      <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-2 sm:gap-2.5">
+          <div className="relative col-span-2 sm:col-span-3 lg:col-span-2">
             <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
             <input
               type="text"
@@ -681,7 +681,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
           <select
             value={filterGrade}
             onChange={(e) => setFilterGrade(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
+            className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
             title="الصف الدراسي"
           >
             <option value="الكل">كل الصفوف</option>
@@ -693,7 +693,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
           <select
             value={filterTerm}
             onChange={(e) => setFilterTerm(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
+            className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
             title="الفصل الدراسي"
           >
             <option value="الكل">كل الفصول</option>
@@ -705,7 +705,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
           <select
             value={filterTrack}
             onChange={(e) => setFilterTrack(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
+            className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
             title="المسار"
           >
             <option value="الكل">كل المسارات</option>
@@ -717,7 +717,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
           <select
             value={filterYear}
             onChange={(e) => setFilterYear(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
+            className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
             title="السنة الدراسية"
           >
             <option value="الكل">كل السنوات</option>
@@ -729,7 +729,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
           <select
             value={filterSubject}
             onChange={(e) => setFilterSubject(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
+            className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
             title="المادة"
           >
             <option value="الكل">كل المواد</option>
@@ -741,7 +741,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
+            className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
             title="حالة ملف الطالب"
           >
             <option value="exclude_completed">استبعاد منتهي الملف</option>
@@ -1791,7 +1791,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
       {/* Modal 6: Confirm Structure-Only Student Row Deletion */}
       {rowDeleteModal.isOpen && selectedStructure && rowDeleteModal.studentsToDelete.length > 0 && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto"
+          className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden"
           onClick={() =>
             !isDeletingRows &&
             setRowDeleteModal({ isOpen: false, studentsToDelete: [], progressToClearOnly: null })
@@ -1800,7 +1800,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-right space-y-4"
+            className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-right space-y-4 max-h-[92dvh] overflow-y-auto"
           >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5 text-rose-600 dark:text-rose-400">
@@ -1920,13 +1920,13 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
       {/* Modal 7: Excluded / Removed Student Rows Restore Modal */}
       {isExcludedModalOpen && selectedStructure && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto"
+          className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden"
           onClick={() => setIsExcludedModalOpen(false)}
           dir="rtl"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-right space-y-4"
+            className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-right space-y-4 max-h-[92dvh] overflow-y-auto"
           >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
@@ -2361,16 +2361,16 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
   return (
     <>
     <div
-      className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4"
+      className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 overflow-hidden"
       onClick={(e) => {
         if (e.target === e.currentTarget) requestSafeClose();
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-right"
+        className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[90vh] text-right"
       >
-        <div className="px-5 py-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div className="shrink-0 px-4 sm:px-5 py-3.5 sm:py-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5 flex-wrap">
             <Layers className="w-5 h-5 text-amber-500" />
             <h3 className="font-black text-base text-slate-900 dark:text-white">

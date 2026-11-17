@@ -639,17 +639,17 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
   return (
     <>
     <div
-      className="fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4"
+      className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 overflow-hidden"
       onClick={(e) => {
         if (e.target === e.currentTarget) requestSafeClose();
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-right"
+        className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[92vh] text-right"
       >
         {/* Header */}
-        <div className="px-5 py-4 bg-slate-50 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
+        <div className="shrink-0 px-4 sm:px-5 py-3.5 sm:py-4 bg-slate-50 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="font-black text-base text-slate-900 dark:text-white">

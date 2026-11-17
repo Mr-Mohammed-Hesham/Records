@@ -37,6 +37,8 @@ import {
   ExamType,
   ExamStructure,
   StudentStructureProgress,
+  OvertimeEntry,
+  OvertimeMonthlyConfig,
 } from '../types';
 
 import { DEFAULT_GRADING_SCALE } from '../utils/grading';
@@ -405,6 +407,8 @@ export const CACHE_KEYS = {
   SETTINGS: 'mmh_cached_settings',
   STRUCTURES: 'mmh_cached_structures',
   STRUCTURE_PROGRESS: 'mmh_cached_structure_progress',
+  OVERTIME_ENTRIES: 'mmh_cached_overtime_entries',
+  OVERTIME_MONTHS: 'mmh_cached_overtime_months',
 };
 
 export function getCachedData<T>(key: string, fallback: T): T {
@@ -459,6 +463,8 @@ export function notifySubscribers(): void {
   const currentSettings = getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS);
   const currentStructures = getCachedData<ExamStructure[]>(CACHE_KEYS.STRUCTURES, []);
   const currentStructureProgress = getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []);
+  const currentOvertimeEntries = getCachedData<OvertimeEntry[]>(CACHE_KEYS.OVERTIME_ENTRIES, []);
+  const currentOvertimeMonthlyConfigs = getCachedData<OvertimeMonthlyConfig[]>(CACHE_KEYS.OVERTIME_MONTHS, []);
 
   const data: RealtimeData = {
     students: currentStudents,
@@ -467,6 +473,8 @@ export function notifySubscribers(): void {
     settings: currentSettings,
     structures: currentStructures,
     structureProgress: currentStructureProgress,
+    overtimeEntries: currentOvertimeEntries,
+    overtimeMonthlyConfigs: currentOvertimeMonthlyConfigs,
   };
 
   realtimeSubscribers.forEach((cb) => {
@@ -1560,6 +1568,178 @@ export async function restoreStudentsToStructure(
 }
 
 /* =========================================================
+   OVERTIME & FINANCIAL PERSISTENCE (حماية دائمة للبيانات المالية)
+   ========================================================= */
+
+export async function saveOvertimeEntry(
+  entry: Omit<OvertimeEntry, 'id'> & { id?: string }
+): Promise<OvertimeEntry> {
+  const docId =
+    entry.id && entry.id.trim() !== ''
+      ? entry.id
+      : doc(collection(db, 'overtimeEntries')).id;
+  const now = new Date().toISOString();
+
+  const fullEntry: OvertimeEntry = {
+    ...entry,
+    id: docId,
+    monthKey: entry.monthKey || entry.date.slice(0, 7),
+    archived: Boolean(entry.archived),
+    createdAt: entry.createdAt || now,
+    updatedAt: now,
+  };
+
+  const current = getCachedData<OvertimeEntry[]>(CACHE_KEYS.OVERTIME_ENTRIES, []);
+  const updated = [fullEntry, ...current.filter((e) => e.id !== docId)];
+  setCachedData(CACHE_KEYS.OVERTIME_ENTRIES, updated);
+  notifySubscribers();
+
+  try {
+    const { id: _ignoreId, ...payload } = fullEntry;
+    const cleanData = sanitizeForFirestore(payload);
+    await setDoc(doc(db, 'overtimeEntries', docId), cleanData, { merge: true });
+  } catch (err) {
+    console.error('Firestore saveOvertimeEntry error (preserved locally):', err);
+  }
+
+  return fullEntry;
+}
+
+export async function archiveOvertimeEntry(
+  entryId: string,
+  archived: boolean
+): Promise<void> {
+  const now = new Date().toISOString();
+  const current = getCachedData<OvertimeEntry[]>(CACHE_KEYS.OVERTIME_ENTRIES, []);
+  const updated = current.map((e) =>
+    e.id === entryId
+      ? {
+          ...e,
+          archived,
+          archivedAt: archived ? now : undefined,
+          updatedAt: now,
+        }
+      : e
+  );
+  setCachedData(CACHE_KEYS.OVERTIME_ENTRIES, updated);
+  notifySubscribers();
+
+  try {
+    await setDoc(
+      doc(db, 'overtimeEntries', entryId),
+      sanitizeForFirestore({
+        archived,
+        archivedAt: archived ? now : null,
+        updatedAt: now,
+      }),
+      { merge: true }
+    );
+  } catch (err) {
+    console.error('Firestore archiveOvertimeEntry error (preserved locally):', err);
+  }
+}
+
+export async function deleteOvertimeEntryPermanently(entryId: string): Promise<void> {
+  const current = getCachedData<OvertimeEntry[]>(CACHE_KEYS.OVERTIME_ENTRIES, []);
+  setCachedData(
+    CACHE_KEYS.OVERTIME_ENTRIES,
+    current.filter((e) => e.id !== entryId)
+  );
+  notifySubscribers();
+
+  try {
+    await deleteDoc(doc(db, 'overtimeEntries', entryId));
+  } catch (err) {
+    console.error('Firestore deleteOvertimeEntryPermanently error (deleted locally):', err);
+  }
+}
+
+export async function saveOvertimeMonthlyConfig(
+  config: OvertimeMonthlyConfig
+): Promise<OvertimeMonthlyConfig> {
+  const now = new Date().toISOString();
+  const docId = config.id || config.monthKey;
+  const fullConfig: OvertimeMonthlyConfig = {
+    ...config,
+    id: docId,
+    monthKey: config.monthKey || docId,
+    createdAt: config.createdAt || now,
+    updatedAt: now,
+  };
+
+  const current = getCachedData<OvertimeMonthlyConfig[]>(CACHE_KEYS.OVERTIME_MONTHS, []);
+  const updated = [fullConfig, ...current.filter((c) => c.id !== docId && c.monthKey !== fullConfig.monthKey)];
+  setCachedData(CACHE_KEYS.OVERTIME_MONTHS, updated);
+  notifySubscribers();
+
+  try {
+    const { id: _ignoreId, ...payload } = fullConfig;
+    const cleanData = sanitizeForFirestore(payload);
+    await setDoc(doc(db, 'overtimeMonthlyConfigs', docId), cleanData, { merge: true });
+  } catch (err) {
+    console.error('Firestore saveOvertimeMonthlyConfig error (preserved locally):', err);
+  }
+
+  return fullConfig;
+}
+
+export async function importOvertimeBackupMerge(
+  entries: OvertimeEntry[],
+  configs: OvertimeMonthlyConfig[]
+): Promise<{ entriesAdded: number; monthsUpdated: number }> {
+  const currentEntries = getCachedData<OvertimeEntry[]>(CACHE_KEYS.OVERTIME_ENTRIES, []);
+  const existingEntryMap = new Map(currentEntries.map((e) => [e.id, e]));
+  let entriesAdded = 0;
+
+  entries.forEach((entry) => {
+    if (entry && entry.id && !existingEntryMap.has(entry.id)) {
+      existingEntryMap.set(entry.id, entry);
+      entriesAdded++;
+    }
+  });
+
+  const currentConfigs = getCachedData<OvertimeMonthlyConfig[]>(CACHE_KEYS.OVERTIME_MONTHS, []);
+  const existingConfigMap = new Map(currentConfigs.map((c) => [c.monthKey || c.id, c]));
+  let monthsUpdated = 0;
+
+  configs.forEach((cfg) => {
+    const key = cfg.monthKey || cfg.id;
+    if (key && !existingConfigMap.has(key)) {
+      existingConfigMap.set(key, { ...cfg, id: key, monthKey: key });
+      monthsUpdated++;
+    }
+  });
+
+  const mergedEntries = Array.from(existingEntryMap.values());
+  const mergedConfigs = Array.from(existingConfigMap.values());
+  setCachedData(CACHE_KEYS.OVERTIME_ENTRIES, mergedEntries);
+  setCachedData(CACHE_KEYS.OVERTIME_MONTHS, mergedConfigs);
+  notifySubscribers();
+
+  try {
+    const batch = writeBatch(db);
+    entries.forEach((entry) => {
+      if (entry?.id) {
+        const { id, ...payload } = entry;
+        batch.set(doc(db, 'overtimeEntries', id), sanitizeForFirestore(payload), { merge: true });
+      }
+    });
+    configs.forEach((cfg) => {
+      const key = cfg.monthKey || cfg.id;
+      if (key) {
+        const { id: _ignore, ...payload } = cfg;
+        batch.set(doc(db, 'overtimeMonthlyConfigs', key), sanitizeForFirestore(payload), { merge: true });
+      }
+    });
+    await batch.commit();
+  } catch (err) {
+    console.error('Firestore importOvertimeBackupMerge error (merged locally):', err);
+  }
+
+  return { entriesAdded, monthsUpdated };
+}
+
+/* =========================================================
    ALL DATA REALTIME
    ========================================================= */
 
@@ -1570,21 +1750,34 @@ export interface RealtimeData {
   settings: TeacherSettings;
   structures: ExamStructure[];
   structureProgress: StudentStructureProgress[];
+  overtimeEntries: OvertimeEntry[];
+  overtimeMonthlyConfigs: OvertimeMonthlyConfig[];
 }
 
 /**
  * مزامنة مباشرة وشاملة مع قاعدة بيانات Firestore
- * تجلب أحدث السجلات (طلاب، امتحانات، نتائج، هياكل، إعدادات) وتحدث الكاش والمشتركين
+ * تجلب أحدث السجلات (طلاب، امتحانات، نتائج، هياكل، أوفر تايم، إعدادات) وتحدث الكاش والمشتركين
  */
 export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
   try {
-    const [studentsSnap, examsSnap, resultsSnap, settingsSnap, structuresSnap, progressSnap] = await Promise.allSettled([
+    const [
+      studentsSnap,
+      examsSnap,
+      resultsSnap,
+      settingsSnap,
+      structuresSnap,
+      progressSnap,
+      overtimeEntriesSnap,
+      overtimeMonthsSnap,
+    ] = await Promise.allSettled([
       getDocs(collection(db, 'students')),
       getDocs(collection(db, 'exams')),
       getDocs(collection(db, 'results')),
       getDoc(doc(db, 'settings', SETTINGS_ID)),
       getDocs(collection(db, 'structures')),
       getDocs(collection(db, 'structureProgress')),
+      getDocs(collection(db, 'overtimeEntries')),
+      getDocs(collection(db, 'overtimeMonthlyConfigs')),
     ]);
 
     let students = getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
@@ -1657,6 +1850,30 @@ export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
       }
     }
 
+    let overtimeEntries = getCachedData<OvertimeEntry[]>(CACHE_KEYS.OVERTIME_ENTRIES, []);
+    if (overtimeEntriesSnap.status === 'fulfilled') {
+      const items = overtimeEntriesSnap.value.docs.map((item) => ({
+        id: item.id,
+        ...item.data(),
+      })) as OvertimeEntry[];
+      if (items.length > 0 || overtimeEntries.length === 0) {
+        overtimeEntries = items;
+        setCachedData(CACHE_KEYS.OVERTIME_ENTRIES, overtimeEntries);
+      }
+    }
+
+    let overtimeMonthlyConfigs = getCachedData<OvertimeMonthlyConfig[]>(CACHE_KEYS.OVERTIME_MONTHS, []);
+    if (overtimeMonthsSnap.status === 'fulfilled') {
+      const items = overtimeMonthsSnap.value.docs.map((item) => ({
+        id: item.id,
+        ...item.data(),
+      })) as OvertimeMonthlyConfig[];
+      if (items.length > 0 || overtimeMonthlyConfigs.length === 0) {
+        overtimeMonthlyConfigs = items;
+        setCachedData(CACHE_KEYS.OVERTIME_MONTHS, overtimeMonthlyConfigs);
+      }
+    }
+
     notifySubscribers();
 
     return {
@@ -1666,6 +1883,8 @@ export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
       settings,
       structures,
       structureProgress,
+      overtimeEntries,
+      overtimeMonthlyConfigs,
     };
   } catch (err) {
     console.warn('syncAllDataFromFirestore fallback to cache:', err);
@@ -1676,6 +1895,8 @@ export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
       settings: getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS),
       structures: getCachedData<ExamStructure[]>(CACHE_KEYS.STRUCTURES, []),
       structureProgress: getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []),
+      overtimeEntries: getCachedData<OvertimeEntry[]>(CACHE_KEYS.OVERTIME_ENTRIES, []),
+      overtimeMonthlyConfigs: getCachedData<OvertimeMonthlyConfig[]>(CACHE_KEYS.OVERTIME_MONTHS, []),
     };
   }
 }
@@ -1695,6 +1916,8 @@ export function subscribeToRealtimeData(
       settings: getCachedData<TeacherSettings>(CACHE_KEYS.SETTINGS, DEFAULT_SETTINGS),
       structures: getCachedData<ExamStructure[]>(CACHE_KEYS.STRUCTURES, []),
       structureProgress: getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []),
+      overtimeEntries: getCachedData<OvertimeEntry[]>(CACHE_KEYS.OVERTIME_ENTRIES, []),
+      overtimeMonthlyConfigs: getCachedData<OvertimeMonthlyConfig[]>(CACHE_KEYS.OVERTIME_MONTHS, []),
     });
   };
   emitCurrent();
@@ -1880,6 +2103,54 @@ export function subscribeToRealtimeData(
       activeUnsubscribers.push(unsubStructureProgress);
     } catch (e) {
       console.warn('Error setting up structureProgress listener:', e);
+    }
+
+    // مستمع سجلات الأوفر تايم OvertimeEntries Listener (مع حماية البيانات المحلية)
+    try {
+      const unsubOvertimeEntries = onSnapshot(
+        collection(db, 'overtimeEntries'),
+        (snapshot) => {
+          const firestoreEntries = snapshot.docs.map((item) => ({
+            id: item.id,
+            ...item.data(),
+          })) as OvertimeEntry[];
+          const localCached = getCachedData<OvertimeEntry[]>(CACHE_KEYS.OVERTIME_ENTRIES, []);
+          if (firestoreEntries.length > 0 || localCached.length === 0) {
+            setCachedData(CACHE_KEYS.OVERTIME_ENTRIES, firestoreEntries);
+            notifySubscribers();
+          }
+        },
+        (err) => {
+          console.warn('Realtime overtimeEntries listener warning:', err.message);
+        }
+      );
+      activeUnsubscribers.push(unsubOvertimeEntries);
+    } catch (e) {
+      console.warn('Error setting up overtimeEntries listener:', e);
+    }
+
+    // مستمع إعدادات الشهور المالية OvertimeMonthlyConfigs Listener
+    try {
+      const unsubOvertimeMonths = onSnapshot(
+        collection(db, 'overtimeMonthlyConfigs'),
+        (snapshot) => {
+          const firestoreMonths = snapshot.docs.map((item) => ({
+            id: item.id,
+            ...item.data(),
+          })) as OvertimeMonthlyConfig[];
+          const localCached = getCachedData<OvertimeMonthlyConfig[]>(CACHE_KEYS.OVERTIME_MONTHS, []);
+          if (firestoreMonths.length > 0 || localCached.length === 0) {
+            setCachedData(CACHE_KEYS.OVERTIME_MONTHS, firestoreMonths);
+            notifySubscribers();
+          }
+        },
+        (err) => {
+          console.warn('Realtime overtimeMonthlyConfigs listener warning:', err.message);
+        }
+      );
+      activeUnsubscribers.push(unsubOvertimeMonths);
+    } catch (e) {
+      console.warn('Error setting up overtimeMonthlyConfigs listener:', e);
     }
   };
 

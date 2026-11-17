@@ -125,6 +125,54 @@
         "createdAt": { "type": "string" },
         "updatedAt": { "type": "string" }
       }
+    },
+    "overtimeEntries": {
+      "title": "Overtime Entries (سجل ساعات الأوفر تايم)",
+      "description": "Daily and monthly overtime hours logs with day type, multiplier, and calculated financial payout",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "monthKey": { "type": "string" },
+        "dayNameAr": { "type": "string" },
+        "hours": { "type": "number" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "dayType": { "type": "string" },
+        "multiplier": { "type": "number" },
+        "hourlyRateSnapshot": { "type": "number" },
+        "calculatedAmount": { "type": "number" },
+        "customFixedAmount": { "type": "number" },
+        "category": { "type": "string" },
+        "notes": { "type": "string" },
+        "archived": { "type": "boolean" },
+        "archivedAt": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "overtimeMonthlyConfigs": {
+      "title": "Overtime Monthly Configs (إعدادات الراتب والمالية الشهرية)",
+      "description": "Per-month salary, hourly rate basis, overtime multipliers, allowances, bonuses, deductions, and savings targets",
+      "properties": {
+        "id": { "type": "string" },
+        "monthKey": { "type": "string" },
+        "currency": { "type": "string" },
+        "totalSalary": { "type": "number" },
+        "basicSalaryRatioPct": { "type": "number" },
+        "calculationMode": { "type": "string" },
+        "workingDaysPerMonth": { "type": "number" },
+        "workingHoursPerDay": { "type": "number" },
+        "manualHourlyRate": { "type": "number" },
+        "regularMultiplier": { "type": "number" },
+        "weekendMultiplier": { "type": "number" },
+        "holidayMultiplier": { "type": "number" },
+        "adjustments": { "type": "array" },
+        "savingsGoalPct": { "type": "number" },
+        "monthlyTargetIncome": { "type": "number" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
     }
   }
 }

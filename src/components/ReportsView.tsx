@@ -691,11 +691,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       </div>
 
       {/* Report Type Tabs & Filters Container */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-4">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+      <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-4">
+        <div className="flex sm:flex-wrap items-center gap-2 overflow-x-auto no-scrollbar border-b border-slate-100 dark:border-slate-800 pb-3 -mx-1 px-1">
           <button
             onClick={() => setReportType('single_student')}
-            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+            className={`shrink-0 whitespace-nowrap px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
               reportType === 'single_student'
                 ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
                 : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/80'
@@ -705,7 +705,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </button>
           <button
             onClick={() => setReportType('all_students')}
-            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+            className={`shrink-0 whitespace-nowrap px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
               reportType === 'all_students'
                 ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
                 : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/80'
@@ -715,7 +715,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </button>
           <button
             onClick={() => setReportType('single_exam')}
-            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+            className={`shrink-0 whitespace-nowrap px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
               reportType === 'single_exam'
                 ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
                 : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/80'
@@ -725,7 +725,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </button>
           <button
             onClick={() => setReportType('by_grade')}
-            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+            className={`shrink-0 whitespace-nowrap px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
               reportType === 'by_grade'
                 ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
                 : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/80'
@@ -735,7 +735,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </button>
           <button
             onClick={() => setReportType('by_group')}
-            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+            className={`shrink-0 whitespace-nowrap px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
               reportType === 'by_group'
                 ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
                 : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/80'
@@ -745,7 +745,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </button>
           <button
             onClick={() => setReportType('completed_course')}
-            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`shrink-0 whitespace-nowrap px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
               reportType === 'completed_course'
                 ? 'bg-sky-500 text-white font-black shadow-md shadow-sky-500/20'
                 : 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/60 hover:bg-sky-100'
@@ -756,7 +756,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </button>
           <button
             onClick={() => setReportType('exam_comparison')}
-            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+            className={`shrink-0 whitespace-nowrap px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
               reportType === 'exam_comparison'
                 ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
                 : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/80'
@@ -767,7 +767,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           <button
             id="btn-report-tab-structures"
             onClick={() => setReportType('structures')}
-            className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`shrink-0 whitespace-nowrap px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
               reportType === 'structures'
                 ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
                 : 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900/40'
