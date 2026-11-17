@@ -307,7 +307,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
     return Array.from(map.values());
   }, [selectedStructureProgress]);
 
-  // Progress attempts grouped by studentDocId (ascending by attemptNumber)
+  // Progress attempts grouped by studentDocId (ascending by attemptNumber, then timestamp)
   const progressByStudentMap = useMemo(() => {
     const map = new Map<string, StudentStructureProgress[]>();
     selectedStructureProgress.forEach((p) => {
@@ -316,7 +316,14 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
       map.set(p.studentDocId, list);
     });
     map.forEach((list) => {
-      list.sort((a, b) => (a.attemptNumber || 1) - (b.attemptNumber || 1));
+      list.sort((a, b) => {
+        const diff = (a.attemptNumber || 1) - (b.attemptNumber || 1);
+        if (diff !== 0) return diff;
+        return (
+          new Date(a.updatedAt || a.createdAt || 0).getTime() -
+          new Date(b.updatedAt || b.createdAt || 0).getTime()
+        );
+      });
     });
     return map;
   }, [selectedStructureProgress]);

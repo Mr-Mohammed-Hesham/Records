@@ -8,12 +8,15 @@ import {
   Sparkles,
   History,
   RotateCcw,
+  ShieldCheck,
+  ArrowLeft,
 } from 'lucide-react';
 import {
   Student,
   ExamStructure,
   StudentStructureProgress,
   StructureQuestionScore,
+  StructureQuestionAttempt,
 } from '../types';
 import {
   ACADEMIC_YEARS,
@@ -42,6 +45,8 @@ export interface BatchStructureScoringModalProps {
   ) => Promise<void>;
 }
 
+type ConflictPolicy = 'keep_existing' | 'higher_wins' | 'replace_selected';
+
 interface BatchStructureDraftPayload {
   grade: string;
   term: string;
@@ -52,7 +57,18 @@ interface BatchStructureDraftPayload {
   date: string;
   notes: string;
   batchMode: 'update_or_create' | 'new_improvement';
+  conflictPolicy: ConflictPolicy;
   questionScores: StructureQuestionScore[];
+  includedQuestionNumbers: number[];
+}
+
+interface MergedStudentResult {
+  student: Student;
+  latest: StudentStructureProgress | null;
+  record: Omit<StudentStructureProgress, 'id'> & { id?: string };
+  preservedPriorQuestionsCount: number;
+  newlyAppliedQuestionsCount: number;
+  upgradedQuestionsCount: number;
 }
 
 export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProps> = ({
@@ -80,9 +96,16 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
   const [batchMode, setBatchMode] = useState<'update_or_create' | 'new_improvement'>('update_or_create');
+  // Default is strictly non-destructive: keep every student's existing recorded question score untouched!
+  const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>('keep_existing');
 
-  // Quick solved count + accuracy applier
-  const [quickSolvedCount, setQuickSolvedCount] = useState<number>(totalQ);
+  // Explicit tracking of which questions the teacher selected/modified in this batch session.
+  // Questions NOT in this set are guaranteed NEVER to be touched or overwritten for any student.
+  const [includedQuestions, setIncludedQuestions] = useState<Set<number>>(() => new Set());
+
+  // Quick range + accuracy applier (non-destructive: leaves questions outside range untouched)
+  const [quickStartQ, setQuickStartQ] = useState<number>(1);
+  const [quickEndQ, setQuickEndQ] = useState<number>(totalQ);
   const [quickAccuracy, setQuickAccuracy] = useState<number>(100);
 
   const [questionScores, setQuestionScores] = useState<StructureQuestionScore[]>(() =>
@@ -140,7 +163,10 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
     setDate(new Date().toISOString().split('T')[0]);
     setNotes('');
     setBatchMode('update_or_create');
-    setQuickSolvedCount(totalQ);
+    setConflictPolicy('keep_existing');
+    setIncludedQuestions(new Set());
+    setQuickStartQ(1);
+    setQuickEndQ(totalQ);
     setQuickAccuracy(100);
     setQuestionScores(
       Array.from({ length: totalQ }, (_, idx) => ({
@@ -177,7 +203,9 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
       date,
       notes,
       batchMode,
+      conflictPolicy,
       questionScores,
+      includedQuestionNumbers: Array.from(includedQuestions),
     });
   }, [
     isOpen,
@@ -192,7 +220,9 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
     date,
     notes,
     batchMode,
+    conflictPolicy,
     questionScores,
+    includedQuestions,
   ]);
 
   const studentsWithPriorCount = useMemo(
@@ -202,20 +232,284 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
     [activeStudents, existingProgressByStudent]
   );
 
-  const liveStats = useMemo(() => {
-    const solvedItems = questionScores.filter((q) => q.solved);
-    const solvedCount = solvedItems.length;
-    const completionPercentage = Math.round((solvedCount / totalQ) * 1000) / 10;
-    const overallAccuracyPercentage =
-      solvedCount > 0
+  // Per-question existing summary across selected students so teacher sees prior scores
+  const existingStatsByQuestion = useMemo(() => {
+    const map = new Map<
+      number,
+      { recordedCount: number; minAcc: number; maxAcc: number }
+    >();
+
+    for (let qNum = 1; qNum <= totalQ; qNum++) {
+      let count = 0;
+      let minAcc = 100;
+      let maxAcc = 0;
+      activeStudents.forEach((st) => {
+        const attempts = existingProgressByStudent.get(st.id) || [];
+        const latest = attempts.length > 0 ? attempts[attempts.length - 1] : null;
+        const pq = latest?.questionScores?.find((q) => q.questionNumber === qNum);
+        if (pq && pq.solved) {
+          count += 1;
+          const acc = Number(pq.accuracyPercentage) || 0;
+          if (acc < minAcc) minAcc = acc;
+          if (acc > maxAcc) maxAcc = acc;
+        }
+      });
+      map.set(qNum, {
+        recordedCount: count,
+        minAcc: count > 0 ? minAcc : 0,
+        maxAcc: count > 0 ? maxAcc : 0,
+      });
+    }
+
+    return map;
+  }, [activeStudents, existingProgressByStudent, totalQ]);
+
+  const batchTemplateStats = useMemo(() => {
+    const includedList = questionScores.filter((q) => includedQuestions.has(q.questionNumber));
+    const includedSolved = includedList.filter((q) => q.solved);
+    const avgIncludedAcc =
+      includedSolved.length > 0
         ? Math.round(
-            (solvedItems.reduce((acc, q) => acc + (Number(q.accuracyPercentage) || 0), 0) /
-              solvedCount) *
+            (includedSolved.reduce((acc, q) => acc + (Number(q.accuracyPercentage) || 0), 0) /
+              includedSolved.length) *
               10
           ) / 10
         : 0;
-    return { solvedCount, completionPercentage, overallAccuracyPercentage };
-  }, [questionScores, totalQ]);
+    return {
+      includedCount: includedList.length,
+      includedSolvedCount: includedSolved.length,
+      avgIncludedAcc,
+    };
+  }, [questionScores, includedQuestions]);
+
+  // Shared pure merge engine: computes exact final records for BOTH live preview and submission!
+  const mergedResultsPreview = useMemo<MergedStudentResult[]>(() => {
+    const now = new Date().toISOString();
+    return activeStudents.map((st, idx) => {
+      const attempts = existingProgressByStudent.get(st.id) || [];
+      const latest = attempts.length > 0 ? attempts[attempts.length - 1] : null;
+      const maxAttempt =
+        attempts.length > 0 ? Math.max(...attempts.map((a) => a.attemptNumber || 1), 1) : 1;
+
+      const createImprovement = batchMode === 'new_improvement' && latest !== null;
+      const nextAttemptNum = createImprovement
+        ? maxAttempt + 1
+        : latest
+        ? latest.attemptNumber || 1
+        : 1;
+      const isImp = createImprovement || Boolean(latest?.isImprovement) || nextAttemptNum > 1;
+
+      const recordId = createImprovement
+        ? `${structure.id}__${st.id}__attempt_${nextAttemptNum}_${Date.now()}_${idx}`
+        : latest?.id || `${structure.id}__${st.id}`;
+
+      let preservedPriorQuestionsCount = 0;
+      let newlyAppliedQuestionsCount = 0;
+      let upgradedQuestionsCount = 0;
+
+      const perStudentQuestions: StructureQuestionScore[] = questionScores.map((batchQ) => {
+        const qNum = batchQ.questionNumber;
+        const prevQ = latest?.questionScores?.find((item) => item.questionNumber === qNum);
+        const hasPrevSolved = Boolean(prevQ && prevQ.solved);
+        const isTargeted = includedQuestions.has(qNum);
+
+        // Rule 1: Untouched question -> ALWAYS preserve student's prior question score untouched!
+        if (!isTargeted) {
+          if (hasPrevSolved && prevQ) {
+            preservedPriorQuestionsCount += 1;
+            return { ...prevQ };
+          }
+          if (prevQ) {
+            return { ...prevQ };
+          }
+          return {
+            questionNumber: qNum,
+            solved: false,
+            accuracyPercentage: 0,
+            notes: '',
+            attemptNumber: createImprovement ? nextAttemptNum : 1,
+            attemptLabel: createImprovement
+              ? `محمّل من المحاولة السابقة`
+              : 'المحاولة الأساسية',
+            isImprovement: false,
+          };
+        }
+
+        // Rule 2: Question WAS selected in this batch, and student ALREADY solved it earlier
+        if (hasPrevSolved && prevQ) {
+          const prevAcc = Number(prevQ.accuracyPercentage) || 0;
+          const batchAcc = batchQ.solved ? Number(batchQ.accuracyPercentage) || 0 : 0;
+
+          if (conflictPolicy === 'keep_existing') {
+            // Safest policy: never overwrite an existing solved question
+            preservedPriorQuestionsCount += 1;
+            return { ...prevQ };
+          }
+
+          if (conflictPolicy === 'higher_wins' && (!batchQ.solved || batchAcc <= prevAcc)) {
+            preservedPriorQuestionsCount += 1;
+            return { ...prevQ };
+          }
+
+          // Applying updated/higher accuracy while preserving question attempt history
+          upgradedQuestionsCount += 1;
+          const prevAttemptNum = prevQ.attemptNumber || latest?.attemptNumber || 1;
+          const nextQAttempt = createImprovement ? nextAttemptNum : prevAttemptNum;
+          const prevHistory: StructureQuestionAttempt[] =
+            prevQ.attempts && prevQ.attempts.length > 0
+              ? [...prevQ.attempts]
+              : [
+                  {
+                    attemptNumber: prevAttemptNum,
+                    attemptLabel: prevQ.attemptLabel || 'المحاولة الأساسية',
+                    accuracyPercentage: prevAcc,
+                    previousAccuracy: prevQ.previousAccuracy,
+                    date: latest?.date || date,
+                  },
+                ];
+
+          const isChanged = batchAcc !== prevAcc || !batchQ.solved;
+          const nextHistory =
+            createImprovement && isChanged
+              ? [
+                  ...prevHistory,
+                  {
+                    attemptNumber: nextAttemptNum,
+                    attemptLabel: `تحسين درجة (محاولة ${nextAttemptNum})`,
+                    accuracyPercentage: batchAcc,
+                    previousAccuracy: prevAcc,
+                    date,
+                  },
+                ]
+              : prevQ.attempts;
+
+          return {
+            ...prevQ,
+            questionNumber: qNum,
+            solved: batchQ.solved,
+            accuracyPercentage: batchQ.solved ? batchAcc : 0,
+            notes: prevQ.notes || '',
+            attemptNumber: nextQAttempt,
+            attemptLabel: createImprovement
+              ? `تحسين درجة (محاولة ${nextAttemptNum})`
+              : prevQ.attemptLabel || 'المحاولة الأساسية',
+            isImprovement:
+              (createImprovement && isChanged) ||
+              Boolean(prevQ.isImprovement) ||
+              (isChanged && batchAcc > prevAcc),
+            previousAccuracy: isChanged ? prevAcc : prevQ.previousAccuracy,
+            attempts: nextHistory,
+          };
+        }
+
+        // Rule 3: Question WAS selected in this batch and NOT solved earlier by this student
+        if (batchQ.solved) {
+          newlyAppliedQuestionsCount += 1;
+        }
+        return {
+          ...batchQ,
+          notes: prevQ?.notes || batchQ.notes || '',
+          attemptNumber: createImprovement ? nextAttemptNum : 1,
+          attemptLabel: createImprovement
+            ? `تحسين درجة (محاولة ${nextAttemptNum})`
+            : 'المحاولة الأساسية',
+          isImprovement: createImprovement && batchQ.solved,
+          previousAccuracy: createImprovement ? 0 : undefined,
+        };
+      });
+
+      // Compute student's true totals from their merged perStudentQuestions
+      const studentSolvedItems = perStudentQuestions.filter((q) => q.solved);
+      const studentSolvedCount = studentSolvedItems.length;
+      const studentCompletionPct = Math.round((studentSolvedCount / totalQ) * 1000) / 10;
+      const studentOverallAcc =
+        studentSolvedCount > 0
+          ? Math.round(
+              (studentSolvedItems.reduce(
+                (acc, q) => acc + (Number(q.accuracyPercentage) || 0),
+                0
+              ) /
+                studentSolvedCount) *
+                10
+            ) / 10
+          : 0;
+
+      const impCount = perStudentQuestions.filter((q) => q.isImprovement).length;
+
+      // Preserve existing student notes unless teacher provided a distinct new note
+      const trimmedNewNote = notes.trim();
+      const existingNote = (latest?.notes || '').trim();
+      const mergedNotes = !trimmedNewNote
+        ? existingNote
+        : createImprovement
+        ? trimmedNewNote
+        : !existingNote
+        ? trimmedNewNote
+        : existingNote.includes(trimmedNewNote)
+        ? existingNote
+        : `${existingNote} | ${trimmedNewNote}`;
+
+      return {
+        student: st,
+        latest,
+        preservedPriorQuestionsCount,
+        newlyAppliedQuestionsCount,
+        upgradedQuestionsCount,
+        record: {
+          id: recordId,
+          structureId: structure.id,
+          structureTitle: structure.title,
+          studentDocId: st.id,
+          studentId: st.studentId,
+          studentName: st.name,
+          grade,
+          term,
+          track,
+          academicYear,
+          subject,
+          group: st.group || group || 'الكل',
+          date,
+          totalQuestions: totalQ,
+          solvedCount: studentSolvedCount,
+          completionPercentage: studentCompletionPct,
+          overallAccuracyPercentage: studentOverallAcc,
+          questionScores: perStudentQuestions,
+          attemptNumber: nextAttemptNum,
+          attemptLabel: createImprovement
+            ? `تحسين درجة (محاولة ${nextAttemptNum})`
+            : latest?.attemptLabel || 'المحاولة الأساسية',
+          isImprovement: isImp,
+          previousAccuracy: createImprovement
+            ? latest?.overallAccuracyPercentage
+            : latest?.previousAccuracy,
+          previousSolvedCount: createImprovement
+            ? latest?.solvedCount
+            : latest?.previousSolvedCount,
+          improvementsCount: impCount,
+          notes: mergedNotes,
+          createdAt: createImprovement ? now : latest?.createdAt || now,
+        },
+      };
+    });
+  }, [
+    activeStudents,
+    existingProgressByStudent,
+    batchMode,
+    conflictPolicy,
+    structure.id,
+    structure.title,
+    questionScores,
+    includedQuestions,
+    totalQ,
+    grade,
+    term,
+    track,
+    academicYear,
+    subject,
+    group,
+    date,
+    notes,
+  ]);
 
   const requestSafeClose = () => {
     if (!isDirty) {
@@ -225,7 +519,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
     setConfirmState({
       isOpen: true,
       title: 'تحذير: تعديلات غير محفوظة',
-      message: `لديك رصد غير محفوظ للهيكل "${structure.title}" لعدد (${activeStudents.length}) طالب. في حال الخروج الآن سيتم تجاهل التعديلات غير المحفوظة. هل تريد الخروج دون حفظ؟`,
+      message: `لديك رصد غير محفوظ للهيكل "${structure.title}" لعدد (${activeStudents.length}) طالب. في حال الخروج الآن سيتم تجاهل التعديلات غير المحفوظة ولن تتغير أي درجات محفوظة سابقاً. هل تريد الخروج دون حفظ؟`,
       confirmText: 'تجاهل التعديلات والخروج',
       cancelText: 'البقاء ومتابعة الرصد',
       isDestructive: true,
@@ -272,6 +566,10 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
     setDate(p.date || new Date().toISOString().split('T')[0]);
     setNotes(p.notes || '');
     setBatchMode(p.batchMode || 'update_or_create');
+    setConflictPolicy(p.conflictPolicy || 'keep_existing');
+    if (Array.isArray(p.includedQuestionNumbers)) {
+      setIncludedQuestions(new Set(p.includedQuestionNumbers));
+    }
     if (Array.isArray(p.questionScores) && p.questionScores.length > 0) {
       setQuestionScores(
         Array.from({ length: totalQ }, (_, idx) => {
@@ -299,55 +597,109 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
     setPendingDraft(null);
   };
 
-  const applyQuickSolvedCount = () => {
-    const k = Math.max(0, Math.min(totalQ, Math.floor(quickSolvedCount || 0)));
+  const applyQuickRange = () => {
+    const start = Math.max(1, Math.min(totalQ, Math.floor(quickStartQ || 1)));
+    const end = Math.max(start, Math.min(totalQ, Math.floor(quickEndQ || start)));
     const acc = Math.max(0, Math.min(100, Math.round(quickAccuracy || 0)));
     markDirty();
+    setIncludedQuestions((prev) => {
+      const next = new Set(prev);
+      for (let q = start; q <= end; q++) {
+        next.add(q);
+      }
+      return next;
+    });
     setQuestionScores((prev) =>
-      prev.map((q) => ({
-        ...q,
-        solved: q.questionNumber <= k,
-        accuracyPercentage: q.questionNumber <= k ? acc : 0,
-      }))
+      prev.map((q) =>
+        q.questionNumber >= start && q.questionNumber <= end
+          ? {
+              ...q,
+              solved: true,
+              accuracyPercentage: acc,
+            }
+          : q
+      )
     );
   };
 
-  const setAllQuestionsState = (solved: boolean, accuracy: number) => {
+  const setAllQuestionsState = (accuracy: number) => {
     markDirty();
+    setIncludedQuestions(new Set(Array.from({ length: totalQ }, (_, i) => i + 1)));
     setQuestionScores((prev) =>
       prev.map((q) => ({
         ...q,
-        solved,
-        accuracyPercentage: solved ? accuracy : 0,
+        solved: true,
+        accuracyPercentage: accuracy,
       }))
     );
   };
 
-  const requestClearAllQuestions = () => {
-    if (liveStats.solvedCount === 0) return;
+  const requestClearBatchSelection = () => {
+    if (includedQuestions.size === 0) return;
     setConfirmState({
       isOpen: true,
-      title: 'تأكيد تفريغ جميع الأسئلة',
-      message: `هل تريد إلغاء تحديد جميع الأسئلة المحلولة (${liveStats.solvedCount} سؤال) وإرجاع نسبتها إلى 0%؟`,
-      confirmText: 'تفريغ الكل',
+      title: 'إلغاء تحديد الأسئلة في هذه الدفعة',
+      message: `هل تريد إلغاء تحديد الأسئلة المختارة في هذه النافذة (${includedQuestions.size} سؤال)؟ لن تتأثر أي درجات سابقة للطلاب.`,
+      confirmText: 'تفريغ التحديد',
       cancelText: 'تراجع',
-      isDestructive: true,
+      isDestructive: false,
       onConfirm: () => {
-        setAllQuestionsState(false, 0);
+        setIncludedQuestions(new Set());
+        setQuestionScores((prev) =>
+          prev.map((q) => ({
+            ...q,
+            solved: false,
+            accuracyPercentage: 0,
+          }))
+        );
         setConfirmState((prev) => ({ ...prev, isOpen: false }));
       },
     });
   };
 
-  const applyAccuracyToSolved = (accuracy: number) => {
+  const applyAccuracyToIncluded = (accuracy: number) => {
     markDirty();
+    // If nothing included yet, apply to all; otherwise only to currently included solved questions
+    const targetAll = includedQuestions.size === 0;
+    if (targetAll) {
+      setIncludedQuestions(new Set(Array.from({ length: totalQ }, (_, i) => i + 1)));
+    }
     setQuestionScores((prev) =>
-      prev.map((q) => (q.solved ? { ...q, accuracyPercentage: accuracy } : q))
+      prev.map((q) =>
+        targetAll || (includedQuestions.has(q.questionNumber) && q.solved)
+          ? { ...q, solved: true, accuracyPercentage: accuracy }
+          : q
+      )
     );
+  };
+
+  const toggleIncludeQuestion = (qNum: number) => {
+    markDirty();
+    setIncludedQuestions((prev) => {
+      const next = new Set(prev);
+      if (next.has(qNum)) {
+        next.delete(qNum);
+      } else {
+        next.add(qNum);
+        setQuestionScores((scores) =>
+          scores.map((q) =>
+            q.questionNumber === qNum && !q.solved
+              ? { ...q, solved: true, accuracyPercentage: 100 }
+              : q
+          )
+        );
+      }
+      return next;
+    });
   };
 
   const toggleQuestionSolved = (qNum: number) => {
     markDirty();
+    setIncludedQuestions((prev) => {
+      const next = new Set(prev);
+      next.add(qNum);
+      return next;
+    });
     setQuestionScores((prev) =>
       prev.map((q) => {
         if (q.questionNumber !== qNum) return q;
@@ -364,6 +716,11 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
   const updateQuestionAccuracy = (qNum: number, rawVal: number) => {
     const clamped = Math.max(0, Math.min(100, isNaN(rawVal) ? 0 : rawVal));
     markDirty();
+    setIncludedQuestions((prev) => {
+      const next = new Set(prev);
+      next.add(qNum);
+      return next;
+    });
     setQuestionScores((prev) =>
       prev.map((q) =>
         q.questionNumber === qNum
@@ -375,90 +732,11 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
 
   const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (activeStudents.length === 0) return;
+    if (activeStudents.length === 0 || includedQuestions.size === 0) return;
 
     try {
       setSaving(true);
-      const now = new Date().toISOString();
-
-      const records: Array<Omit<StudentStructureProgress, 'id'> & { id?: string }> =
-        activeStudents.map((st, idx) => {
-          const attempts = existingProgressByStudent.get(st.id) || [];
-          const latest = attempts.length > 0 ? attempts[attempts.length - 1] : null;
-          const maxAttempt = attempts.length > 0 ? Math.max(...attempts.map((a) => a.attemptNumber || 1), 1) : 1;
-
-          const createImprovement = batchMode === 'new_improvement' && latest !== null;
-          const nextAttemptNum = createImprovement
-            ? maxAttempt + 1
-            : latest
-            ? latest.attemptNumber || 1
-            : 1;
-          const isImp = createImprovement || Boolean(latest?.isImprovement) || nextAttemptNum > 1;
-
-          const recordId = createImprovement
-            ? `${structure.id}__${st.id}__attempt_${nextAttemptNum}_${Date.now()}_${idx}`
-            : latest?.id || `${structure.id}__${st.id}`;
-
-          const perStudentQuestions: StructureQuestionScore[] = questionScores.map((qs) => {
-            const baselineQ = createImprovement
-              ? latest?.questionScores?.find((item) => item.questionNumber === qs.questionNumber)
-              : undefined;
-            const prevQAcc = baselineQ?.solved ? baselineQ.accuracyPercentage : undefined;
-            const isQChanged =
-              createImprovement &&
-              qs.solved &&
-              prevQAcc !== undefined &&
-              qs.accuracyPercentage !== prevQAcc;
-
-            return {
-              ...qs,
-              attemptNumber: createImprovement ? nextAttemptNum : qs.attemptNumber || 1,
-              attemptLabel: createImprovement
-                ? `تحسين درجة (محاولة ${nextAttemptNum})`
-                : qs.attemptLabel || 'المحاولة الأساسية',
-              isImprovement: isQChanged || (createImprovement && qs.solved && !baselineQ?.solved),
-              previousAccuracy: prevQAcc,
-            };
-          });
-
-          const impCount = perStudentQuestions.filter((q) => q.isImprovement).length;
-
-          return {
-            id: recordId,
-            structureId: structure.id,
-            structureTitle: structure.title,
-            studentDocId: st.id,
-            studentId: st.studentId,
-            studentName: st.name,
-            grade,
-            term,
-            track,
-            academicYear,
-            subject,
-            group: st.group || group || 'الكل',
-            date,
-            totalQuestions: totalQ,
-            solvedCount: liveStats.solvedCount,
-            completionPercentage: liveStats.completionPercentage,
-            overallAccuracyPercentage: liveStats.overallAccuracyPercentage,
-            questionScores: perStudentQuestions,
-            attemptNumber: nextAttemptNum,
-            attemptLabel: createImprovement
-              ? `تحسين درجة (محاولة ${nextAttemptNum})`
-              : latest?.attemptLabel || 'المحاولة الأساسية',
-            isImprovement: isImp,
-            previousAccuracy: createImprovement
-              ? latest?.overallAccuracyPercentage
-              : latest?.previousAccuracy,
-            previousSolvedCount: createImprovement
-              ? latest?.solvedCount
-              : latest?.previousSolvedCount,
-            improvementsCount: impCount,
-            notes: notes.trim() || '',
-            createdAt: createImprovement ? now : latest?.createdAt || now,
-          };
-        });
-
+      const records = mergedResultsPreview.map((item) => item.record);
       await onSaveBatch(records);
       clearStructureScoringDraft(draftKey);
       setIsDirty(false);
@@ -510,6 +788,19 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
           </div>
 
           <form onSubmit={handleSaveSubmit} className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs">
+            {/* Safety Guarantee Banner */}
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/35 border border-emerald-300 dark:border-emerald-800/70 flex items-start gap-2.5 text-emerald-900 dark:text-emerald-200">
+              <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+              <div className="space-y-0.5 leading-relaxed">
+                <div className="font-black text-xs sm:text-sm">
+                  حماية الدرجات السابقة مفعّلة تلقائياً (لن تُفقد أي درجة مرصودة سابقاً)
+                </div>
+                <p className="text-[11px] opacity-90">
+                  الأسئلة التي لا تحددها هنا تبقى محتفظة بدرجاتها السابقة لكل طالب كما هي تماماً، ويتم دمج الأسئلة الجديدة وإعادة حساب المجموع والنسبة لكل طالب بشكل مستقل.
+                </p>
+              </div>
+            </div>
+
             {/* Pending Draft Recovery Banner */}
             {pendingDraft && (
               <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 flex flex-wrap items-center justify-between gap-2">
@@ -539,33 +830,38 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
               </div>
             )}
 
-            {/* Selected Students Chips */}
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+            {/* Selected Students Chips + Merge Rules */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-bold text-slate-700 dark:text-slate-200">
                   الطلاب المحددين للتسجيل الجماعي ({activeStudents.length} طالب):
                 </span>
                 {studentsWithPriorCount > 0 && (
                   <span className="text-[11px] font-bold text-amber-700 dark:text-amber-300">
-                    تنبيه: ({studentsWithPriorCount}) طالب لديهم سجل مسبق في هذا الهيكل
+                    ({studentsWithPriorCount}) طالب لديهم درجات سابقة محفوظة في هذا الهيكل
                   </span>
                 )}
               </div>
 
               <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
                 {activeStudents.map((st) => {
-                  const hasPrior = (existingProgressByStudent.get(st.id) || []).length > 0;
+                  const attempts = existingProgressByStudent.get(st.id) || [];
+                  const latest = attempts.length > 0 ? attempts[attempts.length - 1] : null;
                   return (
                     <span
                       key={st.id}
                       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
-                        hasPrior
+                        latest
                           ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700'
                           : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
                       }`}
                     >
                       <span>{st.name}</span>
-                      {hasPrior && <Sparkles className="w-3 h-3 text-amber-500" />}
+                      {latest && (
+                        <span className="font-mono text-[10px] opacity-80">
+                          ({latest.solvedCount}/{totalQ} • {latest.overallAccuracyPercentage}%)
+                        </span>
+                      )}
                       {activeStudents.length > 1 && (
                         <button
                           type="button"
@@ -583,63 +879,118 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                 })}
               </div>
 
-              {/* Behavior Toggle for Students who already have a prior record */}
               {studentsWithPriorCount > 0 && (
-                <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2">
-                  <span className="font-bold text-slate-600 dark:text-slate-300">
-                    للطلاب الذين لديهم سجل مسبق:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      markDirty();
-                      setBatchMode('update_or_create');
-                    }}
-                    className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border cursor-pointer transition ${
-                      batchMode === 'update_or_create'
-                        ? 'bg-amber-500 text-slate-950 border-amber-500'
-                        : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                    }`}
-                  >
-                    تحديث السجل الحالي للمرصودين وإنشاء للمستجدين
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      markDirty();
-                      setBatchMode('new_improvement');
-                    }}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-[11px] border cursor-pointer transition ${
-                      batchMode === 'new_improvement'
-                        ? 'bg-amber-500 text-slate-950 border-amber-500'
-                        : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                    }`}
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    <span>إضافة كمحاولة تحسين جديدة (+ تحسين) لمن لديه سجل سابق</span>
-                  </button>
+                <div className="pt-2.5 border-t border-slate-200 dark:border-slate-700 space-y-2.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-bold text-slate-600 dark:text-slate-300 ml-1">
+                      نظام حفظ السجل للطلاب المرصودين مسبقاً:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        markDirty();
+                        setBatchMode('update_or_create');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border cursor-pointer transition ${
+                        batchMode === 'update_or_create'
+                          ? 'bg-amber-500 text-slate-950 border-amber-500'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      دمج في نفس السجل (مع إبقاء الدرجات السابقة)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        markDirty();
+                        setBatchMode('new_improvement');
+                      }}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-[11px] border cursor-pointer transition ${
+                        batchMode === 'new_improvement'
+                          ? 'bg-amber-500 text-slate-950 border-amber-500'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>إضافة كمحاولة تحسين جديدة (+ إبقاء السجل السابق + وراثة الأسئلة)</span>
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-bold text-slate-600 dark:text-slate-300 ml-1">
+                      إذا كان السؤال المحدد الآن مرصوداً مسبقاً للطالب:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        markDirty();
+                        setConflictPolicy('keep_existing');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border cursor-pointer transition ${
+                        conflictPolicy === 'keep_existing'
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      الاحتفاظ بدرجته السابقة كما هي (الأضمن)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        markDirty();
+                        setConflictPolicy('higher_wins');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border cursor-pointer transition ${
+                        conflictPolicy === 'higher_wins'
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      ترقية للدرجة الأعلى فقط
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        markDirty();
+                        setConflictPolicy('replace_selected');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border cursor-pointer transition ${
+                        conflictPolicy === 'replace_selected'
+                          ? 'bg-sky-600 text-white border-sky-600'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      تحديث الأسئلة المحددة فقط بالدرجة الجديدة
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Live Summary KPIs */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* Live Batch Selection KPIs */}
+            <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
               <div className="p-3 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 block">الأسئلة المحلولة</span>
-                <span className="text-xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
-                  {liveStats.solvedCount} / {totalQ} سؤال
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                  الأسئلة المشمولة في الدفعة
+                </span>
+                <span className="text-lg sm:text-xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
+                  {batchTemplateStats.includedCount} / {totalQ} سؤال
                 </span>
               </div>
               <div className="p-3 bg-amber-50/70 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800/70 text-center">
-                <span className="text-[11px] text-amber-700 dark:text-amber-400 block">نسبة إنجاز الهيكل</span>
-                <span className="text-xl font-black font-mono tabular-nums text-amber-600 dark:text-amber-400">
-                  {liveStats.completionPercentage}%
+                <span className="text-[11px] text-amber-700 dark:text-amber-400 block">
+                  الأسئلة غير المحددة (تُترك كما هي)
+                </span>
+                <span className="text-lg sm:text-xl font-black font-mono tabular-nums text-amber-600 dark:text-amber-400">
+                  {totalQ - batchTemplateStats.includedCount} سؤال محفوظ
                 </span>
               </div>
               <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800/70 text-center">
-                <span className="text-[11px] text-emerald-700 dark:text-emerald-400 block">متوسط نسبة الصحة</span>
-                <span className="text-xl font-black font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
-                  {liveStats.overallAccuracyPercentage}%
+                <span className="text-[11px] text-emerald-700 dark:text-emerald-400 block">
+                  نسبة الأسئلة المحددة حالياً
+                </span>
+                <span className="text-lg sm:text-xl font-black font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
+                  {batchTemplateStats.avgIncludedAcc}%
                 </span>
               </div>
             </div>
@@ -722,24 +1073,38 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
               </div>
             </div>
 
-            {/* Quick Bulk Generator Controls */}
+            {/* Quick Bulk Range Generator Controls */}
             <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/25 border border-amber-200 dark:border-amber-800/60 space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-black text-amber-900 dark:text-amber-200">
-                    ضبط سريع لكل المحددين:
+                    ضبط نطاق أسئلة للمحددين:
                   </span>
                   <div className="inline-flex items-center gap-1.5 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
-                    <span className="text-[11px] text-slate-600 dark:text-slate-300">عدد الأسئلة المحلولة:</span>
+                    <span className="text-[11px] text-slate-600 dark:text-slate-300">من س</span>
                     <input
                       type="number"
-                      min={0}
+                      min={1}
                       max={totalQ}
-                      value={quickSolvedCount}
-                      onChange={(e) => setQuickSolvedCount(Math.max(0, Math.min(totalQ, Number(e.target.value) || 0)))}
-                      className="w-14 px-1.5 py-0.5 text-center font-mono font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded"
+                      value={quickStartQ}
+                      onChange={(e) => {
+                        const val = Math.max(1, Math.min(totalQ, Number(e.target.value) || 1));
+                        setQuickStartQ(val);
+                        if (quickEndQ < val) setQuickEndQ(val);
+                      }}
+                      className="w-12 px-1 py-0.5 text-center font-mono font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded"
                     />
-                    <span className="text-[11px] text-slate-400 font-mono">/ {totalQ}</span>
+                    <span className="text-[11px] text-slate-600 dark:text-slate-300">إلى س</span>
+                    <input
+                      type="number"
+                      min={quickStartQ}
+                      max={totalQ}
+                      value={quickEndQ}
+                      onChange={(e) =>
+                        setQuickEndQ(Math.max(quickStartQ, Math.min(totalQ, Number(e.target.value) || totalQ)))
+                      }
+                      className="w-12 px-1 py-0.5 text-center font-mono font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded"
+                    />
                   </div>
                   <div className="inline-flex items-center gap-1.5 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
                     <span className="text-[11px] text-slate-600 dark:text-slate-300">نسبة الصحة:</span>
@@ -755,52 +1120,54 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                   </div>
                   <button
                     type="button"
-                    onClick={applyQuickSolvedCount}
+                    onClick={applyQuickRange}
                     className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] cursor-pointer"
                   >
-                    تطبيق التوزيع
+                    تطبيق النطاق
                   </button>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setAllQuestionsState(true, 100)}
+                    onClick={() => setAllQuestionsState(100)}
                     className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold text-[11px] cursor-pointer hover:bg-emerald-500"
                   >
-                    حل الكل (100%)
+                    تحديد الكل (100%)
                   </button>
                   <button
                     type="button"
-                    onClick={() => applyAccuracyToSolved(75)}
+                    onClick={() => applyAccuracyToIncluded(75)}
                     className="px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 font-bold text-[11px] cursor-pointer"
                   >
-                    75% للمحلول
+                    75% للمحدد
                   </button>
                   <button
                     type="button"
-                    onClick={() => applyAccuracyToSolved(50)}
+                    onClick={() => applyAccuracyToIncluded(50)}
                     className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold text-[11px] cursor-pointer"
                   >
-                    50% للمحلول
+                    50% للمحدد
                   </button>
                   <button
                     type="button"
-                    onClick={requestClearAllQuestions}
-                    className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] cursor-pointer"
+                    onClick={requestClearBatchSelection}
+                    disabled={includedQuestions.size === 0}
+                    className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] cursor-pointer disabled:opacity-50"
                   >
-                    تفريغ الكل
+                    إلغاء تحديد الأسئلة
                   </button>
                 </div>
               </div>
             </div>
 
             {/* Per-Question Table */}
-            <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+            <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-x-auto">
               <table className="w-full text-right text-xs">
                 <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
                   <tr>
-                    <th className="py-2.5 px-3 min-w-[120px]">السؤال</th>
+                    <th className="py-2.5 px-3 min-w-[130px]">السؤال</th>
+                    <th className="py-2.5 px-3 min-w-[135px]">شمل السؤال بالدفعة</th>
                     <th className="py-2.5 px-3">حالة الحل</th>
                     <th className="py-2.5 px-3">نسبة صحة السؤال (0% - 100%)</th>
                     <th className="py-2.5 px-3 hidden md:table-cell">تحديد سريع</th>
@@ -811,36 +1178,75 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                     const qMeta = structure.questions?.find(
                       (item) => item.questionNumber === qs.questionNumber
                     );
+                    const isIncluded = includedQuestions.has(qs.questionNumber);
+                    const priorSummary = existingStatsByQuestion.get(qs.questionNumber);
+
                     return (
                       <tr
                         key={qs.questionNumber}
                         className={
-                          qs.solved
-                            ? 'bg-emerald-50/20 dark:bg-emerald-950/10'
-                            : 'bg-white dark:bg-slate-900'
+                          isIncluded
+                            ? 'bg-emerald-50/30 dark:bg-emerald-950/15'
+                            : 'bg-white dark:bg-slate-900 opacity-90'
                         }
                       >
                         <td className="py-2 px-3">
-                          <span className="font-mono font-black text-slate-900 dark:text-white">
-                            س{qs.questionNumber}
-                          </span>
-                          {qMeta?.title && (
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400 mr-1.5">
-                              • {qMeta.title}
-                            </span>
-                          )}
+                          <div className="flex flex-col gap-0.5">
+                            <div>
+                              <span className="font-mono font-black text-slate-900 dark:text-white">
+                                س{qs.questionNumber}
+                              </span>
+                              {qMeta?.title && (
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400 mr-1.5">
+                                  • {qMeta.title}
+                                </span>
+                              )}
+                            </div>
+                            {priorSummary && priorSummary.recordedCount > 0 && (
+                              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                                مرصود سابقاً لـ {priorSummary.recordedCount}/{activeStudents.length} (
+                                {priorSummary.minAcc === priorSummary.maxAcc
+                                  ? `${priorSummary.maxAcc}%`
+                                  : `${priorSummary.minAcc}%–${priorSummary.maxAcc}%`}
+                                )
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2 px-3">
+                          <button
+                            type="button"
+                            onClick={() => toggleIncludeQuestion(qs.questionNumber)}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold text-[11px] border cursor-pointer transition ${
+                              isIncluded
+                                ? 'bg-amber-500 text-slate-950 border-amber-500'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                            }`}
+                          >
+                            {isIncluded ? (
+                              <>
+                                <CheckSquare className="w-3.5 h-3.5" />
+                                <span>مشمول بالتحديث</span>
+                              </>
+                            ) : (
+                              <>
+                                <Square className="w-3.5 h-3.5" />
+                                <span>يُترك كما هو</span>
+                              </>
+                            )}
+                          </button>
                         </td>
                         <td className="py-2 px-3">
                           <button
                             type="button"
                             onClick={() => toggleQuestionSolved(qs.questionNumber)}
                             className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold text-[11px] border cursor-pointer transition ${
-                              qs.solved
+                              isIncluded && qs.solved
                                 ? 'bg-emerald-600 text-white border-emerald-600'
                                 : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                             }`}
                           >
-                            {qs.solved ? (
+                            {isIncluded && qs.solved ? (
                               <>
                                 <CheckSquare className="w-3.5 h-3.5" />
                                 <span>تم الحل</span>
@@ -860,7 +1266,8 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                               min={0}
                               max={100}
                               step={1}
-                              value={qs.accuracyPercentage}
+                              value={isIncluded ? qs.accuracyPercentage : ''}
+                              placeholder="—"
                               onChange={(e) =>
                                 updateQuestionAccuracy(qs.questionNumber, Number(e.target.value))
                               }
@@ -872,7 +1279,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                               min={0}
                               max={100}
                               step={5}
-                              value={qs.accuracyPercentage}
+                              value={isIncluded ? qs.accuracyPercentage : 0}
                               onChange={(e) =>
                                 updateQuestionAccuracy(qs.questionNumber, Number(e.target.value))
                               }
@@ -888,7 +1295,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                                 type="button"
                                 onClick={() => updateQuestionAccuracy(qs.questionNumber, val)}
                                 className={`px-2 py-1 rounded text-[10px] font-bold border cursor-pointer ${
-                                  qs.solved && qs.accuracyPercentage === val
+                                  isIncluded && qs.solved && qs.accuracyPercentage === val
                                     ? val >= 75
                                       ? 'bg-emerald-600 text-white border-emerald-600'
                                       : val >= 50
@@ -909,9 +1316,57 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
               </table>
             </div>
 
+            {/* Live Per-Student Merge Preview */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-black text-slate-800 dark:text-slate-100">
+                  معاينة نتيجة الدمج لكل طالب قبل الحفظ:
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  يضمن بقاء الدرجات السابقة + إضافة الجديد
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-40 overflow-y-auto">
+                {mergedResultsPreview.map(
+                  ({
+                    student,
+                    latest,
+                    record,
+                    preservedPriorQuestionsCount,
+                    newlyAppliedQuestionsCount,
+                    upgradedQuestionsCount,
+                  }) => (
+                    <div
+                      key={student.id}
+                      className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 space-y-1"
+                    >
+                      <div className="font-bold text-slate-900 dark:text-white truncate">
+                        {student.name}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[11px] font-mono tabular-nums flex-wrap">
+                        <span className="text-slate-500 dark:text-slate-400">
+                          {latest
+                            ? `سابقاً: ${latest.solvedCount}/${totalQ} (${latest.overallAccuracyPercentage}%)`
+                            : 'مستجد'}
+                        </span>
+                        <ArrowLeft className="w-3 h-3 text-amber-500 shrink-0" />
+                        <span className="font-black text-emerald-600 dark:text-emerald-400">
+                          بعد الحفظ: {record.solvedCount}/{totalQ} ({record.overallAccuracyPercentage}%)
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                        محفوظ سابقاً: {preservedPriorQuestionsCount} • مضاف جديد: {newlyAppliedQuestionsCount}
+                        {upgradedQuestionsCount > 0 ? ` • محدّث: ${upgradedQuestionsCount}` : ''}
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+
             <div>
               <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                ملاحظة موحدة للطلاب المحددين (اختياري)
+                ملاحظة موحدة للطلاب المحددين (اختياري — لن تمسح الملاحظات السابقة)
               </label>
               <input
                 type="text"
@@ -925,26 +1380,33 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
               />
             </div>
 
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={requestSafeClose}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
-              >
-                إلغاء
-              </button>
-              <button
-                type="submit"
-                disabled={saving || activeStudents.length === 0}
-                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black cursor-pointer disabled:opacity-60"
-              >
-                <Save className="w-4 h-4" />
-                <span>
-                  {saving
-                    ? 'جاري الحفظ الجماعي...'
-                    : `حفظ ورصد الهيكل لـ (${activeStudents.length}) طالب`}
-                </span>
-              </button>
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
+                {includedQuestions.size === 0
+                  ? 'اختر سؤالاً واحداً على الأقل من الجدول أعلاه لتطبيقه على الطلاب المحددين'
+                  : `سيتم حفظ (${includedQuestions.size}) سؤال مع حماية كل الدرجات السابقة`}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={requestSafeClose}
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || activeStudents.length === 0 || includedQuestions.size === 0}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>
+                    {saving
+                      ? 'جاري الحفظ الآمن...'
+                      : `حفظ ودمج الدرجات لـ (${activeStudents.length}) طالب`}
+                  </span>
+                </button>
+              </div>
             </div>
           </form>
         </div>
