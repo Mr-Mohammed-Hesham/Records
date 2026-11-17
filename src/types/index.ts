@@ -187,6 +187,7 @@ export interface ExamStructure {
   date?: string; // تاريخ اعتماد أو إضافة الهيكل
   totalQuestions: number; // إجمالي عدد الأسئلة في الهيكل
   questions: StructureQuestionItem[]; // تفاصيل أسئلة الهيكل (س1 .. سN)
+  excludedStudentIds?: string[]; // معرفات الطلاب المحذوف سطرهم من هذا الهيكل فقط (دون حذف ملفهم من المنصة)
   notes?: string;
   createdAt: string;
   updatedAt?: string;

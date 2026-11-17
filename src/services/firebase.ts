@@ -1323,12 +1323,33 @@ export async function saveStudentStructureProgress(
     ...current.filter((p) => p.id !== docId),
   ];
   setCachedData(CACHE_KEYS.STRUCTURE_PROGRESS, updated);
+
+  // If the student row had been previously removed from this structure, restore it automatically on scoring
+  const currentStructures = getCachedData<ExamStructure[]>(CACHE_KEYS.STRUCTURES, []);
+  const targetStruct = currentStructures.find((s) => s.id === progress.structureId);
+  let nextExcludedIds: string[] | null = null;
+  if (targetStruct?.excludedStudentIds?.includes(progress.studentDocId)) {
+    nextExcludedIds = targetStruct.excludedStudentIds.filter((id) => id !== progress.studentDocId);
+    setCachedData(
+      CACHE_KEYS.STRUCTURES,
+      currentStructures.map((s) =>
+        s.id === progress.structureId ? { ...s, excludedStudentIds: nextExcludedIds!, updatedAt: now } : s
+      )
+    );
+  }
   notifySubscribers();
 
   try {
     const { id: _ignoreId, ...payload } = fullRecord;
     const cleanData = sanitizeForFirestore(payload);
     await setDoc(doc(db, 'structureProgress', docId), cleanData, { merge: true });
+    if (nextExcludedIds !== null) {
+      await setDoc(
+        doc(db, 'structures', progress.structureId),
+        { excludedStudentIds: nextExcludedIds, updatedAt: now },
+        { merge: true }
+      );
+    }
   } catch (err) {
     console.error('Firestore saveStudentStructureProgress error (preserved locally):', err);
   }
@@ -1373,6 +1394,29 @@ export async function saveBatchStudentStructureProgress(
     ...current.filter((p) => !savedIdSet.has(p.id)),
   ];
   setCachedData(CACHE_KEYS.STRUCTURE_PROGRESS, updated);
+
+  // Restore any excluded student rows that were explicitly scored in this batch
+  const savedStudentIdsByStructure = new Map<string, Set<string>>();
+  fullRecords.forEach((r) => {
+    const set = savedStudentIdsByStructure.get(r.structureId) || new Set<string>();
+    set.add(r.studentDocId);
+    savedStudentIdsByStructure.set(r.structureId, set);
+  });
+
+  const currentStructures = getCachedData<ExamStructure[]>(CACHE_KEYS.STRUCTURES, []);
+  const structuresToUpdate: Array<{ id: string; excludedStudentIds: string[] }> = [];
+  const nextStructures = currentStructures.map((s) => {
+    const savedStudents = savedStudentIdsByStructure.get(s.id);
+    if (savedStudents && s.excludedStudentIds && s.excludedStudentIds.some((id) => savedStudents.has(id))) {
+      const nextExcluded = s.excludedStudentIds.filter((id) => !savedStudents.has(id));
+      structuresToUpdate.push({ id: s.id, excludedStudentIds: nextExcluded });
+      return { ...s, excludedStudentIds: nextExcluded, updatedAt: now };
+    }
+    return s;
+  });
+  if (structuresToUpdate.length > 0) {
+    setCachedData(CACHE_KEYS.STRUCTURES, nextStructures);
+  }
   notifySubscribers();
 
   try {
@@ -1386,6 +1430,13 @@ export async function saveBatchStudentStructureProgress(
         batch.set(doc(db, 'structureProgress', id), cleanData, { merge: true });
       });
       await batch.commit();
+    }
+    for (const item of structuresToUpdate) {
+      await setDoc(
+        doc(db, 'structures', item.id),
+        { excludedStudentIds: item.excludedStudentIds, updatedAt: now },
+        { merge: true }
+      );
     }
   } catch (err) {
     console.error('Firestore saveBatchStudentStructureProgress error (preserved locally):', err);
@@ -1406,6 +1457,105 @@ export async function deleteStudentStructureProgress(progressId: string): Promis
     await deleteDoc(doc(db, 'structureProgress', progressId));
   } catch (err) {
     console.error('Firestore deleteStudentStructureProgress error (deleted locally):', err);
+  }
+}
+
+/**
+ * حذف سطر طالب (أو مجموعة طلاب) من هيكل محدد فقط، مع حذف سجلاتهم في هذا الهيكل فقط،
+ * ودون المساس بملف الطالب الأساسي أو بياناته ودرجاته الأخرى في المنصة.
+ */
+export async function deleteStudentsFromStructure(
+  structureId: string,
+  studentDocIds: string[]
+): Promise<void> {
+  if (!structureId || !studentDocIds || studentDocIds.length === 0) return;
+  const targetSet = new Set(studentDocIds);
+  const now = new Date().toISOString();
+
+  // 1. Update structure excludedStudentIds locally
+  const currentStructures = getCachedData<ExamStructure[]>(CACHE_KEYS.STRUCTURES, []);
+  const targetStruct = currentStructures.find((s) => s.id === structureId);
+  const mergedExcluded = Array.from(
+    new Set([...(targetStruct?.excludedStudentIds || []), ...studentDocIds])
+  );
+  setCachedData(
+    CACHE_KEYS.STRUCTURES,
+    currentStructures.map((s) =>
+      s.id === structureId
+        ? { ...s, excludedStudentIds: mergedExcluded, updatedAt: now }
+        : s
+    )
+  );
+
+  // 2. Remove any structureProgress rows for those students inside THIS structure only
+  const currentProgress = getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []);
+  const progressToDelete = currentProgress.filter(
+    (p) => p.structureId === structureId && targetSet.has(p.studentDocId)
+  );
+  setCachedData(
+    CACHE_KEYS.STRUCTURE_PROGRESS,
+    currentProgress.filter(
+      (p) => !(p.structureId === structureId && targetSet.has(p.studentDocId))
+    )
+  );
+  notifySubscribers();
+
+  // 3. Persist atomically to Firestore
+  try {
+    const batch = writeBatch(db);
+    batch.set(
+      doc(db, 'structures', structureId),
+      { excludedStudentIds: mergedExcluded, updatedAt: now },
+      { merge: true }
+    );
+    progressToDelete.forEach((p) => {
+      if (p.id) {
+        batch.delete(doc(db, 'structureProgress', p.id));
+      }
+    });
+    await batch.commit();
+  } catch (err) {
+    console.error('Firestore deleteStudentsFromStructure error (preserved locally):', err);
+  }
+}
+
+/**
+ * استعادة سطر طالب (أو جميع السطور المحذوفة) إلى جدول الهيكل مرة أخرى
+ */
+export async function restoreStudentsToStructure(
+  structureId: string,
+  studentDocIds?: string[]
+): Promise<void> {
+  if (!structureId) return;
+  const now = new Date().toISOString();
+  const currentStructures = getCachedData<ExamStructure[]>(CACHE_KEYS.STRUCTURES, []);
+  const targetStruct = currentStructures.find((s) => s.id === structureId);
+  if (!targetStruct) return;
+
+  const currentExcluded = targetStruct.excludedStudentIds || [];
+  const nextExcluded =
+    studentDocIds && studentDocIds.length > 0
+      ? currentExcluded.filter((id) => !studentDocIds.includes(id))
+      : [];
+
+  setCachedData(
+    CACHE_KEYS.STRUCTURES,
+    currentStructures.map((s) =>
+      s.id === structureId
+        ? { ...s, excludedStudentIds: nextExcluded, updatedAt: now }
+        : s
+    )
+  );
+  notifySubscribers();
+
+  try {
+    await setDoc(
+      doc(db, 'structures', structureId),
+      { excludedStudentIds: nextExcluded, updatedAt: now },
+      { merge: true }
+    );
+  } catch (err) {
+    console.error('Firestore restoreStudentsToStructure error (updated locally):', err);
   }
 }
 

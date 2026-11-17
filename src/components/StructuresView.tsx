@@ -18,6 +18,8 @@ import {
   Users,
   History,
   RotateCcw,
+  AlertTriangle,
+  UserMinus,
 } from 'lucide-react';
 import {
   Student,
@@ -68,6 +70,14 @@ interface StructuresViewProps {
     records: Array<Omit<StudentStructureProgress, 'id'> & { id?: string }>
   ) => Promise<StudentStructureProgress[]>;
   onDeleteProgress: (progress: StudentStructureProgress) => void;
+  onDeleteStudentsFromStructure?: (
+    structure: ExamStructure,
+    studentsToRemove: Student[]
+  ) => Promise<void>;
+  onRestoreStudentsToStructure?: (
+    structure: ExamStructure,
+    studentDocIds?: string[]
+  ) => Promise<void>;
   onOpenStudentProfile: (student: Student) => void;
 }
 
@@ -82,6 +92,8 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
   onSaveProgress,
   onSaveBatchProgress,
   onDeleteProgress,
+  onDeleteStudentsFromStructure,
+  onRestoreStudentsToStructure,
   onOpenStudentProfile,
 }) => {
   const initialPersisted = useMemo(
@@ -150,6 +162,19 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
   // Add Student Quick Picker inside Selected Structure
   const [studentPickerSearch, setStudentPickerSearch] = useState('');
   const [showAddAnyStudentPicker, setShowAddAnyStudentPicker] = useState(false);
+
+  // Structure-only Student Row Delete & Restore Modals
+  const [rowDeleteModal, setRowDeleteModal] = useState<{
+    isOpen: boolean;
+    studentsToDelete: Student[];
+    progressToClearOnly: StudentStructureProgress | null;
+  }>({
+    isOpen: false,
+    studentsToDelete: [],
+    progressToClearOnly: null,
+  });
+  const [isDeletingRows, setIsDeletingRows] = useState(false);
+  const [isExcludedModalOpen, setIsExcludedModalOpen] = useState(false);
 
   // Persist StructuresView filters & selected structure whenever they change
   useEffect(() => {
@@ -296,12 +321,24 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
     return map;
   }, [selectedStructureProgress]);
 
+  const excludedStudentIdSet = useMemo(
+    () => new Set(selectedStructure?.excludedStudentIds || []),
+    [selectedStructure]
+  );
+
+  const excludedStudentsInStructure = useMemo(
+    () => students.filter((st) => excludedStudentIdSet.has(st.id)),
+    [students, excludedStudentIdSet]
+  );
+
   // Filtered students visible in the selected structure workspace (expanding multiple attempts like ScoreEntryModal)
   const workspaceStudentRows = useMemo(() => {
     if (!selectedStructure) return [];
 
     // Combine registered students with multi-attempt expansion
     const matchingStudents = students.filter((st) => {
+      if (excludedStudentIdSet.has(st.id)) return false;
+
       const effStatus = getEffectiveEnrollmentStatus(st);
       if (filterStatus === 'exclude_completed' && effStatus === 'completed') return false;
       if (filterStatus !== 'الكل' && filterStatus !== 'exclude_completed' && effStatus !== filterStatus) {
@@ -391,6 +428,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
     return expandedRows;
   }, [
     selectedStructure,
+    excludedStudentIdSet,
     progressByStudentMap,
     students,
     filterStatus,
@@ -995,6 +1033,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                             const nextAtt = stAttempts.length > 0
                               ? Math.max(...stAttempts.map((a) => a.attemptNumber || 1), 1) + 1
                               : 2;
+                            const isExcludedFromStruct = excludedStudentIdSet.has(st.id);
                             return (
                               <div
                                 key={st.id}
@@ -1016,16 +1055,36 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                   }}
                                   className="flex-1 text-right flex items-center justify-between gap-2 cursor-pointer"
                                 >
-                                  <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-bold text-slate-900 dark:text-white">{st.name}</span>
-                                    <span className="text-[11px] text-slate-400 mr-2">
+                                    <span className="text-[11px] text-slate-400">
                                       ({st.grade}{st.track ? ` • ${st.track}` : ''})
                                     </span>
+                                    {isExcludedFromStruct && (
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                                        محذوف من هذا الهيكل
+                                      </span>
+                                    )}
                                   </div>
                                   <span className="font-mono text-[11px] text-amber-600 dark:text-amber-400 font-bold">
-                                    {existing ? `${existing.solvedCount}/${existing.totalQuestions} (${existing.overallAccuracyPercentage}%)` : 'رصد جديد ←'}
+                                    {existing
+                                      ? `${existing.solvedCount}/${existing.totalQuestions} (${existing.overallAccuracyPercentage}%)`
+                                      : isExcludedFromStruct
+                                      ? 'رصد وإعادة للهيكل ←'
+                                      : 'رصد جديد ←'}
                                   </span>
                                 </button>
+                                {isExcludedFromStruct && onRestoreStudentsToStructure && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onRestoreStudentsToStructure(selectedStructure, [st.id])}
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-lg cursor-pointer shrink-0"
+                                    title="استعادة سطر الطالب إلى جدول هذا الهيكل"
+                                  >
+                                    <RotateCcw className="w-3 h-3" />
+                                    إرجاع للجدول
+                                  </button>
+                                )}
                                 {existing && (
                                   <button
                                     type="button"
@@ -1112,6 +1171,17 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 text-xs">
+                      {excludedStudentsInStructure.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setIsExcludedModalOpen(true)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/40 border border-rose-200 dark:border-rose-800/70 text-rose-700 dark:text-rose-300 font-bold text-[11px] cursor-pointer transition"
+                          title="عرض أو استعادة سطور الطلاب المحذوفين من هذا الهيكل فقط"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>سطور محذوفة من الهيكل ({excludedStudentsInStructure.length})</span>
+                        </button>
+                      )}
                       <div className="inline-flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
                         <button
                           type="button"
@@ -1248,6 +1318,24 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                 تسجيل ورصد الدرجة للمحددين مرة واحدة ({selectedStudentIds.size})
                               </span>
                             </button>
+
+                            {onDeleteStudentsFromStructure && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRowDeleteModal({
+                                    isOpen: true,
+                                    studentsToDelete: selectedBatchStudents,
+                                    progressToClearOnly: null,
+                                  })
+                                }
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-bold text-[11px] cursor-pointer whitespace-nowrap"
+                                title="حذف سطور الطلاب المحددين من هذا الهيكل فقط دون حذف ملفاتهم من المنصة"
+                              >
+                                <UserMinus className="w-3.5 h-3.5" />
+                                <span>حذف من الهيكل فقط ({selectedStudentIds.size})</span>
+                              </button>
+                            )}
                           </>
                         )}
                       </div>
@@ -1520,12 +1608,31 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                         تحسين
                                       </button>
                                     )}
-                                    {progress && (
+                                    {progress && isAttemptImprovement ? (
                                       <button
                                         type="button"
                                         onClick={() => onDeleteProgress(progress)}
-                                        className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg cursor-pointer"
-                                        title={isAttemptImprovement ? 'حذف محاولة التحسين' : 'حذف سجل الطالب من هذا الهيكل'}
+                                        className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg cursor-pointer transition"
+                                        title="حذف محاولة التحسين من هذا الهيكل فقط (لا يحذف ملف الطالب من المنصة)"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (onDeleteStudentsFromStructure) {
+                                            setRowDeleteModal({
+                                              isOpen: true,
+                                              studentsToDelete: [student],
+                                              progressToClearOnly: progress,
+                                            });
+                                          } else if (progress) {
+                                            onDeleteProgress(progress);
+                                          }
+                                        }}
+                                        className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg cursor-pointer transition"
+                                        title="حذف سطر الطالب من هذا الهيكل فقط (لا يحذف ملف الطالب من المنصة)"
                                       >
                                         <Trash2 className="w-3.5 h-3.5" />
                                       </button>
@@ -1679,6 +1786,227 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             setSelectedStudentIds(new Set());
           }}
         />
+      )}
+
+      {/* Modal 6: Confirm Structure-Only Student Row Deletion */}
+      {rowDeleteModal.isOpen && selectedStructure && rowDeleteModal.studentsToDelete.length > 0 && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto"
+          onClick={() =>
+            !isDeletingRows &&
+            setRowDeleteModal({ isOpen: false, studentsToDelete: [], progressToClearOnly: null })
+          }
+          dir="rtl"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-right space-y-4"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5 text-rose-600 dark:text-rose-400">
+                <div className="p-2 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <h3 className="font-black text-slate-900 dark:text-white text-base">
+                  {rowDeleteModal.studentsToDelete.length === 1
+                    ? 'حذف سطر الطالب من قسم الهياكل فقط'
+                    : `حذف سطور (${rowDeleteModal.studentsToDelete.length}) طلاب من الهيكل فقط`}
+                </h3>
+              </div>
+              <button
+                type="button"
+                disabled={isDeletingRows}
+                onClick={() =>
+                  setRowDeleteModal({ isOpen: false, studentsToDelete: [], progressToClearOnly: null })
+                }
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+              {rowDeleteModal.studentsToDelete.length === 1 ? (
+                <p>
+                  هل أنت متأكد من حذف سطر الطالب{' '}
+                  <strong className="text-slate-900 dark:text-white">
+                    "{rowDeleteModal.studentsToDelete[0].name}"
+                  </strong>{' '}
+                  من هيكل{' '}
+                  <strong className="text-amber-600 dark:text-amber-400">
+                    "{selectedStructure.title}"
+                  </strong>
+                  ؟
+                </p>
+              ) : (
+                <p>
+                  هل أنت متأكد من حذف سطور عدد{' '}
+                  <strong className="text-slate-900 dark:text-white">
+                    {rowDeleteModal.studentsToDelete.length} طلاب
+                  </strong>{' '}
+                  من هيكل{' '}
+                  <strong className="text-amber-600 dark:text-amber-400">
+                    "{selectedStructure.title}"
+                  </strong>
+                  ؟
+                </p>
+              )}
+
+              <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/70 text-emerald-900 dark:text-emerald-200 text-xs font-bold leading-relaxed">
+                تنبيه مطمئن: الحذف يتم لسطر الطالب (وسجله داخل هذا الهيكل فقط) ولن يتم حذف ملف الطالب الأساسي أو درجاته وبياناته الأخرى الموجودة على المنصة، ويمكنك استعادة السطر لاحقاً في أي وقت.
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={isDeletingRows}
+                  onClick={() =>
+                    setRowDeleteModal({ isOpen: false, studentsToDelete: [], progressToClearOnly: null })
+                  }
+                  className="px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl cursor-pointer"
+                >
+                  تراجع / إلغاء
+                </button>
+
+                {rowDeleteModal.studentsToDelete.length === 1 && rowDeleteModal.progressToClearOnly && (
+                  <button
+                    type="button"
+                    disabled={isDeletingRows}
+                    onClick={() => {
+                      const prog = rowDeleteModal.progressToClearOnly!;
+                      setRowDeleteModal({ isOpen: false, studentsToDelete: [], progressToClearOnly: null });
+                      onDeleteProgress(prog);
+                    }}
+                    className="px-3.5 py-2 text-xs font-bold text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-300 dark:border-amber-700 rounded-xl cursor-pointer"
+                  >
+                    مسح الدرجات فقط (إبقاء السطر)
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  disabled={isDeletingRows}
+                  onClick={async () => {
+                    if (!onDeleteStudentsFromStructure) return;
+                    setIsDeletingRows(true);
+                    try {
+                      const idsToRemove = new Set(rowDeleteModal.studentsToDelete.map((s) => s.id));
+                      await onDeleteStudentsFromStructure(
+                        selectedStructure,
+                        rowDeleteModal.studentsToDelete
+                      );
+                      setSelectedStudentIds((prev) => {
+                        const next = new Set(prev);
+                        idsToRemove.forEach((id) => next.delete(id));
+                        return next;
+                      });
+                      setRowDeleteModal({ isOpen: false, studentsToDelete: [], progressToClearOnly: null });
+                    } finally {
+                      setIsDeletingRows(false);
+                    }
+                  }}
+                  className="px-4 py-2 text-xs font-black text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md shadow-rose-600/20 cursor-pointer disabled:opacity-60"
+                >
+                  {isDeletingRows ? 'جاري الحذف...' : 'حذف السطر من الهيكل فقط'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 7: Excluded / Removed Student Rows Restore Modal */}
+      {isExcludedModalOpen && selectedStructure && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto"
+          onClick={() => setIsExcludedModalOpen(false)}
+          dir="rtl"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-right space-y-4"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h3 className="font-black text-slate-900 dark:text-white text-base flex items-center gap-2">
+                  <RotateCcw className="w-4 h-4 text-amber-500" />
+                  <span>السطور المحذوفة من هيكل "{selectedStructure.title}"</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  ملفات هؤلاء الطلاب ما زالت محفوظة بالكامل على المنصة، ويمكنك استعادة سطر أي طالب لهذا الهيكل بنقرة واحدة
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExcludedModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {excludedStudentsInStructure.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-400">
+                لا توجد سطور محذوفة حالياً من هذا الهيكل.
+              </div>
+            ) : (
+              <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-2xl">
+                {excludedStudentsInStructure.map((st) => (
+                  <div
+                    key={st.id}
+                    className="px-3.5 py-2.5 flex items-center justify-between gap-2 text-xs bg-white dark:bg-slate-900"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-900 dark:text-white truncate">{st.name}</div>
+                      <div className="text-[10px] text-slate-400 font-mono">
+                        {st.studentId} • {st.grade}{st.track ? ` • ${st.track}` : ''}
+                      </div>
+                    </div>
+                    {onRestoreStudentsToStructure && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await onRestoreStudentsToStructure(selectedStructure, [st.id]);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-bold text-[11px] cursor-pointer shrink-0"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>استعادة للهيكل</span>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+              {excludedStudentsInStructure.length > 0 && onRestoreStudentsToStructure ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await onRestoreStudentsToStructure(selectedStructure);
+                    setIsExcludedModalOpen(false);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-black text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-xl cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>استعادة كل السطور ({excludedStudentsInStructure.length})</span>
+                </button>
+              ) : (
+                <span />
+              )}
+              <button
+                type="button"
+                onClick={() => setIsExcludedModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -71,6 +71,8 @@ import {
   saveStudentStructureProgress,
   saveBatchStudentStructureProgress,
   deleteStudentStructureProgress,
+  deleteStudentsFromStructure,
+  restoreStudentsToStructure,
   seedSampleData,
   clearAllData,
   DEFAULT_SETTINGS,
@@ -1505,9 +1507,9 @@ export default function App() {
       isOpen: true,
       title: isImp ? 'حذف محاولة تحسين من الهيكل' : 'حذف سجل الطالب في الهيكل',
       message: isImp
-        ? `هل أنت متأكد من حذف محاولة التحسين رقم (${progress.attemptNumber || 2}) للطالب "${progress.studentName}" في هيكل "${progress.structureTitle}"؟ سيتم حذف هذه المحاولة نهائياً مع الإبقاء على المحاولات السابقة.`
-        : `هل أنت متأكد من حذف سجل الطالب "${progress.studentName}" من هيكل "${progress.structureTitle}"؟ سيتم حذف كافة درجات الأسئلة المسجلة في هذا السجل.`,
-      confirmText: isImp ? 'حذف المحاولة' : 'تأكيد الحذف',
+        ? `هل أنت متأكد من حذف محاولة التحسين رقم (${progress.attemptNumber || 2}) للطالب "${progress.studentName}" في هيكل "${progress.structureTitle}"؟ سيتم حذف هذه المحاولة من هذا الهيكل فقط مع بقاء ملف الطالب وباقي بياناته على المنصة.`
+        : `هل أنت متأكد من حذف سجل الطالب "${progress.studentName}" من هيكل "${progress.structureTitle}"؟ سيتم مسح درجات هذا السجل من الهيكل فقط ولن يتم حذف ملف الطالب من المنصة.`,
+      confirmText: isImp ? 'حذف المحاولة' : 'مسح الدرجات فقط',
       cancelText: 'تراجع',
       isDestructive: true,
       onConfirm: async () => {
@@ -1516,7 +1518,7 @@ export default function App() {
           addToast(
             isImp
               ? 'تم حذف محاولة التحسين من الهيكل بنجاح'
-              : 'تم حذف سجل الطالب من الهيكل بنجاح'
+              : 'تم مسح درجات الطالب من الهيكل بنجاح (ملف الطالب باقٍ على المنصة)'
           );
         } catch (err) {
           console.error('Delete structure progress error:', err);
@@ -1524,6 +1526,48 @@ export default function App() {
         }
       },
     });
+  };
+
+  const handleDeleteStudentsFromStructure = async (
+    structure: ExamStructure,
+    studentsToRemove: Student[]
+  ) => {
+    if (!studentsToRemove || studentsToRemove.length === 0) return;
+    try {
+      await deleteStudentsFromStructure(
+        structure.id,
+        studentsToRemove.map((s) => s.id)
+      );
+      if (studentsToRemove.length === 1) {
+        addToast(
+          `تم حذف سطر الطالب "${studentsToRemove[0].name}" من هيكل "${structure.title}" فقط (ملف الطالب وبياناته على المنصة لم تتأثر)`
+        );
+      } else {
+        addToast(
+          `تم حذف سطور (${studentsToRemove.length}) طلاب من هيكل "${structure.title}" فقط (ملفاتهم وبياناتهم على المنصة باقية كما هي)`
+        );
+      }
+    } catch (err) {
+      console.error('Delete students from structure error:', err);
+      addToast('تعذر حذف سطر الطالب من الهيكل', 'error');
+    }
+  };
+
+  const handleRestoreStudentsToStructure = async (
+    structure: ExamStructure,
+    studentDocIds?: string[]
+  ) => {
+    try {
+      await restoreStudentsToStructure(structure.id, studentDocIds);
+      addToast(
+        studentDocIds && studentDocIds.length === 1
+          ? `تمت استعادة سطر الطالب إلى هيكل "${structure.title}" بنجاح`
+          : `تمت استعادة سطور الطلاب إلى هيكل "${structure.title}" بنجاح`
+      );
+    } catch (err) {
+      console.error('Restore students to structure error:', err);
+      addToast('تعذر استعادة سطر الطالب إلى الهيكل', 'error');
+    }
   };
 
   /* =======================================================
@@ -2837,6 +2881,8 @@ export default function App() {
               onSaveProgress={handleSaveStructureProgress}
               onSaveBatchProgress={handleSaveBatchStructureProgress}
               onDeleteProgress={handleDeleteStructureProgress}
+              onDeleteStudentsFromStructure={handleDeleteStudentsFromStructure}
+              onRestoreStudentsToStructure={handleRestoreStudentsToStructure}
               onOpenStudentProfile={handleOpenStudentProfile}
             />
           )}

@@ -87,6 +87,7 @@
         "date": { "type": "string" },
         "totalQuestions": { "type": "number" },
         "questions": { "type": "array" },
+        "excludedStudentIds": { "type": "array" },
         "notes": { "type": "string" },
         "createdAt": { "type": "string" },
         "updatedAt": { "type": "string" }
