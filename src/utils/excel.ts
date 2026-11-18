@@ -12,6 +12,12 @@ import {
 } from '../types';
 import { calculateStudentStats } from './grading';
 import { getEffectiveEnrollmentStatus, ENROLLMENT_STATUS_META, getEffectiveEnrollmentNote } from './studentStatus';
+import {
+  StructureStatusFilter,
+  getEffectiveStructureStatus,
+  getStructureStatusLabel,
+  getStructureCompletionFilterLabel,
+} from './structureStatus';
 
 export interface ExcelLayoutAndChartOptions {
   includeChart?: boolean;       // تضمين الرسم البياني للدرجات في التقرير (افتراضي: true)
@@ -1589,6 +1595,7 @@ export interface StructuresExportFilterOptions extends ExportFilterOptions {
   structureId?: string;
   structureIds?: string[]; // تحديد هيكل معين أو مجموعة هياكل محددة
   structureLimit?: number; // تحديد عدد معين من الهياكل
+  structureCompletionStatus?: StructureStatusFilter; // 'all' | 'ongoing' | 'completed'
 }
 
 /**
@@ -1608,6 +1615,11 @@ export function exportStructuresReportExcel(
 
   // 1. تطبيق فلاتر الهياكل وسجلات الطلاب بنفس منطق exportCustomAcademicExcel
   let filteredStructures = [...structures];
+  if (customOptions.structureCompletionStatus && customOptions.structureCompletionStatus !== 'all') {
+    filteredStructures = filteredStructures.filter(
+      (s) => getEffectiveStructureStatus(s) === customOptions.structureCompletionStatus
+    );
+  }
   if (customOptions.structureId && customOptions.structureId !== 'الكل') {
     filteredStructures = filteredStructures.filter((s) => s.id === customOptions.structureId);
   }
@@ -1723,6 +1735,10 @@ export function exportStructuresReportExcel(
   const structuresForSheet = targetStructures.length > 0 ? targetStructures : filteredStructures;
   const structMap = new Map(structures.map((s) => [s.id, s]));
 
+  const structStatusFilterLabel = getStructureCompletionFilterLabel(
+    customOptions.structureCompletionStatus
+  );
+
   // ═══════════════════════════════════════════════════════════════════
   // SHEET 1: ملخص أداء الهياكل والطلاب (نفس تقسيم "ملخص أداء الطلاب")
   // ═══════════════════════════════════════════════════════════════════
@@ -1730,7 +1746,7 @@ export function exportStructuresReportExcel(
     [titleHeader, '', '', '', '', ''],
     ['تاريخ الاستخراج:', new Date().toLocaleDateString('ar-EG'), 'نطاق التقرير:', customOptions.filterLabel || periodLabel, 'وضع التنسيق:', isMobile ? '📱 وضع الهاتف المدمج' : '💻 الوضع المكتبي'],
     ['الصف / المسار:', `${customOptions.grade || 'كافة الصفوف'} (${trackLabel})`, 'المادة / السنة:', `${customOptions.subject || 'كافة المواد'} • ${customOptions.academicYear || 'كل السنوات'}`, 'الفصل الدراسي (الترم):', termLabel],
-    ['حالة ملفات الطلاب:', statusLabel, 'الهياكل المشمولة:', `${structuresForSheet.length} هيكل`, 'سجلات الطلاب:', `${filteredProgress.length} سجل`],
+    ['حالة ملفات الطلاب:', statusLabel, 'نطاق حالة الهياكل:', `${structStatusFilterLabel} (${structuresForSheet.length} هيكل)`, 'سجلات الطلاب:', `${filteredProgress.length} سجل`],
     [''],
   ];
 
@@ -1747,7 +1763,7 @@ export function exportStructuresReportExcel(
         'م',
         'اسم الطالب والصف/المسار',
         'حالة الملف والمحاولة',
-        'الهيكل والمحلول %',
+        'الهيكل وحالته والمحلول %',
         'الرسم البياني لنسبة الصحة',
         'التقييم وملاحظات الهيكل',
       ]
@@ -1757,6 +1773,7 @@ export function exportStructuresReportExcel(
         'الصف / المسار',
         'حالة الملف بالكورس',
         'اسم الهيكل',
+        'حالة الهيكل (مستمر / منتهي)',
         'نوع المحاولة / التحسين',
         'الفصل / السنة / المادة',
         'الأسئلة المحلولة والإنجاز %',
@@ -1770,10 +1787,12 @@ export function exportStructuresReportExcel(
       ? [
           isMobile
             ? ['-', 'لا توجد سجلات طلاب مرصودة ضمن الفلاتر المحددة', '-', '-', '⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%', 'يرجى رصد حلول الطلاب في قسم الهياكل']
-            : ['-', 'لا توجد سجلات طلاب مرصودة ضمن الفلاتر المحددة', '-', '-', '-', '-', '-', '0 / 0', '0%', '⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%', '-'],
+            : ['-', 'لا توجد سجلات طلاب مرصودة ضمن الفلاتر المحددة', '-', '-', '-', '-', '-', '-', '0 / 0', '0%', '⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%', '-'],
         ]
       : sortedFilteredProgress.map((rec, idx) => {
           const st = studentMap.get(rec.studentDocId);
+          const structMeta = structMap.get(rec.structureId);
+          const structStatusText = getStructureStatusLabel(structMeta, true);
           const stStatus = st
             ? ENROLLMENT_STATUS_META[getEffectiveEnrollmentStatus(st)]?.shortLabel || 'فعال'
             : 'فعال';
@@ -1791,7 +1810,7 @@ export function exportStructuresReportExcel(
               idx + 1,
               `${rec.studentName} (${rec.grade} • ${rec.track})`,
               `${stStatus} | ${attemptText}`,
-              `${rec.structureTitle} | ${rec.solvedCount}/${rec.totalQuestions} (${rec.completionPercentage}%)`,
+              `${rec.structureTitle} (${structStatusText}) | ${rec.solvedCount}/${rec.totalQuestions} (${rec.completionPercentage}%)`,
               buildVisualScoreBar(rec.overallAccuracyPercentage, true),
               `${rating} - ${perfNote}`,
             ];
@@ -1803,6 +1822,7 @@ export function exportStructuresReportExcel(
             `${rec.grade} (${rec.track})`,
             stStatus,
             rec.structureTitle,
+            structStatusText,
             attemptText,
             `${rec.term} • ${rec.academicYear} • ${rec.subject}`,
             `${rec.solvedCount} / ${rec.totalQuestions} (${rec.completionPercentage}%)`,
@@ -1817,7 +1837,7 @@ export function exportStructuresReportExcel(
   applyWorksheetFormatting(
     wsSummary,
     allSummaryRows.length,
-    isMobile ? [5, 26, 22, 24, 26, 36] : [6, 24, 20, 16, 24, 28, 24, 18, 16, 28, 40],
+    isMobile ? [5, 26, 22, 28, 26, 36] : [6, 24, 20, 16, 24, 24, 28, 24, 18, 16, 28, 40],
     [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }],
     isMobile
   );
@@ -1852,7 +1872,7 @@ export function exportStructuresReportExcel(
 
       detailedReportRows.push([
         `══════ [ ${idx + 1}. الطالب: ${rec.studentName} ] ══════`,
-        `الهيكل: ${rec.structureTitle}`,
+        `الهيكل: ${rec.structureTitle} (${getStructureStatusLabel(structMeta, true)})`,
         `${attemptSummary} | حالة الملف: ${stStatus}`,
         `متوسط الصحة: ${rec.overallAccuracyPercentage}%`,
       ]);
@@ -1946,6 +1966,7 @@ export function exportStructuresReportExcel(
 
       detailMatrixRows.push([
         `الهيكل: ${struct.title}`,
+        `حالة الهيكل: ${getStructureStatusLabel(struct)}`,
         `الصف: ${struct.grade}`,
         `الفصل: ${struct.term}`,
         `المسار: ${struct.track}`,

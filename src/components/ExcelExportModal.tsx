@@ -33,6 +33,11 @@ import {
   saveExcelPreferences,
 } from '../utils/excel';
 import { getEffectiveEnrollmentStatus } from '../utils/studentStatus';
+import {
+  StructureStatusFilter,
+  getEffectiveStructureStatus,
+  STRUCTURE_STATUS_META,
+} from '../utils/structureStatus';
 import { ACADEMIC_TERMS, ACADEMIC_TRACKS, ACADEMIC_YEARS } from '../services/firebase';
 
 export type ExcelExportModalMode = 'academic_reports' | 'structures_reports' | 'all_data';
@@ -61,6 +66,7 @@ interface ExcelExportModalProps {
   defaultStructureSelectionMode?: SelectionScopeMode;
   defaultStructureLimit?: number;
   defaultSelectedStructureIds?: string[];
+  defaultStructureCompletionStatus?: StructureStatusFilter;
 }
 
 const MODAL_STATE_KEY = 'mh_excel_modal_saved_filters_v2';
@@ -88,6 +94,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   defaultStructureSelectionMode,
   defaultStructureLimit,
   defaultSelectedStructureIds,
+  defaultStructureCompletionStatus,
 }) => {
   const initialPrefs = useMemo(() => getSavedExcelPreferences(), []);
 
@@ -244,6 +251,18 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
 
   const [structureSearchQuery, setStructureSearchQuery] = useState('');
   const [structureQuickSelectCount, setStructureQuickSelectCount] = useState<number>(3);
+  const [structureCompletionFilter, setStructureCompletionFilter] = useState<StructureStatusFilter>(() => {
+    if (defaultStructureCompletionStatus) return defaultStructureCompletionStatus;
+    try {
+      const saved = JSON.parse(localStorage.getItem(MODAL_STATE_KEY) || '{}');
+      if (saved.structureCompletionFilter === 'ongoing' || saved.structureCompletionFilter === 'completed') {
+        return saved.structureCompletionFilter;
+      }
+      return 'all';
+    } catch {
+      return 'all';
+    }
+  });
 
   const [exportMode, setExportMode] = useState<ExcelExportModalMode>(() => {
     if (defaultExportMode) return defaultExportMode;
@@ -293,6 +312,9 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     if (defaultStructureLimit && defaultStructureLimit > 0) {
       setStructureLimit(defaultStructureLimit);
     }
+    if (defaultStructureCompletionStatus) {
+      setStructureCompletionFilter(defaultStructureCompletionStatus);
+    }
   }, [
     isOpen,
     defaultExportMode,
@@ -309,6 +331,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     defaultStructureSelectionMode,
     defaultStructureLimit,
     defaultSelectedStructureIds,
+    defaultStructureCompletionStatus,
   ]);
 
   // Chart & Layout preferences
@@ -354,6 +377,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
           structureSelectionMode,
           structureLimit,
           selectedStructureIds,
+          structureCompletionFilter,
         })
       );
     } catch {
@@ -376,6 +400,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     structureSelectionMode,
     structureLimit,
     selectedStructureIds,
+    structureCompletionFilter,
   ]);
 
   const handleResetAll = () => {
@@ -393,6 +418,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     setStructureLimit(3);
     setSelectedStructureIds([]);
     setStructureSearchQuery('');
+    setStructureCompletionFilter('all');
     setEnrollmentStatusFilter('exclude_completed');
     setStartDate('');
     setEndDate('');
@@ -451,8 +477,8 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   const studentByIdMap = useMemo(() => new Map(students.map(s => [s.id, s])), [students]);
   const examMap = useMemo(() => new Map(exams.map(e => [e.id, e])), [exams]);
 
-  // Base structures matching metadata filters (before structure count/specific selection)
-  const baseMatchingStructures = useMemo(() => {
+  // Base structures matching metadata filters (before structureCompletionFilter & count/specific)
+  const metadataMatchingStructures = useMemo(() => {
     return structures.filter(st => {
       if (selectedGrade !== 'الكل' && st.grade !== selectedGrade) return false;
       if (selectedTerm !== 'الكل' && st.term !== selectedTerm) return false;
@@ -462,6 +488,28 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
       return true;
     });
   }, [structures, selectedGrade, selectedTerm, selectedTrack, selectedAcademicYear, selectedSubject]);
+
+  const structureCompletionCounts = useMemo(() => {
+    let ongoing = 0;
+    let completed = 0;
+    metadataMatchingStructures.forEach(st => {
+      if (getEffectiveStructureStatus(st) === 'completed') completed += 1;
+      else ongoing += 1;
+    });
+    return {
+      all: metadataMatchingStructures.length,
+      ongoing,
+      completed,
+    };
+  }, [metadataMatchingStructures]);
+
+  // Base structures matching metadata filters + structureCompletionFilter (all / ongoing / completed)
+  const baseMatchingStructures = useMemo(() => {
+    if (structureCompletionFilter === 'all') return metadataMatchingStructures;
+    return metadataMatchingStructures.filter(
+      st => getEffectiveStructureStatus(st) === structureCompletionFilter
+    );
+  }, [metadataMatchingStructures, structureCompletionFilter]);
 
   // Effective structures after applying structureSelectionMode (all / count / specific)
   const effectiveStructuresList = useMemo(() => {
@@ -704,6 +752,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
           academicYear: selectedAcademicYear,
           subject: selectedSubject,
           group: selectedGroup,
+          structureCompletionStatus: structureCompletionFilter,
           structureId:
             exportStructureIds && exportStructureIds.length === 1
               ? exportStructureIds[0]
@@ -1112,39 +1161,108 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
               </div>
             </div>
 
-            {/* Extra Filters for Structures (Track, Year) */}
+            {/* Extra Filters for Structures (Track, Year, Completion Status) */}
             {exportMode === 'structures_reports' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    المسار الدراسي:
-                  </label>
-                  <select
-                    value={selectedTrack}
-                    onChange={(e) => setSelectedTrack(e.target.value)}
-                    className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
-                  >
-                    <option value="الكل">كافة المسارات</option>
-                    {availableTracks.map((tr) => (
-                      <option key={tr} value={tr}>{tr}</option>
-                    ))}
-                  </select>
+              <div className="space-y-3 pt-2 border-t border-slate-200/80 dark:border-slate-700/80">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                      المسار الدراسي:
+                    </label>
+                    <select
+                      value={selectedTrack}
+                      onChange={(e) => setSelectedTrack(e.target.value)}
+                      className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
+                    >
+                      <option value="الكل">كافة المسارات</option>
+                      {availableTracks.map((tr) => (
+                        <option key={tr} value={tr}>{tr}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                      السنة الدراسية:
+                    </label>
+                    <select
+                      value={selectedAcademicYear}
+                      onChange={(e) => setSelectedAcademicYear(e.target.value)}
+                      className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-mono font-bold cursor-pointer"
+                    >
+                      <option value="الكل">كل السنوات</option>
+                      {availableYears.map((yr) => (
+                        <option key={yr} value={yr}>{yr}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                    السنة الدراسية:
-                  </label>
-                  <select
-                    value={selectedAcademicYear}
-                    onChange={(e) => setSelectedAcademicYear(e.target.value)}
-                    className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-mono font-bold cursor-pointer"
-                  >
-                    <option value="الكل">كل السنوات</option>
-                    {availableYears.map((yr) => (
-                      <option key={yr} value={yr}>{yr}</option>
-                    ))}
-                  </select>
+                {/* Structure Completion Status Filter (Ongoing vs Completed vs All) */}
+                <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700/80 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span>تصفية الهياكل حسب الحالة (مستمر / منتهي):</span>
+                  </span>
+                  <div className="inline-flex flex-wrap bg-slate-100 dark:bg-slate-800 p-1 rounded-xl gap-1 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setStructureCompletionFilter('all')}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
+                        structureCompletionFilter === 'all'
+                          ? 'bg-amber-500 text-slate-950 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
+                      }`}
+                    >
+                      جميع الهياكل ({structureCompletionCounts.all})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStructureCompletionFilter('ongoing');
+                        setSelectedStructureIds(prev => {
+                          const kept = prev.filter(id => {
+                            const st = metadataMatchingStructures.find(s => s.id === id);
+                            return st ? getEffectiveStructureStatus(st) === 'ongoing' : false;
+                          });
+                          if (kept.length === 0 && structureSelectionMode === 'specific') {
+                            setStructureSelectionMode('all');
+                          }
+                          return kept;
+                        });
+                      }}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
+                        structureCompletionFilter === 'ongoing'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
+                      }`}
+                    >
+                      مستمرة وجاري الدراسة ({structureCompletionCounts.ongoing})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStructureCompletionFilter('completed');
+                        setSelectedStructureIds(prev => {
+                          const kept = prev.filter(id => {
+                            const st = metadataMatchingStructures.find(s => s.id === id);
+                            return st ? getEffectiveStructureStatus(st) === 'completed' : false;
+                          });
+                          if (kept.length === 0 && structureSelectionMode === 'specific') {
+                            setStructureSelectionMode('all');
+                          }
+                          return kept;
+                        });
+                      }}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
+                        structureCompletionFilter === 'completed'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
+                      }`}
+                    >
+                      منتهية وتم الامتحان ({structureCompletionCounts.completed})
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -1298,6 +1416,8 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                       ) : (
                         searchableStructuresList.map((st) => {
                           const checked = selectedStructureIds.includes(st.id);
+                          const stStatus = getEffectiveStructureStatus(st);
+                          const stMeta = STRUCTURE_STATUS_META[stStatus];
                           return (
                             <label
                               key={st.id}
@@ -1316,6 +1436,11 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                                 />
                                 <span className="font-bold text-slate-900 dark:text-white truncate">
                                   {st.title}
+                                </span>
+                                <span
+                                  className={`px-1.5 py-0.5 rounded border text-[9px] font-bold shrink-0 ${stMeta.badgeClass}`}
+                                >
+                                  {stMeta.shortLabel}
                                 </span>
                               </div>
                               <span className="text-[10px] text-slate-500 dark:text-slate-400 shrink-0">
