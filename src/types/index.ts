@@ -174,7 +174,7 @@ export interface StructureQuestionItem {
   notes?: string;
 }
 
-export type StructureCompletionStatus = 'ongoing' | 'completed';
+export type StructureCompletionStatus = 'ongoing' | 'studied_not_examined' | 'completed';
 
 export interface ExamStructure {
   id: string;
@@ -187,8 +187,8 @@ export interface ExamStructure {
   subject: string; // المادة
   group?: string; // الشعبة / المجموعة أو الكل
   date?: string; // تاريخ اعتماد أو إضافة الهيكل
-  completionStatus?: StructureCompletionStatus; // 'ongoing' = مستمر وجاري الدراسة (افتراضي) | 'completed' = انتهى وتم امتحان المادة
-  completedAt?: string; // تاريخ انتهاء الهيكل أو امتحان المادة (اختياري)
+  completionStatus?: StructureCompletionStatus; // 'ongoing' = مستمر وجاري الدراسة | 'studied_not_examined' = منتهي دراسته ولم يُمتحن بعد | 'completed' = انتهى وتم امتحان المادة
+  completedAt?: string; // تاريخ انتهاء دراسة الهيكل أو امتحان المادة (اختياري)
   totalQuestions: number; // إجمالي عدد الأسئلة في الهيكل
   questions: StructureQuestionItem[]; // تفاصيل أسئلة الهيكل (س1 .. سN)
   excludedStudentIds?: string[]; // معرفات الطلاب المحذوف سطرهم من هذا الهيكل فقط (دون حذف ملفهم من المنصة)

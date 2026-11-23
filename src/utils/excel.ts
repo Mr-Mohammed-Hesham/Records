@@ -1595,7 +1595,7 @@ export interface StructuresExportFilterOptions extends ExportFilterOptions {
   structureId?: string;
   structureIds?: string[]; // تحديد هيكل معين أو مجموعة هياكل محددة
   structureLimit?: number; // تحديد عدد معين من الهياكل
-  structureCompletionStatus?: StructureStatusFilter; // 'all' | 'ongoing' | 'completed'
+  structureCompletionStatus?: StructureStatusFilter; // 'all' | 'ongoing' | 'studied_not_examined' | 'completed'
 }
 
 /**
@@ -1773,7 +1773,7 @@ export function exportStructuresReportExcel(
         'الصف / المسار',
         'حالة الملف بالكورس',
         'اسم الهيكل',
-        'حالة الهيكل (مستمر / منتهي)',
+        'حالة الهيكل (مستمر / منتهي دراسة / تم الامتحان)',
         'نوع المحاولة / التحسين',
         'الفصل / السنة / المادة',
         'الأسئلة المحلولة والإنجاز %',

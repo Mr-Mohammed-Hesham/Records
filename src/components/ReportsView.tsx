@@ -10,6 +10,7 @@ import {
   Filter,
   CheckCircle2,
   Clock,
+  BookOpenCheck,
   Printer,
   GraduationCap,
   TrendingUp,
@@ -453,14 +454,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   const reportStructureCompletionCounts = useMemo(() => {
     let ongoing = 0;
+    let studiedNotExamined = 0;
     let completed = 0;
     reportStructuresBeforeCompletionFilter.forEach((st) => {
-      if (getEffectiveStructureStatus(st) === 'completed') completed += 1;
+      const eff = getEffectiveStructureStatus(st);
+      if (eff === 'completed') completed += 1;
+      else if (eff === 'studied_not_examined') studiedNotExamined += 1;
       else ongoing += 1;
     });
     return {
       all: reportStructuresBeforeCompletionFilter.length,
       ongoing,
+      studiedNotExamined,
       completed,
     };
   }, [reportStructuresBeforeCompletionFilter]);
@@ -2351,7 +2356,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             <div className="col-span-2 sm:col-span-5 pt-2 border-t border-slate-200/80 dark:border-slate-700/80 flex flex-wrap items-center justify-between gap-2">
               <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-amber-500" />
-                <span>تصفية حسب حالة الهيكل (مستمر / منتهي وتم الامتحان):</span>
+                <span>تصفية حسب حالة الهيكل:</span>
               </span>
               <div className="inline-flex flex-wrap items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px]">
                 <button
@@ -2376,6 +2381,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 >
                   <Clock className="w-3 h-3" />
                   <span>مستمر وجاري الدراسة ({reportStructureCompletionCounts.ongoing})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStructureCompletionStatus('studied_not_examined')}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                    selectedStructureCompletionStatus === 'studied_not_examined'
+                      ? 'bg-amber-600 text-white'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <BookOpenCheck className="w-3 h-3" />
+                  <span>منتهي دراسة ولم يُمتحن ({reportStructureCompletionCounts.studiedNotExamined})</span>
                 </button>
                 <button
                   type="button"

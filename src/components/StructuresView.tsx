@@ -22,6 +22,7 @@ import {
   UserMinus,
   CheckCircle2,
   Clock,
+  BookOpenCheck,
   TrendingUp,
   ChevronDown,
   ChevronUp,
@@ -49,8 +50,10 @@ import {
 } from '../utils/studentStatus';
 import {
   StructureStatusFilter,
+  STRUCTURE_STATUS_ORDER,
   STRUCTURE_STATUS_META,
   getEffectiveStructureStatus,
+  getNextStructureStatus,
   getStructureStatusLabel,
 } from '../utils/structureStatus';
 import {
@@ -143,6 +146,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
   const [filterStatus, setFilterStatus] = useState(initialPersisted.filterStatus);
   const [filterCompletionStatus, setFilterCompletionStatus] = useState<StructureStatusFilter>(
     initialPersisted.filterCompletionStatus === 'ongoing' ||
+      initialPersisted.filterCompletionStatus === 'studied_not_examined' ||
       initialPersisted.filterCompletionStatus === 'completed'
       ? initialPersisted.filterCompletionStatus
       : 'all'
@@ -431,14 +435,18 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
 
   const structureCompletionCounts = useMemo(() => {
     let ongoing = 0;
+    let studiedNotExamined = 0;
     let completed = 0;
     metadataFilteredStructures.forEach((st) => {
-      if (getEffectiveStructureStatus(st) === 'completed') completed += 1;
+      const eff = getEffectiveStructureStatus(st);
+      if (eff === 'completed') completed += 1;
+      else if (eff === 'studied_not_examined') studiedNotExamined += 1;
       else ongoing += 1;
     });
     return {
       all: metadataFilteredStructures.length,
       ongoing,
+      studiedNotExamined,
       completed,
     };
   }, [metadataFilteredStructures]);
@@ -524,6 +532,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
       totalAllStructures: structures.length,
       matchingMetadataCount: structureCompletionCounts.all,
       ongoingCount: structureCompletionCounts.ongoing,
+      studiedNotExaminedCount: structureCompletionCounts.studiedNotExamined,
       completedCount: structureCompletionCounts.completed,
       filteredCount: filteredStructures.length,
       overallCompletionPct,
@@ -556,17 +565,18 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
     setStructureSortBy('newest');
   };
 
-  const handleToggleStructureCompletionStatus = async (st: ExamStructure) => {
+  const handleChangeStructureCompletionStatus = async (
+    st: ExamStructure,
+    nextStatus: StructureCompletionStatus
+  ) => {
     if (togglingStructureId === st.id) return;
-    const currentStatus = getEffectiveStructureStatus(st);
-    const nextStatus: StructureCompletionStatus =
-      currentStatus === 'completed' ? 'ongoing' : 'completed';
+    if (getEffectiveStructureStatus(st) === nextStatus) return;
     const today = new Date().toISOString().split('T')[0];
     setTogglingStructureId(st.id);
     try {
       await onUpdateStructure(st.id, {
         completionStatus: nextStatus,
-        completedAt: nextStatus === 'completed' ? st.completedAt || today : '',
+        completedAt: nextStatus === 'ongoing' ? '' : st.completedAt || today,
         updatedAt: new Date().toISOString(),
       });
     } finally {
@@ -1001,7 +1011,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
       {/* Overview Statistical Cards (Interactive KPI Strip for Structures Tab) */}
       {structures.length > 0 && (
         <div className="space-y-3">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <button
               type="button"
               onClick={() => setFilterCompletionStatus('all')}
@@ -1074,6 +1084,46 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             <button
               type="button"
               onClick={() =>
+                setFilterCompletionStatus((prev) =>
+                  prev === 'studied_not_examined' ? 'all' : 'studied_not_examined'
+                )
+              }
+              className={`p-3.5 sm:p-4 rounded-2xl border text-right transition cursor-pointer ${
+                filterCompletionStatus === 'studied_not_examined'
+                  ? 'bg-amber-50/90 dark:bg-amber-950/35 border-amber-500 dark:border-amber-700'
+                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-amber-300 dark:hover:border-amber-800'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                  منتهي دراسة (لم يُمتحن)
+                </span>
+                <BookOpenCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              </div>
+              <div className="mt-1.5 flex items-baseline gap-2">
+                <span className="text-2xl font-black text-amber-600 dark:text-amber-400 font-mono tabular-nums">
+                  {globalStructuresSummary.studiedNotExaminedCount}
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+                  (
+                  {globalStructuresSummary.matchingMetadataCount > 0
+                    ? Math.round(
+                        (globalStructuresSummary.studiedNotExaminedCount /
+                          globalStructuresSummary.matchingMetadataCount) *
+                          100
+                      )
+                    : 0}
+                  %)
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
+                بانتظار الامتحان · اضغط للفرز
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
                 setFilterCompletionStatus((prev) => (prev === 'completed' ? 'all' : 'completed'))
               }
               className={`p-3.5 sm:p-4 rounded-2xl border text-right transition cursor-pointer ${
@@ -1084,7 +1134,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                  الهياكل المنتهية
+                  منتهي وتم الامتحان
                 </span>
                 <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
               </div>
@@ -1112,7 +1162,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             <button
               type="button"
               onClick={() => setShowCompletionBreakdownPanel((prev) => !prev)}
-              className={`p-3.5 sm:p-4 rounded-2xl border text-right transition cursor-pointer ${
+              className={`col-span-2 sm:col-span-2 lg:col-span-1 p-3.5 sm:p-4 rounded-2xl border text-right transition cursor-pointer ${
                 showCompletionBreakdownPanel
                   ? 'bg-slate-100/90 dark:bg-slate-800 border-amber-500'
                   : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-700'
@@ -1211,11 +1261,15 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                 className={`inline-flex items-center gap-1 text-[11px] font-bold ${
                                   effStatus === 'completed'
                                     ? 'text-indigo-600 dark:text-indigo-400'
+                                    : effStatus === 'studied_not_examined'
+                                    ? 'text-amber-600 dark:text-amber-400'
                                     : 'text-emerald-600 dark:text-emerald-400'
                                 }`}
                               >
                                 {effStatus === 'completed' ? (
                                   <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                                ) : effStatus === 'studied_not_examined' ? (
+                                  <BookOpenCheck className="w-3.5 h-3.5 shrink-0" />
                                 ) : (
                                   <Clock className="w-3.5 h-3.5 shrink-0" />
                                 )}
@@ -1382,6 +1436,18 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
               </button>
               <button
                 type="button"
+                onClick={() => setFilterCompletionStatus('studied_not_examined')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
+                  filterCompletionStatus === 'studied_not_examined'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
+                }`}
+              >
+                <BookOpenCheck className="w-3.5 h-3.5 shrink-0" />
+                <span>منتهي دراسته ولم يُمتحن ({structureCompletionCounts.studiedNotExamined})</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setFilterCompletionStatus('completed')}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
                   filterCompletionStatus === 'completed'
@@ -1509,7 +1575,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                   const avgAcc = Math.round(cardCohortStats?.avgAccuracyPct ?? 0);
                   const effCompStatus = getEffectiveStructureStatus(st);
                   const compMeta = STRUCTURE_STATUS_META[effCompStatus];
-                  const isCompleted = effCompStatus === 'completed';
+                  const nextCompStatus = getNextStructureStatus(effCompStatus);
 
                   return (
                     <div
@@ -1537,8 +1603,10 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                             <span
                               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] font-bold ${compMeta.badgeClass}`}
                             >
-                              {isCompleted ? (
+                              {effCompStatus === 'completed' ? (
                                 <CheckCircle2 className="w-3 h-3 shrink-0" />
+                              ) : effCompStatus === 'studied_not_examined' ? (
+                                <BookOpenCheck className="w-3 h-3 shrink-0" />
                               ) : (
                                 <Clock className="w-3 h-3 shrink-0" />
                               )}
@@ -1557,20 +1625,20 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                           <button
                             type="button"
                             disabled={togglingStructureId === st.id}
-                            onClick={() => handleToggleStructureCompletionStatus(st)}
+                            onClick={() => handleChangeStructureCompletionStatus(st, nextCompStatus)}
                             className={`p-1.5 rounded-lg cursor-pointer transition disabled:opacity-50 ${
-                              isCompleted
+                              effCompStatus === 'completed'
                                 ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60'
+                                : effCompStatus === 'studied_not_examined'
+                                ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60'
                                 : 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
                             }`}
-                            title={
-                              isCompleted
-                                ? 'تم امتحان المادة — اضغط لإرجاعه إلى «مستمر وجاري الدراسة»'
-                                : 'مستمر وجاري الدراسة — اضغط لتحديده كـ «انتهى وتم امتحان المادة»'
-                            }
+                            title={`${compMeta.label} — اضغط للتبديل إلى «${STRUCTURE_STATUS_META[nextCompStatus].label}»`}
                           >
-                            {isCompleted ? (
+                            {effCompStatus === 'completed' ? (
                               <CheckCircle2 className="w-3.5 h-3.5" />
+                            ) : effCompStatus === 'studied_not_examined' ? (
+                              <BookOpenCheck className="w-3.5 h-3.5" />
                             ) : (
                               <Clock className="w-3.5 h-3.5" />
                             )}
@@ -1674,6 +1742,8 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                             >
                               {selStatus === 'completed' ? (
                                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                              ) : selStatus === 'studied_not_examined' ? (
+                                <BookOpenCheck className="w-3.5 h-3.5 shrink-0" />
                               ) : (
                                 <Clock className="w-3.5 h-3.5 shrink-0" />
                               )}
@@ -1702,29 +1772,37 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        disabled={togglingStructureId === selectedStructure.id}
-                        onClick={() => handleToggleStructureCompletionStatus(selectedStructure)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border transition cursor-pointer disabled:opacity-50 ${
-                          getEffectiveStructureStatus(selectedStructure) === 'completed'
-                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
-                            : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100'
-                        }`}
-                        title="تبديل حالة الهيكل بين «مستمر وجاري الدراسة» و«انتهى وتم امتحان المادة»"
-                      >
-                        {getEffectiveStructureStatus(selectedStructure) === 'completed' ? (
-                          <>
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>إعادة إلى «مستمر»</span>
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>تحديد كـ «منتهي وتم الامتحان»</span>
-                          </>
-                        )}
-                      </button>
+                      <div className="inline-flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px]">
+                        {STRUCTURE_STATUS_ORDER.map((statusKey) => {
+                          const meta = STRUCTURE_STATUS_META[statusKey];
+                          const isCurrent = getEffectiveStructureStatus(selectedStructure) === statusKey;
+                          return (
+                            <button
+                              key={statusKey}
+                              type="button"
+                              disabled={togglingStructureId === selectedStructure.id}
+                              onClick={() =>
+                                handleChangeStructureCompletionStatus(selectedStructure, statusKey)
+                              }
+                              title={meta.description}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer disabled:opacity-60 whitespace-nowrap ${
+                                isCurrent
+                                  ? meta.activeBtnClass
+                                  : 'text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-slate-700/70'
+                              }`}
+                            >
+                              {statusKey === 'completed' ? (
+                                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                              ) : statusKey === 'studied_not_examined' ? (
+                                <BookOpenCheck className="w-3.5 h-3.5 shrink-0" />
+                              ) : (
+                                <Clock className="w-3.5 h-3.5 shrink-0" />
+                              )}
+                              <span>{meta.shortLabel}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
 
                       <button
                         type="button"
@@ -3070,7 +3148,13 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
     setCustomSubject(p.customSubject || '');
     setGroup(p.group || 'الكل');
     setDate(p.date || date);
-    setCompletionStatus(p.completionStatus === 'completed' ? 'completed' : 'ongoing');
+    setCompletionStatus(
+      p.completionStatus === 'completed' ||
+        p.completionStatus === 'studied_not_examined' ||
+        p.completionStatus === 'ongoing'
+        ? p.completionStatus
+        : 'ongoing'
+    );
     setCompletedAt(p.completedAt || '');
     setTotalQuestions(p.totalQuestions || 10);
     setQuestions(p.questions || []);
@@ -3158,7 +3242,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
         date,
         completionStatus,
         completedAt:
-          completionStatus === 'completed'
+          completionStatus !== 'ongoing'
             ? completedAt || new Date().toISOString().split('T')[0]
             : '',
         totalQuestions,
@@ -3448,7 +3532,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
             <label className="block font-extrabold text-slate-800 dark:text-slate-100">
               حالة تدريس الهيكل وامتحان المادة
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <button
                 type="button"
                 onClick={() => {
@@ -3471,7 +3555,39 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                     مستمر وجاري الدراسة
                   </span>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                    الهيكل ما زال قيد التدريس ولم يُمتحن بعد
+                    الهيكل ما زال قيد التدريس ولم تنتهِ دراسته
+                  </span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  markDirty();
+                  setCompletionStatus('studied_not_examined');
+                  if (!completedAt) {
+                    setCompletedAt(new Date().toISOString().split('T')[0]);
+                  }
+                }}
+                className={`p-3 rounded-xl border text-right transition cursor-pointer flex items-start gap-2.5 ${
+                  completionStatus === 'studied_not_examined'
+                    ? 'bg-amber-50 dark:bg-amber-950/50 border-amber-500 ring-1 ring-amber-500/30'
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                }`}
+              >
+                <BookOpenCheck
+                  className={`w-4 h-4 mt-0.5 shrink-0 ${
+                    completionStatus === 'studied_not_examined'
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-slate-400'
+                  }`}
+                />
+                <div>
+                  <span className="font-black text-slate-900 dark:text-white block">
+                    منتهي دراسته ولم يُمتحن بعد
+                  </span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                    انتهى شرح الهيكل وبانتظار عقد امتحان المادة
                   </span>
                 </div>
               </button>
@@ -3507,10 +3623,12 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
               </button>
             </div>
 
-            {completionStatus === 'completed' && (
+            {completionStatus !== 'ongoing' && (
               <div className="pt-1 flex flex-wrap items-center gap-2">
                 <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                  تاريخ انتهاء الهيكل / امتحان المادة (اختياري):
+                  {completionStatus === 'studied_not_examined'
+                    ? 'تاريخ انتهاء دراسة الهيكل (اختياري):'
+                    : 'تاريخ انتهاء الهيكل / امتحان المادة (اختياري):'}
                 </label>
                 <input
                   type="date"
@@ -3519,7 +3637,11 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                     markDirty();
                     setCompletedAt(e.target.value);
                   }}
-                  className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-lg text-slate-900 dark:text-white font-mono text-xs"
+                  className={`px-2.5 py-1.5 bg-white dark:bg-slate-900 border rounded-lg text-slate-900 dark:text-white font-mono text-xs ${
+                    completionStatus === 'studied_not_examined'
+                      ? 'border-amber-300 dark:border-amber-800'
+                      : 'border-indigo-200 dark:border-indigo-800'
+                  }`}
                 />
               </div>
             )}

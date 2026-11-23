@@ -255,7 +255,11 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
     if (defaultStructureCompletionStatus) return defaultStructureCompletionStatus;
     try {
       const saved = JSON.parse(localStorage.getItem(MODAL_STATE_KEY) || '{}');
-      if (saved.structureCompletionFilter === 'ongoing' || saved.structureCompletionFilter === 'completed') {
+      if (
+        saved.structureCompletionFilter === 'ongoing' ||
+        saved.structureCompletionFilter === 'studied_not_examined' ||
+        saved.structureCompletionFilter === 'completed'
+      ) {
         return saved.structureCompletionFilter;
       }
       return 'all';
@@ -491,19 +495,23 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
 
   const structureCompletionCounts = useMemo(() => {
     let ongoing = 0;
+    let studiedNotExamined = 0;
     let completed = 0;
     metadataMatchingStructures.forEach(st => {
-      if (getEffectiveStructureStatus(st) === 'completed') completed += 1;
+      const eff = getEffectiveStructureStatus(st);
+      if (eff === 'completed') completed += 1;
+      else if (eff === 'studied_not_examined') studiedNotExamined += 1;
       else ongoing += 1;
     });
     return {
       all: metadataMatchingStructures.length,
       ongoing,
+      studiedNotExamined,
       completed,
     };
   }, [metadataMatchingStructures]);
 
-  // Base structures matching metadata filters + structureCompletionFilter (all / ongoing / completed)
+  // Base structures matching metadata filters + structureCompletionFilter (all / ongoing / studied_not_examined / completed)
   const baseMatchingStructures = useMemo(() => {
     if (structureCompletionFilter === 'all') return metadataMatchingStructures;
     return metadataMatchingStructures.filter(
@@ -1198,11 +1206,11 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                   </div>
                 </div>
 
-                {/* Structure Completion Status Filter (Ongoing vs Completed vs All) */}
+                {/* Structure Completion Status Filter (Ongoing vs Studied Not Examined vs Completed vs All) */}
                 <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700/80 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    <span>تصفية الهياكل حسب الحالة (مستمر / منتهي):</span>
+                    <span>تصفية الهياكل حسب الحالة:</span>
                   </span>
                   <div className="inline-flex flex-wrap bg-slate-100 dark:bg-slate-800 p-1 rounded-xl gap-1 text-[11px]">
                     <button
@@ -1238,6 +1246,31 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                       }`}
                     >
                       مستمرة وجاري الدراسة ({structureCompletionCounts.ongoing})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStructureCompletionFilter('studied_not_examined');
+                        setSelectedStructureIds(prev => {
+                          const kept = prev.filter(id => {
+                            const st = metadataMatchingStructures.find(s => s.id === id);
+                            return st
+                              ? getEffectiveStructureStatus(st) === 'studied_not_examined'
+                              : false;
+                          });
+                          if (kept.length === 0 && structureSelectionMode === 'specific') {
+                            setStructureSelectionMode('all');
+                          }
+                          return kept;
+                        });
+                      }}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
+                        structureCompletionFilter === 'studied_not_examined'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
+                      }`}
+                    >
+                      منتهية دراسة ولم تُمتحن ({structureCompletionCounts.studiedNotExamined})
                     </button>
                     <button
                       type="button"
