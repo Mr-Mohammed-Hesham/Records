@@ -22,6 +22,10 @@ import {
   UserMinus,
   CheckCircle2,
   Clock,
+  TrendingUp,
+  ChevronDown,
+  ChevronUp,
+  ArrowUpDown,
 } from 'lucide-react';
 import {
   Student,
@@ -116,6 +120,13 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
         filterSubject: 'الكل',
         filterStatus: 'exclude_completed',
         filterCompletionStatus: 'all' as StructureStatusFilter,
+        filterProgressLevel: 'all' as 'all' | 'completed_100' | 'in_progress' | 'not_started',
+        structureSortBy: 'newest' as
+          | 'newest'
+          | 'completion_desc'
+          | 'completion_asc'
+          | 'accuracy_desc'
+          | 'students_desc',
         studentListScope: 'matching' as 'matching' | 'all' | 'recorded_only',
         selectedStructureId: structures[0]?.id || '',
       }),
@@ -136,6 +147,26 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
       ? initialPersisted.filterCompletionStatus
       : 'all'
   );
+  const [filterProgressLevel, setFilterProgressLevel] = useState<
+    'all' | 'completed_100' | 'in_progress' | 'not_started'
+  >(
+    initialPersisted.filterProgressLevel === 'completed_100' ||
+      initialPersisted.filterProgressLevel === 'in_progress' ||
+      initialPersisted.filterProgressLevel === 'not_started'
+      ? initialPersisted.filterProgressLevel
+      : 'all'
+  );
+  const [structureSortBy, setStructureSortBy] = useState<
+    'newest' | 'completion_desc' | 'completion_asc' | 'accuracy_desc' | 'students_desc'
+  >(
+    initialPersisted.structureSortBy === 'completion_desc' ||
+      initialPersisted.structureSortBy === 'completion_asc' ||
+      initialPersisted.structureSortBy === 'accuracy_desc' ||
+      initialPersisted.structureSortBy === 'students_desc'
+      ? initialPersisted.structureSortBy
+      : 'newest'
+  );
+  const [showCompletionBreakdownPanel, setShowCompletionBreakdownPanel] = useState(false);
   const [togglingStructureId, setTogglingStructureId] = useState<string | null>(null);
   const [studentListScope, setStudentListScope] = useState<'matching' | 'all' | 'recorded_only'>(
     initialPersisted.studentListScope
@@ -204,6 +235,8 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
       filterSubject,
       filterStatus,
       filterCompletionStatus,
+      filterProgressLevel,
+      structureSortBy,
       studentListScope,
       selectedStructureId,
     });
@@ -216,6 +249,8 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
     filterSubject,
     filterStatus,
     filterCompletionStatus,
+    filterProgressLevel,
+    structureSortBy,
     studentListScope,
     selectedStructureId,
   ]);
@@ -241,6 +276,136 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
     const fromData = structures.map((s) => s.academicYear).filter(Boolean);
     return Array.from(new Set([...ACADEMIC_YEARS, ...fromData]));
   }, [structures]);
+
+  // Student map for quick lookups
+  const studentMap = useMemo(() => new Map(students.map((s) => [s.id, s])), [students]);
+
+  // Per-structure cohort completion & accuracy analytics (respecting excludedStudentIds + filterStatus)
+  const structureCohortStatsMap = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        totalQuestions: number;
+        eligibleCount: number;
+        recordedCount: number;
+        denominatorStudents: number;
+        totalSolvedQuestions: number;
+        totalExpectedQuestions: number;
+        overallCompletionPct: number;
+        recordedAvgCompletionPct: number;
+        avgAccuracyPct: number;
+      }
+    >();
+
+    // Group latest progress per structureId -> studentDocId
+    const progressByStruct = new Map<string, Map<string, StudentStructureProgress>>();
+    structureProgress.forEach((p) => {
+      let stProgMap = progressByStruct.get(p.structureId);
+      if (!stProgMap) {
+        stProgMap = new Map<string, StudentStructureProgress>();
+        progressByStruct.set(p.structureId, stProgMap);
+      }
+      const prev = stProgMap.get(p.studentDocId);
+      if (!prev) {
+        stProgMap.set(p.studentDocId, p);
+        return;
+      }
+      const prevAtt = prev.attemptNumber || 1;
+      const curAtt = p.attemptNumber || 1;
+      if (
+        curAtt > prevAtt ||
+        (curAtt === prevAtt &&
+          new Date(p.updatedAt || p.createdAt || 0).getTime() >=
+            new Date(prev.updatedAt || prev.createdAt || 0).getTime())
+      ) {
+        stProgMap.set(p.studentDocId, p);
+      }
+    });
+
+    structures.forEach((st) => {
+      const totalQ = Math.max(1, st.totalQuestions || st.questions?.length || 1);
+      const excludedSet = new Set(st.excludedStudentIds || []);
+      const rawLatestMap = progressByStruct.get(st.id) || new Map<string, StudentStructureProgress>();
+
+      const activeLatestRecords: StudentStructureProgress[] = [];
+      const activeRecordedStudentIds = new Set<string>();
+
+      rawLatestMap.forEach((rec, studentDocId) => {
+        if (excludedSet.has(studentDocId)) return;
+        const studentObj = studentMap.get(studentDocId);
+        if (studentObj) {
+          const eff = getEffectiveEnrollmentStatus(studentObj);
+          if (filterStatus === 'exclude_completed' && eff === 'completed') return;
+          if (filterStatus !== 'الكل' && filterStatus !== 'exclude_completed' && eff !== filterStatus) {
+            return;
+          }
+        }
+        activeLatestRecords.push(rec);
+        activeRecordedStudentIds.add(studentDocId);
+      });
+
+      let eligibleCount = 0;
+      students.forEach((student) => {
+        if (excludedSet.has(student.id)) return;
+        const eff = getEffectiveEnrollmentStatus(student);
+        if (filterStatus === 'exclude_completed' && eff === 'completed') return;
+        if (filterStatus !== 'الكل' && filterStatus !== 'exclude_completed' && eff !== filterStatus) {
+          return;
+        }
+        if (activeRecordedStudentIds.has(student.id)) {
+          eligibleCount += 1;
+          return;
+        }
+        if (student.grade !== st.grade) return;
+        if (student.term && st.term && student.term !== st.term) return;
+        if (student.track && st.track && student.track !== st.track) return;
+        if (student.academicYear && st.academicYear && student.academicYear !== st.academicYear) return;
+        eligibleCount += 1;
+      });
+
+      const recordedCount = activeLatestRecords.length;
+      const denominatorStudents = Math.max(eligibleCount, recordedCount);
+      const totalSolvedQuestions = activeLatestRecords.reduce(
+        (sum, r) => sum + Math.min(totalQ, Math.max(0, r.solvedCount || 0)),
+        0
+      );
+      const totalExpectedQuestions = denominatorStudents * totalQ;
+      const overallCompletionPct =
+        totalExpectedQuestions > 0
+          ? Math.min(100, Math.round((totalSolvedQuestions / totalExpectedQuestions) * 1000) / 10)
+          : 0;
+      const recordedAvgCompletionPct =
+        recordedCount > 0
+          ? Math.round(
+              (activeLatestRecords.reduce((a, b) => a + (b.completionPercentage || 0), 0) /
+                recordedCount) *
+                10
+            ) / 10
+          : 0;
+      const avgAccuracyPct =
+        recordedCount > 0
+          ? Math.round(
+              (activeLatestRecords.reduce((a, b) => a + (b.overallAccuracyPercentage || 0), 0) /
+                recordedCount) *
+                10
+            ) / 10
+          : 0;
+
+      map.set(st.id, {
+        totalQuestions: totalQ,
+        eligibleCount,
+        recordedCount,
+        denominatorStudents,
+        totalSolvedQuestions,
+        totalExpectedQuestions,
+        overallCompletionPct,
+        recordedAvgCompletionPct,
+        avgAccuracyPct,
+      });
+    });
+
+    return map;
+  }, [structures, structureProgress, students, studentMap, filterStatus]);
 
   // Structures matching metadata & search filters (before completion status split)
   const metadataFilteredStructures = useMemo(() => {
@@ -278,13 +443,118 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
     };
   }, [metadataFilteredStructures]);
 
-  // Filtered Structures (including completion status filter)
+  // Filtered Structures (completion status filter + progress level filter + sorting)
   const filteredStructures = useMemo(() => {
-    if (filterCompletionStatus === 'all') return metadataFilteredStructures;
-    return metadataFilteredStructures.filter(
-      (st) => getEffectiveStructureStatus(st) === filterCompletionStatus
-    );
-  }, [metadataFilteredStructures, filterCompletionStatus]);
+    const list = metadataFilteredStructures.filter((st) => {
+      if (
+        filterCompletionStatus !== 'all' &&
+        getEffectiveStructureStatus(st) !== filterCompletionStatus
+      ) {
+        return false;
+      }
+      if (filterProgressLevel !== 'all') {
+        const stats = structureCohortStatsMap.get(st.id);
+        const pct = stats?.overallCompletionPct || 0;
+        const recCount = stats?.recordedCount || 0;
+        if (filterProgressLevel === 'completed_100' && pct < 100) return false;
+        if (filterProgressLevel === 'in_progress' && (recCount === 0 || pct <= 0 || pct >= 100)) {
+          return false;
+        }
+        if (filterProgressLevel === 'not_started' && recCount > 0) return false;
+      }
+      return true;
+    });
+
+    if (structureSortBy === 'newest') return list;
+
+    return [...list].sort((a, b) => {
+      const sa = structureCohortStatsMap.get(a.id);
+      const sb = structureCohortStatsMap.get(b.id);
+      if (structureSortBy === 'completion_desc') {
+        return (sb?.overallCompletionPct || 0) - (sa?.overallCompletionPct || 0);
+      }
+      if (structureSortBy === 'completion_asc') {
+        return (sa?.overallCompletionPct || 0) - (sb?.overallCompletionPct || 0);
+      }
+      if (structureSortBy === 'accuracy_desc') {
+        return (sb?.avgAccuracyPct || 0) - (sa?.avgAccuracyPct || 0);
+      }
+      if (structureSortBy === 'students_desc') {
+        return (sb?.recordedCount || 0) - (sa?.recordedCount || 0);
+      }
+      return 0;
+    });
+  }, [
+    metadataFilteredStructures,
+    filterCompletionStatus,
+    filterProgressLevel,
+    structureSortBy,
+    structureCohortStatsMap,
+  ]);
+
+  // Global summary KPIs across structures for the 4 top statistical cards
+  const globalStructuresSummary = useMemo(() => {
+    let totalSolvedAll = 0;
+    let totalExpectedAll = 0;
+    let totalRecordedStudents = 0;
+    let totalDenominatorStudents = 0;
+    let accSum = 0;
+    let accCount = 0;
+
+    filteredStructures.forEach((st) => {
+      const s = structureCohortStatsMap.get(st.id);
+      if (!s) return;
+      totalSolvedAll += s.totalSolvedQuestions;
+      totalExpectedAll += s.totalExpectedQuestions;
+      totalRecordedStudents += s.recordedCount;
+      totalDenominatorStudents += s.denominatorStudents;
+      if (s.recordedCount > 0) {
+        accSum += s.avgAccuracyPct;
+        accCount += 1;
+      }
+    });
+
+    const overallCompletionPct =
+      totalExpectedAll > 0
+        ? Math.min(100, Math.round((totalSolvedAll / totalExpectedAll) * 1000) / 10)
+        : 0;
+    const avgAccuracyPct = accCount > 0 ? Math.round((accSum / accCount) * 10) / 10 : 0;
+
+    return {
+      totalAllStructures: structures.length,
+      matchingMetadataCount: structureCompletionCounts.all,
+      ongoingCount: structureCompletionCounts.ongoing,
+      completedCount: structureCompletionCounts.completed,
+      filteredCount: filteredStructures.length,
+      overallCompletionPct,
+      totalRecordedStudents,
+      totalDenominatorStudents,
+      avgAccuracyPct,
+    };
+  }, [structures.length, structureCompletionCounts, filteredStructures, structureCohortStatsMap]);
+
+  const hasAnyActiveStructureFilter =
+    filterGrade !== 'الكل' ||
+    filterTerm !== 'الكل' ||
+    filterTrack !== 'الكل' ||
+    filterYear !== 'الكل' ||
+    filterSubject !== 'الكل' ||
+    filterCompletionStatus !== 'all' ||
+    filterProgressLevel !== 'all' ||
+    structureSortBy !== 'newest' ||
+    Boolean(searchQuery.trim());
+
+  const handleResetStructureFilters = () => {
+    setSearchQuery('');
+    setFilterGrade('الكل');
+    setFilterTerm('الكل');
+    setFilterTrack('الكل');
+    setFilterYear('الكل');
+    setFilterSubject('الكل');
+    setFilterCompletionStatus('all');
+    setFilterProgressLevel('all');
+    setStructureSortBy('newest');
+  };
 
   const handleToggleStructureCompletionStatus = async (st: ExamStructure) => {
     if (togglingStructureId === st.id) return;
@@ -333,9 +603,6 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
       });
     }
   }, [selectedStructure?.id]);
-
-  // Student map for quick lookups
-  const studentMap = useMemo(() => new Map(students.map((s) => [s.id, s])), [students]);
 
   // Progress records for selected structure
   const selectedStructureProgress = useMemo(() => {
@@ -731,6 +998,267 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
         </div>
       </div>
 
+      {/* Overview Statistical Cards (Interactive KPI Strip for Structures Tab) */}
+      {structures.length > 0 && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <button
+              type="button"
+              onClick={() => setFilterCompletionStatus('all')}
+              className={`p-3.5 sm:p-4 rounded-2xl border text-right transition cursor-pointer ${
+                filterCompletionStatus === 'all'
+                  ? 'bg-amber-50/70 dark:bg-amber-950/25 border-amber-400 dark:border-amber-700'
+                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                  إجمالي الهياكل
+                </span>
+                <Layers className="w-4 h-4 text-amber-500 shrink-0" />
+              </div>
+              <div className="mt-1.5 flex items-baseline gap-2">
+                <span className="text-2xl font-black text-slate-900 dark:text-white font-mono tabular-nums">
+                  {globalStructuresSummary.matchingMetadataCount}
+                </span>
+                {globalStructuresSummary.matchingMetadataCount !==
+                  globalStructuresSummary.totalAllStructures && (
+                  <span className="text-[11px] text-slate-400 font-mono tabular-nums">
+                    من {globalStructuresSummary.totalAllStructures}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
+                المعروض حسب الفلاتر: {globalStructuresSummary.filteredCount} هيكل
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setFilterCompletionStatus((prev) => (prev === 'ongoing' ? 'all' : 'ongoing'))
+              }
+              className={`p-3.5 sm:p-4 rounded-2xl border text-right transition cursor-pointer ${
+                filterCompletionStatus === 'ongoing'
+                  ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-500 dark:border-emerald-700'
+                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                  الهياكل الجارية
+                </span>
+                <Clock className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              </div>
+              <div className="mt-1.5 flex items-baseline gap-2">
+                <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">
+                  {globalStructuresSummary.ongoingCount}
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+                  (
+                  {globalStructuresSummary.matchingMetadataCount > 0
+                    ? Math.round(
+                        (globalStructuresSummary.ongoingCount /
+                          globalStructuresSummary.matchingMetadataCount) *
+                          100
+                      )
+                    : 0}
+                  %)
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
+                مستمر وجاري الدراسة · اضغط للفرز
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setFilterCompletionStatus((prev) => (prev === 'completed' ? 'all' : 'completed'))
+              }
+              className={`p-3.5 sm:p-4 rounded-2xl border text-right transition cursor-pointer ${
+                filterCompletionStatus === 'completed'
+                  ? 'bg-indigo-50/80 dark:bg-indigo-950/30 border-indigo-500 dark:border-indigo-700'
+                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-800'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                  الهياكل المنتهية
+                </span>
+                <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              </div>
+              <div className="mt-1.5 flex items-baseline gap-2">
+                <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono tabular-nums">
+                  {globalStructuresSummary.completedCount}
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+                  (
+                  {globalStructuresSummary.matchingMetadataCount > 0
+                    ? Math.round(
+                        (globalStructuresSummary.completedCount /
+                          globalStructuresSummary.matchingMetadataCount) *
+                          100
+                      )
+                    : 0}
+                  %)
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
+                انتهى وتم امتحان المادة · اضغط للفرز
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowCompletionBreakdownPanel((prev) => !prev)}
+              className={`p-3.5 sm:p-4 rounded-2xl border text-right transition cursor-pointer ${
+                showCompletionBreakdownPanel
+                  ? 'bg-slate-100/90 dark:bg-slate-800 border-amber-500'
+                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-700'
+              }`}
+              title="عرض أو إخفاء جدول نسبة الإنجاز الكلية لجميع الطلاب في كل هيكل"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                  نسبة الإنجاز الكلية للطلاب
+                </span>
+                <TrendingUp className="w-4 h-4 text-amber-500 shrink-0" />
+              </div>
+              <div className="mt-1.5 flex items-baseline justify-between gap-2">
+                <span className="text-2xl font-black text-slate-900 dark:text-white font-mono tabular-nums">
+                  {globalStructuresSummary.overallCompletionPct}%
+                </span>
+                <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 inline-flex items-center gap-0.5 whitespace-nowrap">
+                  <span>كل هيكل</span>
+                  {showCompletionBreakdownPanel ? (
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  )}
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mt-2">
+                <div
+                  className="h-full bg-amber-500 transition-all"
+                  style={{ width: `${Math.min(100, globalStructuresSummary.overallCompletionPct)}%` }}
+                />
+              </div>
+            </button>
+          </div>
+
+          {/* Expandable Per-Structure Student Completion Summary Table */}
+          {showCompletionBreakdownPanel && (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-amber-500 shrink-0" />
+                  <h2 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
+                    ملخص نسبة الإنجاز الكلية لجميع الطلاب في كل هيكل ({filteredStructures.length} هيكل)
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCompletionBreakdownPanel(false)}
+                  className="text-[11px] font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white cursor-pointer"
+                >
+                  إغلاق الملخص
+                </button>
+              </div>
+
+              {filteredStructures.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-400">
+                  لا توجد هياكل مطابقة لمعايير الفلترة الحالية
+                </div>
+              ) : (
+                <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-800/70 text-[11px] font-bold text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 sticky top-0">
+                      <tr>
+                        <th className="py-2.5 px-3">الهيكل</th>
+                        <th className="py-2.5 px-3">الحالة</th>
+                        <th className="py-2.5 px-3">الطلاب المرصودون</th>
+                        <th className="py-2.5 px-3 min-w-[170px]">نسبة الإنجاز الكلية لجميع الطلاب</th>
+                        <th className="py-2.5 px-3">متوسط الصحة</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {filteredStructures.map((st) => {
+                        const stats = structureCohortStatsMap.get(st.id);
+                        const pct = stats?.overallCompletionPct || 0;
+                        const effStatus = getEffectiveStructureStatus(st);
+                        const isSelectedRow = selectedStructure?.id === st.id;
+                        return (
+                          <tr
+                            key={`summary-row-${st.id}`}
+                            onClick={() => setSelectedStructureId(st.id)}
+                            className={`cursor-pointer transition ${
+                              isSelectedRow
+                                ? 'bg-amber-50/70 dark:bg-amber-950/20'
+                                : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                            }`}
+                          >
+                            <td className="py-2.5 px-3">
+                              <div className="font-bold text-slate-900 dark:text-white">
+                                {st.title}
+                              </div>
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                {st.grade} · {st.track} · {st.subject} · {st.term}
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 whitespace-nowrap">
+                              <span
+                                className={`inline-flex items-center gap-1 text-[11px] font-bold ${
+                                  effStatus === 'completed'
+                                    ? 'text-indigo-600 dark:text-indigo-400'
+                                    : 'text-emerald-600 dark:text-emerald-400'
+                                }`}
+                              >
+                                {effStatus === 'completed' ? (
+                                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                                ) : (
+                                  <Clock className="w-3.5 h-3.5 shrink-0" />
+                                )}
+                                <span>{STRUCTURE_STATUS_META[effStatus].shortLabel}</span>
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 font-mono tabular-nums whitespace-nowrap text-slate-700 dark:text-slate-300">
+                              {stats?.recordedCount || 0} / {stats?.denominatorStudents || 0} طالب
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full transition-all ${
+                                      pct >= 80
+                                        ? 'bg-emerald-500'
+                                        : pct >= 40
+                                        ? 'bg-amber-500'
+                                        : 'bg-slate-400'
+                                    }`}
+                                    style={{ width: `${Math.min(100, pct)}%` }}
+                                  />
+                                </div>
+                                <span className="font-mono tabular-nums font-black text-slate-900 dark:text-white w-12 text-left">
+                                  {pct}%
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                              {(stats?.recordedCount || 0) > 0 ? `${stats?.avgAccuracyPct}%` : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Filters Toolbar */}
       <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2.5">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-2 sm:gap-2.5">
@@ -820,49 +1348,105 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
           </select>
         </div>
 
-        {/* Structure Completion Status Segmented Filter */}
-        <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-bold">
-            <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0" />
-            <span>حالة تدريس وامتحان الهيكل:</span>
+        {/* Structure Completion Status Segmented Filter + Progress Level + Sort */}
+        <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-bold">
+              <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0" />
+              <span>حالة الهيكل:</span>
+            </div>
+
+            <div className="inline-flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setFilterCompletionStatus('all')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
+                  filterCompletionStatus === 'all'
+                    ? 'bg-amber-500 text-slate-950 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
+                }`}
+              >
+                جميع الهياكل ({structureCompletionCounts.all})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterCompletionStatus('ongoing')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
+                  filterCompletionStatus === 'ongoing'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5 shrink-0" />
+                <span>مستمر وجاري الدراسة ({structureCompletionCounts.ongoing})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterCompletionStatus('completed')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
+                  filterCompletionStatus === 'completed'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>انتهى وتم امتحان المادة ({structureCompletionCounts.completed})</span>
+              </button>
+            </div>
           </div>
 
-          <div className="inline-flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px]">
-            <button
-              type="button"
-              onClick={() => setFilterCompletionStatus('all')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
-                filterCompletionStatus === 'all'
-                  ? 'bg-amber-500 text-slate-950 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
-              }`}
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={filterProgressLevel}
+              onChange={(e) =>
+                setFilterProgressLevel(
+                  e.target.value as 'all' | 'completed_100' | 'in_progress' | 'not_started'
+                )
+              }
+              className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-[11px] font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
+              title="فلترة حسب مستوى إنجاز الطلاب"
             >
-              جميع الهياكل ({structureCompletionCounts.all})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterCompletionStatus('ongoing')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
-                filterCompletionStatus === 'ongoing'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
-              }`}
-            >
-              <Clock className="w-3.5 h-3.5 shrink-0" />
-              <span>مستمر وجاري الدراسة ({structureCompletionCounts.ongoing})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilterCompletionStatus('completed')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition cursor-pointer whitespace-nowrap ${
-                filterCompletionStatus === 'completed'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
-              }`}
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-              <span>انتهى وتم امتحان المادة ({structureCompletionCounts.completed})</span>
-            </button>
+              <option value="all">كل مستويات الإنجاز</option>
+              <option value="completed_100">مكتمل الإنجاز (100%)</option>
+              <option value="in_progress">قيد الإنجاز (مرصود جزئياً)</option>
+              <option value="not_started">لم يبدأ الرصد بعد (0%)</option>
+            </select>
+
+            <div className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1">
+              <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <select
+                value={structureSortBy}
+                onChange={(e) =>
+                  setStructureSortBy(
+                    e.target.value as
+                      | 'newest'
+                      | 'completion_desc'
+                      | 'completion_asc'
+                      | 'accuracy_desc'
+                      | 'students_desc'
+                  )
+                }
+                className="bg-transparent text-[11px] font-bold text-slate-800 dark:text-slate-200 cursor-pointer focus:outline-hidden"
+                title="ترتيب قائمة الهياكل"
+              >
+                <option value="newest">الترتيب: الأحدث</option>
+                <option value="completion_desc">الأعلى نسبة إنجاز</option>
+                <option value="completion_asc">الأقل نسبة إنجاز</option>
+                <option value="accuracy_desc">الأعلى نسبة صحة</option>
+                <option value="students_desc">الأكثر طلاباً مرصودين</option>
+              </select>
+            </div>
+
+            {hasAnyActiveStructureFilter && (
+              <button
+                type="button"
+                onClick={handleResetStructureFilters}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-[11px] font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-100 cursor-pointer whitespace-nowrap"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>إعادة ضبط الفلاتر</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -901,24 +1485,10 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
               <span className="font-black text-slate-700 dark:text-slate-200">
                 قائمة الهياكل المسجلة ({filteredStructures.length})
               </span>
-              {(filterGrade !== 'الكل' ||
-                filterTerm !== 'الكل' ||
-                filterTrack !== 'الكل' ||
-                filterYear !== 'الكل' ||
-                filterSubject !== 'الكل' ||
-                filterCompletionStatus !== 'all' ||
-                searchQuery) && (
+              {hasAnyActiveStructureFilter && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setFilterGrade('الكل');
-                    setFilterTerm('الكل');
-                    setFilterTrack('الكل');
-                    setFilterYear('الكل');
-                    setFilterSubject('الكل');
-                    setFilterCompletionStatus('all');
-                  }}
+                  onClick={handleResetStructureFilters}
                   className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
                 >
                   إعادة ضبط الفلاتر
@@ -934,23 +1504,9 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
               <div className="space-y-2 max-h-[680px] overflow-y-auto pl-0.5">
                 {filteredStructures.map((st) => {
                   const isSelected = selectedStructure?.id === st.id;
-                  const stProgress = structureProgress.filter((p) => p.structureId === st.id);
-                  const latestByStudent = new Map<string, StudentStructureProgress>();
-                  stProgress.forEach((p) => {
-                    const prev = latestByStudent.get(p.studentDocId);
-                    if (!prev || (p.attemptNumber || 1) >= (prev.attemptNumber || 1)) {
-                      latestByStudent.set(p.studentDocId, p);
-                    }
-                  });
-                  const latestList = Array.from(latestByStudent.values());
-                  const countRecorded = latestList.length;
-                  const avgAcc =
-                    latestList.length > 0
-                      ? Math.round(
-                          latestList.reduce((a, b) => a + (b.overallAccuracyPercentage || 0), 0) /
-                            latestList.length
-                        )
-                      : 0;
+                  const cardCohortStats = structureCohortStatsMap.get(st.id);
+                  const countRecorded = cardCohortStats?.recordedCount ?? 0;
+                  const avgAcc = Math.round(cardCohortStats?.avgAccuracyPct ?? 0);
                   const effCompStatus = getEffectiveStructureStatus(st);
                   const compMeta = STRUCTURE_STATUS_META[effCompStatus];
                   const isCompleted = effCompStatus === 'completed';
@@ -1041,17 +1597,50 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                         </div>
                       </div>
 
-                      <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] font-mono tabular-nums">
-                        <span className="text-slate-600 dark:text-slate-300">
-                          الأسئلة: <strong className="text-slate-900 dark:text-white">{st.totalQuestions}</strong>
-                        </span>
-                        <span className="text-slate-600 dark:text-slate-300">
-                          طلاب مرصودين: <strong className="text-amber-600 dark:text-amber-400">{countRecorded}</strong>
-                        </span>
-                        <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                          {countRecorded > 0 ? `${avgAcc}% صحة` : 'جديد'}
-                        </span>
-                      </div>
+                      {(() => {
+                        const cardCohortStats = structureCohortStatsMap.get(st.id);
+                        const overallPct = cardCohortStats?.overallCompletionPct ?? 0;
+                        const recStu = cardCohortStats?.recordedCount ?? countRecorded;
+                        const totalStu = cardCohortStats?.denominatorStudents ?? countRecorded;
+                        return (
+                          <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                            <div>
+                              <div className="flex items-center justify-between text-[11px] mb-1">
+                                <span className="text-slate-500 dark:text-slate-400 font-bold">
+                                  نسبة الإنجاز الكلية للطلاب
+                                </span>
+                                <span className="font-mono tabular-nums font-black text-slate-900 dark:text-white">
+                                  {overallPct}%
+                                </span>
+                              </div>
+                              <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full transition-all ${
+                                    overallPct >= 80
+                                      ? 'bg-emerald-500'
+                                      : overallPct >= 40
+                                      ? 'bg-amber-500'
+                                      : 'bg-slate-400'
+                                  }`}
+                                  style={{ width: `${Math.min(100, overallPct)}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between text-[11px] font-mono tabular-nums">
+                              <span className="text-slate-600 dark:text-slate-300">
+                                الأسئلة: <strong className="text-slate-900 dark:text-white">{st.totalQuestions}</strong>
+                              </span>
+                              <span className="text-slate-600 dark:text-slate-300">
+                                مرصود: <strong className="text-amber-600 dark:text-amber-400">{recStu}/{totalStu}</strong>
+                              </span>
+                              <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                {recStu > 0 ? `${avgAcc}% صحة` : 'جديد'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })}
@@ -1149,43 +1738,65 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                   </div>
 
                   {/* Quick Summary KPIs (flat tabular cards, no heavy shadows) */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
-                      <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
-                        إجمالي أسئلة الهيكل
-                      </span>
-                      <span className="text-xl font-black text-slate-900 dark:text-white font-mono tabular-nums mt-0.5 block">
-                        {selectedStructure.totalQuestions} سؤال
-                      </span>
-                    </div>
+                  {(() => {
+                    const selectedCohortStats = structureCohortStatsMap.get(selectedStructure.id);
+                    const overallCohortPct = selectedCohortStats?.overallCompletionPct ?? 0;
+                    const eligibleTotal = selectedCohortStats?.denominatorStudents ?? structureSummary.recordedCount;
+                    return (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                          <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
+                            إجمالي أسئلة الهيكل
+                          </span>
+                          <span className="text-xl font-black text-slate-900 dark:text-white font-mono tabular-nums mt-0.5 block">
+                            {selectedStructure.totalQuestions} سؤال
+                          </span>
+                        </div>
 
-                    <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
-                      <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
-                        الطلاب المرصودين
-                      </span>
-                      <span className="text-xl font-black text-indigo-600 dark:text-indigo-400 font-mono tabular-nums mt-0.5 block">
-                        {structureSummary.recordedCount} طالب
-                      </span>
-                    </div>
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                          <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
+                            الطلاب المرصودين
+                          </span>
+                          <span className="text-xl font-black text-indigo-600 dark:text-indigo-400 font-mono tabular-nums mt-0.5 block">
+                            {structureSummary.recordedCount} / {eligibleTotal} طالب
+                          </span>
+                        </div>
 
-                    <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
-                      <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
-                        متوسط الأسئلة المحلولة
-                      </span>
-                      <span className="text-xl font-black text-amber-600 dark:text-amber-400 font-mono tabular-nums mt-0.5 block">
-                        {structureSummary.avgSolved} / {selectedStructure.totalQuestions}
-                      </span>
-                    </div>
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                          <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
+                            نسبة الإنجاز الكلية للطلاب
+                          </span>
+                          <span className="text-xl font-black text-amber-600 dark:text-amber-400 font-mono tabular-nums mt-0.5 block">
+                            {overallCohortPct}%
+                          </span>
+                          <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mt-1.5">
+                            <div
+                              className="h-full bg-amber-500 transition-all"
+                              style={{ width: `${Math.min(100, overallCohortPct)}%` }}
+                            />
+                          </div>
+                        </div>
 
-                    <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
-                      <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
-                        متوسط نسبة الصحة العامة
-                      </span>
-                      <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono tabular-nums mt-0.5 block">
-                        {structureSummary.avgAccuracy}%
-                      </span>
-                    </div>
-                  </div>
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                          <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
+                            متوسط الأسئلة المحلولة
+                          </span>
+                          <span className="text-xl font-black text-slate-900 dark:text-white font-mono tabular-nums mt-0.5 block">
+                            {structureSummary.avgSolved} / {selectedStructure.totalQuestions}
+                          </span>
+                        </div>
+
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
+                          <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
+                            متوسط نسبة الصحة العامة
+                          </span>
+                          <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono tabular-nums mt-0.5 block">
+                            {structureSummary.avgAccuracy}%
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Quick Any-Student Picker Dropdown when clicking "تسجيل حل طالب بالهيكل" */}
                   {showAddAnyStudentPicker && (
