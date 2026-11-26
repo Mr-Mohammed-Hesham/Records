@@ -1777,6 +1777,56 @@ export async function importOvertimeBackupMerge(
    TEACHER WORKSPACE (KANBAN TASKS, TO-DO & PERSONAL NOTES)
    ========================================================= */
 
+const pendingTaskWrites = new Set<string>();
+const pendingNoteWrites = new Set<string>();
+const unsyncedTaskIds = new Set<string>();
+const unsyncedNoteIds = new Set<string>();
+const recentlyDeletedTaskIds = new Map<string, number>();
+const recentlyDeletedNoteIds = new Map<string, number>();
+const WORKSPACE_DELETE_TTL_MS = 15000;
+
+function mergeWorkspaceCollections<
+  T extends { id: string; updatedAt?: string; createdAt?: string }
+>(
+  serverItems: T[],
+  localItems: T[],
+  pendingIds: Set<string>,
+  unsyncedIds: Set<string>,
+  deletedMap: Map<string, number>
+): T[] {
+  const now = Date.now();
+  deletedMap.forEach((ts, id) => {
+    if (now - ts > WORKSPACE_DELETE_TTL_MS) {
+      deletedMap.delete(id);
+    }
+  });
+
+  const merged = new Map<string, T>();
+  serverItems.forEach((item) => {
+    if (!deletedMap.has(item.id)) {
+      merged.set(item.id, item);
+    }
+  });
+
+  localItems.forEach((local) => {
+    if (deletedMap.has(local.id)) return;
+    if (pendingIds.has(local.id) || unsyncedIds.has(local.id)) {
+      merged.set(local.id, local);
+      return;
+    }
+    const srv = merged.get(local.id);
+    if (srv) {
+      const localTs = Date.parse(local.updatedAt || local.createdAt || '') || 0;
+      const srvTs = Date.parse(srv.updatedAt || srv.createdAt || '') || 0;
+      if (localTs > srvTs) {
+        merged.set(local.id, local);
+      }
+    }
+  });
+
+  return Array.from(merged.values());
+}
+
 export async function saveTeacherTask(
   task: Omit<TeacherTask, 'id'> & { id?: string }
 ): Promise<TeacherTask> {
@@ -1795,6 +1845,9 @@ export async function saveTeacherTask(
       task.status === 'done' ? task.completedAt || now : undefined,
   };
 
+  pendingTaskWrites.add(docId);
+  recentlyDeletedTaskIds.delete(docId);
+
   const current = getCachedData<TeacherTask[]>(CACHE_KEYS.TEACHER_TASKS, []);
   const updated = [fullTask, ...current.filter((t) => t.id !== docId)];
   setCachedData(CACHE_KEYS.TEACHER_TASKS, updated);
@@ -1802,17 +1855,23 @@ export async function saveTeacherTask(
 
   try {
     const { id: _ignoreId, ...payload } = fullTask;
-    await setDoc(doc(db, 'teacherTasks', docId), sanitizeForFirestore(payload), {
-      merge: true,
-    });
+    await setDoc(doc(db, 'teacherTasks', docId), sanitizeForFirestore(payload));
+    unsyncedTaskIds.delete(docId);
   } catch (err) {
+    unsyncedTaskIds.add(docId);
     handleFirestoreError(err, OperationType.WRITE, `teacherTasks/${docId}`);
+  } finally {
+    pendingTaskWrites.delete(docId);
   }
 
   return fullTask;
 }
 
 export async function deleteTeacherTask(taskId: string): Promise<void> {
+  recentlyDeletedTaskIds.set(taskId, Date.now());
+  unsyncedTaskIds.delete(taskId);
+  pendingTaskWrites.add(taskId);
+
   const current = getCachedData<TeacherTask[]>(CACHE_KEYS.TEACHER_TASKS, []);
   setCachedData(
     CACHE_KEYS.TEACHER_TASKS,
@@ -1824,6 +1883,8 @@ export async function deleteTeacherTask(taskId: string): Promise<void> {
     await deleteDoc(doc(db, 'teacherTasks', taskId));
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, `teacherTasks/${taskId}`);
+  } finally {
+    pendingTaskWrites.delete(taskId);
   }
 }
 
@@ -1843,6 +1904,9 @@ export async function saveTeacherNote(
     updatedAt: now,
   };
 
+  pendingNoteWrites.add(docId);
+  recentlyDeletedNoteIds.delete(docId);
+
   const current = getCachedData<TeacherNote[]>(CACHE_KEYS.TEACHER_NOTES, []);
   const updated = [fullNote, ...current.filter((n) => n.id !== docId)];
   setCachedData(CACHE_KEYS.TEACHER_NOTES, updated);
@@ -1850,17 +1914,23 @@ export async function saveTeacherNote(
 
   try {
     const { id: _ignoreId, ...payload } = fullNote;
-    await setDoc(doc(db, 'teacherNotes', docId), sanitizeForFirestore(payload), {
-      merge: true,
-    });
+    await setDoc(doc(db, 'teacherNotes', docId), sanitizeForFirestore(payload));
+    unsyncedNoteIds.delete(docId);
   } catch (err) {
+    unsyncedNoteIds.add(docId);
     handleFirestoreError(err, OperationType.WRITE, `teacherNotes/${docId}`);
+  } finally {
+    pendingNoteWrites.delete(docId);
   }
 
   return fullNote;
 }
 
 export async function deleteTeacherNote(noteId: string): Promise<void> {
+  recentlyDeletedNoteIds.set(noteId, Date.now());
+  unsyncedNoteIds.delete(noteId);
+  pendingNoteWrites.add(noteId);
+
   const current = getCachedData<TeacherNote[]>(CACHE_KEYS.TEACHER_NOTES, []);
   setCachedData(
     CACHE_KEYS.TEACHER_NOTES,
@@ -1872,6 +1942,8 @@ export async function deleteTeacherNote(noteId: string): Promise<void> {
     await deleteDoc(doc(db, 'teacherNotes', noteId));
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, `teacherNotes/${noteId}`);
+  } finally {
+    pendingNoteWrites.delete(noteId);
   }
 }
 
@@ -2023,7 +2095,13 @@ export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
         ...item.data(),
       })) as TeacherTask[];
       if (items.length > 0 || teacherTasks.length === 0) {
-        teacherTasks = items;
+        teacherTasks = mergeWorkspaceCollections(
+          items,
+          teacherTasks,
+          pendingTaskWrites,
+          unsyncedTaskIds,
+          recentlyDeletedTaskIds
+        );
         setCachedData(CACHE_KEYS.TEACHER_TASKS, teacherTasks);
       }
     }
@@ -2035,7 +2113,13 @@ export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
         ...item.data(),
       })) as TeacherNote[];
       if (items.length > 0 || teacherNotes.length === 0) {
-        teacherNotes = items;
+        teacherNotes = mergeWorkspaceCollections(
+          items,
+          teacherNotes,
+          pendingNoteWrites,
+          unsyncedNoteIds,
+          recentlyDeletedNoteIds
+        );
         setCachedData(CACHE_KEYS.TEACHER_NOTES, teacherNotes);
       }
     }
@@ -2335,8 +2419,19 @@ export function subscribeToRealtimeData(
             ...item.data(),
           })) as TeacherTask[];
           const localCached = getCachedData<TeacherTask[]>(CACHE_KEYS.TEACHER_TASKS, []);
-          if (firestoreTasks.length > 0 || localCached.length === 0) {
-            setCachedData(CACHE_KEYS.TEACHER_TASKS, firestoreTasks);
+          if (
+            firestoreTasks.length > 0 ||
+            localCached.length === 0 ||
+            (pendingTaskWrites.size === 0 && unsyncedTaskIds.size === 0)
+          ) {
+            const merged = mergeWorkspaceCollections(
+              firestoreTasks,
+              localCached,
+              pendingTaskWrites,
+              unsyncedTaskIds,
+              recentlyDeletedTaskIds
+            );
+            setCachedData(CACHE_KEYS.TEACHER_TASKS, merged);
             notifySubscribers();
           }
         },
@@ -2359,8 +2454,19 @@ export function subscribeToRealtimeData(
             ...item.data(),
           })) as TeacherNote[];
           const localCached = getCachedData<TeacherNote[]>(CACHE_KEYS.TEACHER_NOTES, []);
-          if (firestoreNotes.length > 0 || localCached.length === 0) {
-            setCachedData(CACHE_KEYS.TEACHER_NOTES, firestoreNotes);
+          if (
+            firestoreNotes.length > 0 ||
+            localCached.length === 0 ||
+            (pendingNoteWrites.size === 0 && unsyncedNoteIds.size === 0)
+          ) {
+            const merged = mergeWorkspaceCollections(
+              firestoreNotes,
+              localCached,
+              pendingNoteWrites,
+              unsyncedNoteIds,
+              recentlyDeletedNoteIds
+            );
+            setCachedData(CACHE_KEYS.TEACHER_NOTES, merged);
             notifySubscribers();
           }
         },

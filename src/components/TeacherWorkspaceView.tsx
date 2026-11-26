@@ -20,6 +20,8 @@ import {
   FileSpreadsheet,
   Filter,
   Download,
+  AlertTriangle,
+  Save,
 } from 'lucide-react';
 import {
   ExamStructure,
@@ -44,6 +46,7 @@ import {
   filterTasksForWorkspaceExport,
   filterTodoItemsForWorkspaceExport,
 } from '../utils/excel';
+import { ConfirmModal } from './ConfirmModal';
 
 interface TeacherWorkspaceViewProps {
   tasks: TeacherTask[];
@@ -55,6 +58,7 @@ interface TeacherWorkspaceViewProps {
   onSaveNote: (note: Omit<TeacherNote, 'id'> & { id?: string }) => Promise<TeacherNote>;
   onDeleteNote: (noteId: string) => Promise<void>;
   onNotify?: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 const PRIORITY_META: Record<
@@ -172,6 +176,7 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
   onSaveNote,
   onDeleteNote,
   onNotify,
+  onDirtyChange,
 }) => {
   const { lang, dir, tr } = useLanguage();
   const [activeTab, setActiveTab] = useState<'kanban' | 'todo' | 'notes'>('kanban');
@@ -193,16 +198,32 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
   const [taskSubtasks, setTaskSubtasks] = useState<TeacherTaskSubtask[]>([]);
   const [newSubtaskText, setNewSubtaskText] = useState('');
   const [savingTask, setSavingTask] = useState(false);
+  const [taskInitialSnapshot, setTaskInitialSnapshot] = useState('');
 
   // Dragging state
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
 
-  // To-Do Quick Add State
+  // To-Do Quick Add & Inline Edit State
   const [quickTodoText, setQuickTodoText] = useState('');
   const [quickTodoPriority, setQuickTodoPriority] = useState<TeacherTaskPriority>('medium');
   const [newChecklistTitle, setNewChecklistTitle] = useState('');
   const [creatingChecklist, setCreatingChecklist] = useState(false);
   const [perListInput, setPerListInput] = useState<Record<string, string>>({});
+  const [editingListTitle, setEditingListTitle] = useState<{
+    listId: string;
+    title: string;
+    originalTitle: string;
+  } | null>(null);
+  const [savingListTitle, setSavingListTitle] = useState(false);
+  const [editingTodoItem, setEditingTodoItem] = useState<{
+    listId: string;
+    itemId: string;
+    text: string;
+    priority: TeacherTaskPriority;
+    originalText: string;
+    originalPriority: TeacherTaskPriority;
+  } | null>(null);
+  const [savingTodoItem, setSavingTodoItem] = useState(false);
 
   // Rich Note Modal State
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
@@ -213,6 +234,20 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
   const [noteCategory, setNoteCategory] = useState('');
   const [notePinned, setNotePinned] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
+  const [noteInitialSnapshot, setNoteInitialSnapshot] = useState('');
+
+  // Exit Warning Confirm Modal State
+  const [exitWarningModal, setExitWarningModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirmExit: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirmExit: () => {},
+  });
 
   // Export Modal State
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -249,15 +284,9 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
       });
   }, [tasks, priorityFilter, categoryFilter, searchQuery]);
 
-  const todoLists = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+  const allTodoLists = useMemo(() => {
     return notes
       .filter((n) => n.noteType === 'todo_list')
-      .filter((n) => {
-        if (!q) return true;
-        const itemsText = (n.checklistItems || []).map((i) => i.text).join(' ');
-        return `${n.title} ${itemsText}`.toLowerCase().includes(q);
-      })
       .sort((a, b) => {
         if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
         return (
@@ -265,7 +294,16 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
           new Date(a.updatedAt || a.createdAt).getTime()
         );
       });
-  }, [notes, searchQuery]);
+  }, [notes]);
+
+  const todoLists = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return allTodoLists.filter((n) => {
+      if (!q) return true;
+      const itemsText = (n.checklistItems || []).map((i) => i.text).join(' ');
+      return `${n.title} ${itemsText}`.toLowerCase().includes(q);
+    });
+  }, [allTodoLists, searchQuery]);
 
   const richNotes = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -364,6 +402,225 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
     );
   };
 
+  const currentTaskSnapshot = useMemo(
+    () =>
+      JSON.stringify({
+        title: taskTitle,
+        desc: taskDesc,
+        status: taskStatus,
+        priority: taskPriority,
+        category: taskCategory,
+        dueDate: taskDueDate,
+        linkedStructId: taskLinkedStructId,
+        subtasks: taskSubtasks,
+      }),
+    [
+      taskTitle,
+      taskDesc,
+      taskStatus,
+      taskPriority,
+      taskCategory,
+      taskDueDate,
+      taskLinkedStructId,
+      taskSubtasks,
+    ]
+  );
+
+  const isTaskModalDirty = useMemo(() => {
+    if (!isTaskModalOpen) return false;
+    return (
+      currentTaskSnapshot !== taskInitialSnapshot ||
+      newSubtaskText.trim() !== ''
+    );
+  }, [
+    isTaskModalOpen,
+    currentTaskSnapshot,
+    taskInitialSnapshot,
+    newSubtaskText,
+  ]);
+
+  const currentNoteSnapshot = useMemo(
+    () =>
+      JSON.stringify({
+        title: noteTitle,
+        content: noteContent,
+        color: noteColor,
+        category: noteCategory,
+        pinned: notePinned,
+      }),
+    [noteTitle, noteContent, noteColor, noteCategory, notePinned]
+  );
+
+  const isNoteModalDirty = useMemo(() => {
+    if (!isNoteModalOpen) return false;
+    return currentNoteSnapshot !== noteInitialSnapshot;
+  }, [isNoteModalOpen, currentNoteSnapshot, noteInitialSnapshot]);
+
+  const isTodoInlineDirty = useMemo(() => {
+    if (
+      editingListTitle &&
+      editingListTitle.title.trim() !== editingListTitle.originalTitle.trim()
+    ) {
+      return true;
+    }
+    if (
+      editingTodoItem &&
+      (editingTodoItem.text.trim() !== editingTodoItem.originalText.trim() ||
+        editingTodoItem.priority !== editingTodoItem.originalPriority)
+    ) {
+      return true;
+    }
+    if (quickTodoText.trim() !== '' || newChecklistTitle.trim() !== '') {
+      return true;
+    }
+    if (Object.values(perListInput).some((v) => typeof v === 'string' && v.trim() !== '')) {
+      return true;
+    }
+    return false;
+  }, [
+    editingListTitle,
+    editingTodoItem,
+    quickTodoText,
+    newChecklistTitle,
+    perListInput,
+  ]);
+
+  const hasUnsavedWorkspaceEdits =
+    isTaskModalDirty || isNoteModalDirty || isTodoInlineDirty;
+
+  React.useEffect(() => {
+    onDirtyChange?.(
+      hasUnsavedWorkspaceEdits || isTaskModalOpen || isNoteModalOpen
+    );
+  }, [
+    hasUnsavedWorkspaceEdits,
+    isTaskModalOpen,
+    isNoteModalOpen,
+    onDirtyChange,
+  ]);
+
+  React.useEffect(() => {
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [onDirtyChange]);
+
+  // Browser tab close / refresh warning whenever editing or having unsaved changes
+  React.useEffect(() => {
+    if (!hasUnsavedWorkspaceEdits && !isTaskModalOpen && !isNoteModalOpen) {
+      return;
+    }
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedWorkspaceEdits, isTaskModalOpen, isNoteModalOpen]);
+
+  const showExitWarning = (
+    title: string,
+    message: string,
+    onConfirmExit: () => void
+  ) => {
+    setExitWarningModal({
+      isOpen: true,
+      title,
+      message,
+      onConfirmExit,
+    });
+  };
+
+  const requestCloseTaskModal = () => {
+    if (isTaskModalDirty) {
+      showExitWarning(
+        tr('تحذير قبل الخروج — تعديلات غير محفوظة', 'Exit Warning — Unsaved Changes'),
+        tr(
+          'رسالة تحذيرية: لديك تغييرات غير محفوظة في المهمة الحالية. إذا خرجت الآن فسيتم تجاهل التعديلات ولن يتم حفظها. هل تريد الخروج بدون حفظ؟',
+          'Warning: You have unsaved changes in this task. Exiting now will discard your edits. Exit without saving?'
+        ),
+        () => {
+          setIsTaskModalOpen(false);
+          setNewSubtaskText('');
+        }
+      );
+      return;
+    }
+    setIsTaskModalOpen(false);
+  };
+
+  const requestCloseNoteModal = () => {
+    if (isNoteModalDirty) {
+      showExitWarning(
+        tr('تحذير قبل الخروج — ملاحظة غير محفوظة', 'Exit Warning — Unsaved Note'),
+        tr(
+          'رسالة تحذيرية: لديك تغييرات غير محفوظة في الملاحظة الحالية. إذا خرجت الآن فسيتم تجاهل التعديلات. هل تريد الخروج بدون حفظ؟',
+          'Warning: You have unsaved changes in this note. Exiting now will discard them. Exit without saving?'
+        ),
+        () => {
+          setIsNoteModalOpen(false);
+        }
+      );
+      return;
+    }
+    setIsNoteModalOpen(false);
+  };
+
+  const requestSwitchWorkspaceTab = (nextTab: 'kanban' | 'todo' | 'notes') => {
+    if (nextTab === activeTab) return;
+    if (isTodoInlineDirty) {
+      showExitWarning(
+        tr('تحذير قبل الخروج من قائمة المهام', 'Exit Warning — Unsaved To-Do Edits'),
+        tr(
+          'رسالة تحذيرية: لديك تعديلات أو كتابات غير محفوظة في قائمة المهام (To-Do). الانتقال الآن سيلغي التعديلات غير المحفوظة. هل تريد المتابعة؟',
+          'Warning: You have unsaved changes or draft items in your To-Do list. Switching tabs now will discard unsaved edits. Continue?'
+        ),
+        () => {
+          setEditingListTitle(null);
+          setEditingTodoItem(null);
+          setQuickTodoText('');
+          setNewChecklistTitle('');
+          setPerListInput({});
+          setActiveTab(nextTab);
+        }
+      );
+      return;
+    }
+    setActiveTab(nextTab);
+  };
+
+  // Capture Escape key so App.tsx doesn't silently leave the workspace without triggering exit warning
+  React.useEffect(() => {
+    const handleKeyDownCapture = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (exitWarningModal.isOpen) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        setExitWarningModal((prev) => ({ ...prev, isOpen: false }));
+        return;
+      }
+      if (isTaskModalOpen) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        requestCloseTaskModal();
+        return;
+      }
+      if (isNoteModalOpen) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        requestCloseNoteModal();
+        return;
+      }
+      if (isExportModalOpen) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        setIsExportModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDownCapture, true);
+    return () => window.removeEventListener('keydown', handleKeyDownCapture, true);
+  });
+
   const openNewTaskModal = (initialStatus: TeacherTaskStatus = 'todo') => {
     setEditingTask(null);
     setTaskTitle('');
@@ -375,10 +632,23 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
     setTaskLinkedStructId('');
     setTaskSubtasks([]);
     setNewSubtaskText('');
+    setTaskInitialSnapshot(
+      JSON.stringify({
+        title: '',
+        desc: '',
+        status: initialStatus,
+        priority: 'medium',
+        category: 'general',
+        dueDate: '',
+        linkedStructId: '',
+        subtasks: [],
+      })
+    );
     setIsTaskModalOpen(true);
   };
 
   const openEditTaskModal = (task: TeacherTask) => {
+    const subs = (task.subtasks || []).map((s) => ({ ...s }));
     setEditingTask(task);
     setTaskTitle(task.title);
     setTaskDesc(task.description || '');
@@ -387,8 +657,20 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
     setTaskCategory(task.category);
     setTaskDueDate(task.dueDate || '');
     setTaskLinkedStructId(task.linkedStructureId || '');
-    setTaskSubtasks(task.subtasks || []);
+    setTaskSubtasks(subs);
     setNewSubtaskText('');
+    setTaskInitialSnapshot(
+      JSON.stringify({
+        title: task.title,
+        desc: task.description || '',
+        status: task.status,
+        priority: task.priority,
+        category: task.category,
+        dueDate: task.dueDate || '',
+        linkedStructId: task.linkedStructureId || '',
+        subtasks: subs,
+      })
+    );
     setIsTaskModalOpen(true);
   };
 
@@ -398,8 +680,23 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
     setSavingTask(true);
     try {
       const linkedStruct = structures.find((s) => s.id === taskLinkedStructId);
+      const pendingSubText = newSubtaskText.trim();
+      const cleanedSubtasks = taskSubtasks
+        .map((st) => ({ ...st, text: st.text.trim() }))
+        .filter((st) => st.text !== '');
+      const finalSubtasks: TeacherTaskSubtask[] = pendingSubText
+        ? [
+            ...cleanedSubtasks,
+            {
+              id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+              text: pendingSubText,
+              done: false,
+            },
+          ]
+        : cleanedSubtasks;
+
       await onSaveTask({
-        ...(editingTask ? { id: editingTask.id, createdAt: editingTask.createdAt } : {}),
+        ...(editingTask ? editingTask : {}),
         title: taskTitle.trim(),
         description: taskDesc.trim() || undefined,
         status: taskStatus,
@@ -408,15 +705,22 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
         dueDate: taskDueDate || undefined,
         linkedStructureId: linkedStruct?.id || undefined,
         linkedStructureTitle: linkedStruct?.title || undefined,
-        subtasks: taskSubtasks,
+        subtasks: finalSubtasks,
         createdAt: editingTask?.createdAt || new Date().toISOString(),
       });
+      setNewSubtaskText('');
       setIsTaskModalOpen(false);
       onNotify?.(
         editingTask
-          ? tr('تم تحديث المهمة بنجاح', 'Task updated successfully')
-          : tr('تمت إضافة المهمة إلى مساحة عمل المعلم', 'Task added to Teacher Workspace'),
+          ? tr('تم حفظ وتحديث المهمة بنجاح', 'Task updated and saved successfully')
+          : tr('تمت إضافة وحفظ المهمة بنجاح', 'Task added and saved successfully'),
         'success'
+      );
+    } catch (err) {
+      console.error('Failed to save task:', err);
+      onNotify?.(
+        tr('تعذر حفظ المهمة، يرجى المحاولة مرة أخرى', 'Could not save task, please try again'),
+        'error'
       );
     } finally {
       setSavingTask(false);
@@ -428,24 +732,34 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
     nextStatus: TeacherTaskStatus
   ) => {
     if (task.status === nextStatus) return;
-    await onSaveTask({
-      ...task,
-      status: nextStatus,
-    });
+    try {
+      await onSaveTask({
+        ...task,
+        status: nextStatus,
+      });
+    } catch (err) {
+      console.error('Move task error:', err);
+      onNotify?.(tr('تعذر تحديث حالة المهمة', 'Failed to update task status'), 'error');
+    }
   };
 
   const handleToggleSubtask = async (
     task: TeacherTask,
     subtaskId: string
   ) => {
-    const nextSubs = (task.subtasks || []).map((st) =>
-      st.id === subtaskId ? { ...st, done: !st.done } : st
-    );
-    await onSaveTask({ ...task, subtasks: nextSubs });
+    try {
+      const nextSubs = (task.subtasks || []).map((st) =>
+        st.id === subtaskId ? { ...st, done: !st.done } : st
+      );
+      await onSaveTask({ ...task, subtasks: nextSubs });
+    } catch (err) {
+      console.error('Toggle subtask error:', err);
+      onNotify?.(tr('تعذر حفظ حالة الخطوة الفرعية', 'Failed to save subtask state'), 'error');
+    }
   };
 
-  // Instant Daily Quick To-Do List helpers
-  const primaryDailyTodoList = todoLists[0] || null;
+  // Instant Daily Quick To-Do List helpers (unfiltered primary list so search never creates duplicates)
+  const primaryDailyTodoList = allTodoLists[0] || null;
 
   const handleQuickAddTodo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -460,24 +774,29 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
       dueDate: todayKey,
     };
 
-    if (primaryDailyTodoList) {
-      await onSaveNote({
-        ...primaryDailyTodoList,
-        checklistItems: [newItem, ...(primaryDailyTodoList.checklistItems || [])],
-      });
-    } else {
-      await onSaveNote({
-        title: tr('قائمة المهام اليومية (To-Do)', 'Daily To-Do List'),
-        content: '',
-        noteType: 'todo_list',
-        color: 'amber',
-        pinned: true,
-        checklistItems: [newItem],
-        createdAt: new Date().toISOString(),
-      });
+    try {
+      if (primaryDailyTodoList) {
+        await onSaveNote({
+          ...primaryDailyTodoList,
+          checklistItems: [newItem, ...(primaryDailyTodoList.checklistItems || [])],
+        });
+      } else {
+        await onSaveNote({
+          title: tr('قائمة المهام اليومية (To-Do)', 'Daily To-Do List'),
+          content: '',
+          noteType: 'todo_list',
+          color: 'amber',
+          pinned: true,
+          checklistItems: [newItem],
+          createdAt: new Date().toISOString(),
+        });
+      }
+      setQuickTodoText('');
+      onNotify?.(tr('تمت إضافة وحفظ البند في قائمة المهام (To-Do)', 'Item added and saved to To-Do list'), 'success');
+    } catch (err) {
+      console.error('Quick add todo error:', err);
+      onNotify?.(tr('تعذر حفظ البند الجديد', 'Failed to save To-Do item'), 'error');
     }
-    setQuickTodoText('');
-    onNotify?.(tr('تمت إضافة البند إلى قائمة To-Do', 'Item added to To-Do list'), 'success');
   };
 
   const handleAddItemToSpecificList = async (list: TeacherNote) => {
@@ -489,50 +808,146 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
       done: false,
       priority: 'medium',
     };
-    await onSaveNote({
-      ...list,
-      checklistItems: [...(list.checklistItems || []), newItem],
-    });
-    setPerListInput((prev) => ({ ...prev, [list.id]: '' }));
+    try {
+      await onSaveNote({
+        ...list,
+        checklistItems: [...(list.checklistItems || []), newItem],
+      });
+      setPerListInput((prev) => ({ ...prev, [list.id]: '' }));
+      onNotify?.(tr('تم حفظ البند في القائمة', 'Item saved to list'), 'success');
+    } catch (err) {
+      console.error('Add item error:', err);
+      onNotify?.(tr('تعذر حفظ البند في القائمة', 'Failed to save item to list'), 'error');
+    }
   };
 
   const handleToggleChecklistItem = async (
     list: TeacherNote,
     itemId: string
   ) => {
-    const nextItems = (list.checklistItems || []).map((item) =>
-      item.id === itemId ? { ...item, done: !item.done } : item
-    );
-    await onSaveNote({ ...list, checklistItems: nextItems });
+    try {
+      const nextItems = (list.checklistItems || []).map((item) =>
+        item.id === itemId ? { ...item, done: !item.done } : item
+      );
+      await onSaveNote({ ...list, checklistItems: nextItems });
+    } catch (err) {
+      console.error('Toggle checklist item error:', err);
+      onNotify?.(tr('تعذر حفظ التعديل', 'Failed to save change'), 'error');
+    }
   };
 
   const handleDeleteChecklistItem = async (
     list: TeacherNote,
     itemId: string
   ) => {
-    const nextItems = (list.checklistItems || []).filter(
-      (item) => item.id !== itemId
-    );
-    await onSaveNote({ ...list, checklistItems: nextItems });
+    try {
+      const nextItems = (list.checklistItems || []).filter(
+        (item) => item.id !== itemId
+      );
+      await onSaveNote({ ...list, checklistItems: nextItems });
+      onNotify?.(tr('تم حذف البند وحفظ القائمة', 'Item removed and list saved'), 'info');
+    } catch (err) {
+      console.error('Delete checklist item error:', err);
+      onNotify?.(tr('تعذر حذف البند', 'Failed to delete item'), 'error');
+    }
+  };
+
+  const handleSaveTodoListTitle = async (list: TeacherNote) => {
+    if (!editingListTitle || editingListTitle.listId !== list.id) return;
+    const trimmed = editingListTitle.title.trim();
+    if (!trimmed) return;
+    setSavingListTitle(true);
+    try {
+      await onSaveNote({ ...list, title: trimmed });
+      setEditingListTitle(null);
+      onNotify?.(tr('تم حفظ اسم القائمة بنجاح', 'List title saved successfully'), 'success');
+    } catch (err) {
+      console.error('Save list title error:', err);
+      onNotify?.(tr('تعذر حفظ اسم القائمة', 'Failed to save list title'), 'error');
+    } finally {
+      setSavingListTitle(false);
+    }
+  };
+
+  const requestCancelListTitleEdit = () => {
+    if (!editingListTitle) return;
+    if (editingListTitle.title.trim() !== editingListTitle.originalTitle.trim()) {
+      showExitWarning(
+        tr('تحذير قبل الخروج من التعديل', 'Exit Edit Warning'),
+        tr(
+          'رسالة تحذيرية: لم يتم حفظ تعديل اسم القائمة. هل تريد الخروج وتجاهل التعديل؟',
+          'Warning: List title changes are not saved yet. Exit and discard?'
+        ),
+        () => setEditingListTitle(null)
+      );
+      return;
+    }
+    setEditingListTitle(null);
+  };
+
+  const handleSaveTodoItemEdit = async (list: TeacherNote) => {
+    if (!editingTodoItem || editingTodoItem.listId !== list.id) return;
+    const trimmed = editingTodoItem.text.trim();
+    if (!trimmed) return;
+    setSavingTodoItem(true);
+    try {
+      const nextItems = (list.checklistItems || []).map((item) =>
+        item.id === editingTodoItem.itemId
+          ? { ...item, text: trimmed, priority: editingTodoItem.priority }
+          : item
+      );
+      await onSaveNote({ ...list, checklistItems: nextItems });
+      setEditingTodoItem(null);
+      onNotify?.(tr('تم حفظ تعديل المهمة بنجاح', 'To-Do item updated and saved'), 'success');
+    } catch (err) {
+      console.error('Save todo item edit error:', err);
+      onNotify?.(tr('تعذر حفظ تعديل المهمة', 'Failed to save To-Do item changes'), 'error');
+    } finally {
+      setSavingTodoItem(false);
+    }
+  };
+
+  const requestCancelTodoItemEdit = () => {
+    if (!editingTodoItem) return;
+    const changed =
+      editingTodoItem.text.trim() !== editingTodoItem.originalText.trim() ||
+      editingTodoItem.priority !== editingTodoItem.originalPriority;
+    if (changed) {
+      showExitWarning(
+        tr('تحذير قبل الخروج من التعديل', 'Exit Edit Warning'),
+        tr(
+          'رسالة تحذيرية: لم يتم حفظ التعديل على بند قائمة المهام. هل تريد الخروج بدون حفظ؟',
+          'Warning: Your edits to this To-Do item are not saved. Exit without saving?'
+        ),
+        () => setEditingTodoItem(null)
+      );
+      return;
+    }
+    setEditingTodoItem(null);
   };
 
   const handlePromoteTodoToBoard = async (
     list: TeacherNote,
     item: TeacherNoteChecklistItem
   ) => {
-    await onSaveTask({
-      title: item.text,
-      description: `${tr('محوّل من قائمة:', 'Promoted from list:')} ${list.title}`,
-      status: item.done ? 'done' : 'todo',
-      priority: item.priority || 'medium',
-      category: 'general',
-      dueDate: item.dueDate,
-      createdAt: new Date().toISOString(),
-    });
-    onNotify?.(
-      tr('تم تحويل البند إلى بطاقة في لوحة المهام', 'Promoted item to Tasks Board'),
-      'success'
-    );
+    try {
+      await onSaveTask({
+        title: item.text,
+        description: `${tr('محوّل من قائمة:', 'Promoted from list:')} ${list.title}`,
+        status: item.done ? 'done' : 'todo',
+        priority: item.priority || 'medium',
+        category: 'general',
+        dueDate: item.dueDate,
+        createdAt: new Date().toISOString(),
+      });
+      onNotify?.(
+        tr('تم تحويل البند إلى بطاقة في لوحة المهام', 'Promoted item to Tasks Board'),
+        'success'
+      );
+    } catch (err) {
+      console.error('Promote todo error:', err);
+      onNotify?.(tr('تعذر تحويل البند إلى لوحة المهام', 'Failed to promote item'), 'error');
+    }
   };
 
   const handleCreateCustomChecklist = async (e: React.FormEvent) => {
@@ -554,6 +969,9 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
         tr('تم إنشاء قائمة To-Do جديدة بنجاح', 'New To-Do list created successfully'),
         'success'
       );
+    } catch (err) {
+      console.error('Create checklist error:', err);
+      onNotify?.(tr('تعذر إنشاء القائمة الجديدة', 'Failed to create To-Do list'), 'error');
     } finally {
       setCreatingChecklist(false);
     }
@@ -561,22 +979,44 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
 
   // Rich Notes handlers
   const openNewNoteModal = () => {
+    const defCat = tr('عام', 'General');
     setEditingNote(null);
     setNoteTitle('');
     setNoteContent('');
     setNoteColor('amber');
-    setNoteCategory(tr('عام', 'General'));
+    setNoteCategory(defCat);
     setNotePinned(false);
+    setNoteInitialSnapshot(
+      JSON.stringify({
+        title: '',
+        content: '',
+        color: 'amber',
+        category: defCat,
+        pinned: false,
+      })
+    );
     setIsNoteModalOpen(true);
   };
 
   const openEditNoteModal = (note: TeacherNote) => {
+    const cat = note.category || tr('عام', 'General');
+    const clr = note.color || 'amber';
+    const pin = Boolean(note.pinned);
     setEditingNote(note);
     setNoteTitle(note.title);
     setNoteContent(note.content);
-    setNoteColor(note.color || 'amber');
-    setNoteCategory(note.category || tr('عام', 'General'));
-    setNotePinned(Boolean(note.pinned));
+    setNoteColor(clr);
+    setNoteCategory(cat);
+    setNotePinned(pin);
+    setNoteInitialSnapshot(
+      JSON.stringify({
+        title: note.title,
+        content: note.content,
+        color: clr,
+        category: cat,
+        pinned: pin,
+      })
+    );
     setIsNoteModalOpen(true);
   };
 
@@ -586,7 +1026,7 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
     setSavingNote(true);
     try {
       await onSaveNote({
-        ...(editingNote ? { id: editingNote.id, createdAt: editingNote.createdAt } : {}),
+        ...(editingNote ? editingNote : {}),
         title: noteTitle.trim() || tr('ملاحظة سريعة', 'Quick Note'),
         content: noteContent.trim(),
         noteType: 'note',
@@ -598,10 +1038,13 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
       setIsNoteModalOpen(false);
       onNotify?.(
         editingNote
-          ? tr('تم تحديث الملاحظة', 'Note updated')
+          ? tr('تم حفظ وتحديث الملاحظة بنجاح', 'Note updated and saved')
           : tr('تم حفظ ملاحظة المعلم بنجاح', 'Teacher note saved'),
         'success'
       );
+    } catch (err) {
+      console.error('Save note error:', err);
+      onNotify?.(tr('تعذر حفظ الملاحظة، يرجى المحاولة مجدداً', 'Failed to save note'), 'error');
     } finally {
       setSavingNote(false);
     }
@@ -703,7 +1146,7 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
           <div className="inline-flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-x-auto no-scrollbar max-w-full">
             <button
               type="button"
-              onClick={() => setActiveTab('kanban')}
+              onClick={() => requestSwitchWorkspaceTab('kanban')}
               className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
                 activeTab === 'kanban'
                   ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
@@ -716,7 +1159,7 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
 
             <button
               type="button"
-              onClick={() => setActiveTab('todo')}
+              onClick={() => requestSwitchWorkspaceTab('todo')}
               className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
                 activeTab === 'todo'
                   ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
@@ -729,7 +1172,7 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
 
             <button
               type="button"
-              onClick={() => setActiveTab('notes')}
+              onClick={() => requestSwitchWorkspaceTab('notes')}
               className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
                 activeTab === 'notes'
                   ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
@@ -1142,15 +1585,70 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
                     className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 space-y-3"
                   >
                     <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-black text-sm sm:text-base text-slate-900 dark:text-white truncate">
-                            {list.title}
-                          </h3>
-                          <span className="font-mono tabular-nums text-xs font-bold text-sky-600 dark:text-sky-400">
-                            {doneCount}/{items.length} ({pct}%)
-                          </span>
-                        </div>
+                      <div className="min-w-0 flex-1">
+                        {editingListTitle?.listId === list.id ? (
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={editingListTitle.title}
+                              onChange={(e) =>
+                                setEditingListTitle((prev) =>
+                                  prev ? { ...prev, title: e.target.value } : null
+                                )
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveTodoListTitle(list);
+                                } else if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  requestCancelListTitleEdit();
+                                }
+                              }}
+                              className="flex-1 min-w-0 px-2.5 py-1 bg-slate-50 dark:bg-slate-800 border border-amber-400 rounded-xl text-xs sm:text-sm font-black text-slate-900 dark:text-white"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              disabled={savingListTitle || !editingListTitle.title.trim()}
+                              onClick={() => handleSaveTodoListTitle(list)}
+                              className="px-2.5 py-1 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-black cursor-pointer disabled:opacity-50"
+                            >
+                              {tr('حفظ', 'Save')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={requestCancelListTitleEdit}
+                              className="px-2 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-bold cursor-pointer"
+                            >
+                              {tr('إلغاء', 'Cancel')}
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-black text-sm sm:text-base text-slate-900 dark:text-white truncate">
+                              {list.title}
+                            </h3>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditingListTitle({
+                                  listId: list.id,
+                                  title: list.title,
+                                  originalTitle: list.title,
+                                })
+                              }
+                              className="p-1 text-slate-400 hover:text-amber-500 rounded-lg cursor-pointer shrink-0"
+                              title={tr('تعديل اسم القائمة', 'Edit List Title')}
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="font-mono tabular-nums text-xs font-bold text-sky-600 dark:text-sky-400">
+                              {doneCount}/{items.length} ({pct}%)
+                            </span>
+                          </div>
+                        )}
                         <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mt-1.5">
                           <div
                             style={{ width: `${pct}%` }}
@@ -1242,62 +1740,161 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
                           {tr('لا توجد بنود داخل هذه القائمة بعد.', 'No items in this list yet.')}
                         </p>
                       ) : (
-                        items.map((item) => (
-                          <div
-                            key={item.id}
-                            className="py-2 flex items-center justify-between gap-2 text-xs group"
-                          >
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleToggleChecklistItem(list, item.id)
-                              }
-                              className="flex items-center gap-2 text-start flex-1 min-w-0 cursor-pointer"
-                            >
-                              {item.done ? (
-                                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                              ) : (
-                                <Circle className="w-4 h-4 text-slate-400 group-hover:text-amber-500 shrink-0" />
-                              )}
-                              <span
-                                className={`truncate ${
-                                  item.done
-                                    ? 'line-through text-slate-400'
-                                    : 'text-slate-800 dark:text-slate-100 font-semibold'
-                                }`}
-                              >
-                                {item.text}
-                              </span>
-                              {item.priority === 'high' && !item.done && (
-                                <span className="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 text-[10px] font-bold shrink-0">
-                                  {tr('عاجل', 'Urgent')}
-                                </span>
-                              )}
-                            </button>
+                        items.map((item) => {
+                          const isEditingThisItem =
+                            editingTodoItem?.listId === list.id &&
+                            editingTodoItem?.itemId === item.id;
 
-                            <div className="flex items-center gap-1 shrink-0">
+                          if (isEditingThisItem && editingTodoItem) {
+                            return (
+                              <div
+                                key={item.id}
+                                className="py-2.5 px-2 my-1 rounded-xl bg-amber-50/70 dark:bg-amber-950/25 border border-amber-300 dark:border-amber-700 space-y-2 text-xs"
+                              >
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <input
+                                    type="text"
+                                    value={editingTodoItem.text}
+                                    onChange={(e) =>
+                                      setEditingTodoItem((prev) =>
+                                        prev ? { ...prev, text: e.target.value } : null
+                                      )
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleSaveTodoItemEdit(list);
+                                      } else if (e.key === 'Escape') {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        requestCancelTodoItemEdit();
+                                      }
+                                    }}
+                                    className="flex-1 min-w-[160px] px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-amber-400 rounded-lg text-xs font-semibold text-slate-900 dark:text-white"
+                                    autoFocus
+                                  />
+                                  <select
+                                    value={editingTodoItem.priority}
+                                    onChange={(e) =>
+                                      setEditingTodoItem((prev) =>
+                                        prev
+                                          ? {
+                                              ...prev,
+                                              priority: e.target.value as TeacherTaskPriority,
+                                            }
+                                          : null
+                                      )
+                                    }
+                                    className="px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
+                                  >
+                                    <option value="high">{tr('عاجلة', 'Urgent')}</option>
+                                    <option value="medium">{tr('متوسطة', 'Medium')}</option>
+                                    <option value="low">{tr('عادية', 'Normal')}</option>
+                                  </select>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3" />
+                                    {tr('اضغط حفظ لتثبيت التعديل', 'Click Save to keep edit')}
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={requestCancelTodoItemEdit}
+                                      className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
+                                    >
+                                      {tr('إلغاء', 'Cancel')}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={savingTodoItem || !editingTodoItem.text.trim()}
+                                      onClick={() => handleSaveTodoItemEdit(list)}
+                                      className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-black cursor-pointer disabled:opacity-50"
+                                    >
+                                      <Save className="w-3 h-3" />
+                                      <span>{tr('حفظ التعديل', 'Save')}</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={item.id}
+                              className="py-2 flex items-center justify-between gap-2 text-xs group"
+                            >
                               <button
                                 type="button"
                                 onClick={() =>
-                                  handlePromoteTodoToBoard(list, item)
+                                  handleToggleChecklistItem(list, item.id)
                                 }
-                                className="px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold cursor-pointer hover:bg-amber-100"
-                                title={tr('نسخ كبطاقة في لوحة المهام', 'Send to Tasks Board')}
+                                className="flex items-center gap-2 text-start flex-1 min-w-0 cursor-pointer"
                               >
-                                {tr('لوحة المهام', 'To Board')}
+                                {item.done ? (
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                                ) : (
+                                  <Circle className="w-4 h-4 text-slate-400 group-hover:text-amber-500 shrink-0" />
+                                )}
+                                <span
+                                  className={`truncate ${
+                                    item.done
+                                      ? 'line-through text-slate-400'
+                                      : 'text-slate-800 dark:text-slate-100 font-semibold'
+                                  }`}
+                                >
+                                  {item.text}
+                                </span>
+                                {item.priority === 'high' && !item.done && (
+                                  <span className="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 text-[10px] font-bold shrink-0">
+                                    {tr('عاجل', 'Urgent')}
+                                  </span>
+                                )}
                               </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleDeleteChecklistItem(list, item.id)
-                                }
-                                className="p-1 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setEditingTodoItem({
+                                      listId: list.id,
+                                      itemId: item.id,
+                                      text: item.text,
+                                      priority: item.priority || 'medium',
+                                      originalText: item.text,
+                                      originalPriority: item.priority || 'medium',
+                                    })
+                                  }
+                                  className="p-1 text-slate-400 hover:text-amber-500 rounded-lg cursor-pointer"
+                                  title={tr('تعديل البند', 'Edit Item')}
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handlePromoteTodoToBoard(list, item)
+                                  }
+                                  className="px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold cursor-pointer hover:bg-amber-100"
+                                  title={tr('نسخ كبطاقة في لوحة المهام', 'Send to Tasks Board')}
+                                >
+                                  {tr('لوحة المهام', 'To Board')}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDeleteChecklistItem(list, item.id)
+                                  }
+                                  className="p-1 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
+                                  title={tr('حذف البند', 'Delete Item')}
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </div>
@@ -1646,7 +2243,7 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
       {isTaskModalOpen && (
         <div
           className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4"
-          onClick={() => setIsTaskModalOpen(false)}
+          onClick={requestCloseTaskModal}
           dir={dir}
         >
           <div
@@ -1664,7 +2261,7 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
               </h3>
               <button
                 type="button"
-                onClick={() => setIsTaskModalOpen(false)}
+                onClick={requestCloseTaskModal}
                 className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -1840,15 +2437,50 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
                   </button>
                 </div>
                 {taskSubtasks.length > 0 && (
-                  <div className="space-y-1 max-h-32 overflow-y-auto pt-1">
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pt-1">
                     {taskSubtasks.map((st) => (
                       <div
                         key={st.id}
-                        className="flex items-center justify-between gap-2 px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"
+                        className="flex items-center gap-2 px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"
                       >
-                        <span className="truncate text-slate-700 dark:text-slate-200">
-                          {st.text}
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTaskSubtasks((prev) =>
+                              prev.map((item) =>
+                                item.id === st.id
+                                  ? { ...item, done: !item.done }
+                                  : item
+                              )
+                            )
+                          }
+                          className="shrink-0 cursor-pointer"
+                          title={tr('تبديل حالة الخطوة', 'Toggle step')}
+                        >
+                          {st.done ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                          ) : (
+                            <Circle className="w-4 h-4 text-slate-400 hover:text-amber-500" />
+                          )}
+                        </button>
+                        <input
+                          type="text"
+                          value={st.text}
+                          onChange={(e) =>
+                            setTaskSubtasks((prev) =>
+                              prev.map((item) =>
+                                item.id === st.id
+                                  ? { ...item, text: e.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          className={`flex-1 min-w-0 bg-transparent text-xs focus:outline-hidden ${
+                            st.done
+                              ? 'line-through text-slate-400'
+                              : 'text-slate-700 dark:text-slate-200 font-semibold'
+                          }`}
+                        />
                         <button
                           type="button"
                           onClick={() =>
@@ -1856,7 +2488,7 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
                               prev.filter((item) => item.id !== st.id)
                             )
                           }
-                          className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                          className="text-slate-400 hover:text-rose-600 cursor-pointer shrink-0"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -1866,10 +2498,22 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
                 )}
               </div>
 
+              {isTaskModalDirty && (
+                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/35 border border-amber-300 dark:border-amber-800 flex items-center gap-2 text-[11px] font-bold text-amber-800 dark:text-amber-200">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span>
+                    {tr(
+                      'توجد تغييرات غير محفوظة — اضغط "حفظ المهمة" لتثبيت التعديلات قبل الخروج.',
+                      'Unsaved edits detected — click "Save Task" before exiting.'
+                    )}
+                  </span>
+                </div>
+              )}
+
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsTaskModalOpen(false)}
+                  onClick={requestCloseTaskModal}
                   className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
                 >
                   {tr('إلغاء', 'Cancel')}
@@ -1893,7 +2537,7 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
       {isNoteModalOpen && (
         <div
           className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4"
-          onClick={() => setIsNoteModalOpen(false)}
+          onClick={requestCloseNoteModal}
           dir={dir}
         >
           <div
@@ -1911,7 +2555,7 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
               </h3>
               <button
                 type="button"
-                onClick={() => setIsNoteModalOpen(false)}
+                onClick={requestCloseNoteModal}
                 className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -2010,10 +2654,22 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
                 </span>
               </label>
 
+              {isNoteModalDirty && (
+                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/35 border border-amber-300 dark:border-amber-800 flex items-center gap-2 text-[11px] font-bold text-amber-800 dark:text-amber-200">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span>
+                    {tr(
+                      'توجد تغييرات غير محفوظة — اضغط "حفظ الملاحظة" قبل الخروج.',
+                      'Unsaved edits detected — click "Save Note" before exiting.'
+                    )}
+                  </span>
+                </div>
+              )}
+
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsNoteModalOpen(false)}
+                  onClick={requestCloseNoteModal}
                   className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
                 >
                   {tr('إلغاء', 'Cancel')}
@@ -2032,6 +2688,25 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Exit Warning Confirmation Modal */}
+      <ConfirmModal
+        isOpen={exitWarningModal.isOpen}
+        title={exitWarningModal.title}
+        message={exitWarningModal.message}
+        confirmText={tr('خروج بدون حفظ', 'Exit Without Saving')}
+        cancelText={tr('البقاء وإكمال الحفظ', 'Stay & Save')}
+        isDestructive={true}
+        zIndexClass="z-[80]"
+        onConfirm={() => {
+          const action = exitWarningModal.onConfirmExit;
+          setExitWarningModal((prev) => ({ ...prev, isOpen: false }));
+          action();
+        }}
+        onCancel={() =>
+          setExitWarningModal((prev) => ({ ...prev, isOpen: false }))
+        }
+      />
     </div>
   );
 };
@@ -2066,10 +2741,18 @@ export const TeacherWorkspaceDashboardWidget: React.FC<
     [tasks]
   );
 
-  const primaryTodoList = useMemo(
-    () => notes.find((n) => n.noteType === 'todo_list') || null,
-    [notes]
-  );
+  const primaryTodoList = useMemo(() => {
+    const lists = notes
+      .filter((n) => n.noteType === 'todo_list')
+      .sort((a, b) => {
+        if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
+        return (
+          new Date(b.updatedAt || b.createdAt).getTime() -
+          new Date(a.updatedAt || a.createdAt).getTime()
+        );
+      });
+    return lists[0] || null;
+  }, [notes]);
 
   const todoItems = useMemo(
     () => (primaryTodoList?.checklistItems || []).slice(0, 5),

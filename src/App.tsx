@@ -233,6 +233,9 @@ export default function App() {
   const [teacherNotes, setTeacherNotes] =
     useState<TeacherNote[]>([]);
 
+  const [isWorkspaceDirty, setIsWorkspaceDirty] =
+    useState(false);
+
   const [loading, setLoading] =
     useState(true);
 
@@ -607,6 +610,24 @@ export default function App() {
     }
     // 8. If in any other section than dashboard
     if (currentView !== 'dashboard') {
+      if (currentView === 'workspace' && isWorkspaceDirty) {
+        setConfirmModalConfig({
+          isOpen: true,
+          title: tr('تحذير قبل الخروج — تعديلات غير محفوظة', 'Exit Warning — Unsaved Changes'),
+          message: tr(
+            'رسالة تحذيرية: لديك تغييرات غير محفوظة في قائمة المهام (مساحة عمل المعلم). إذا خرجت الآن فسيتم تجاهلها. هل تريد الخروج بدون حفظ؟',
+            'Warning: You have unsaved edits in your task list. Exiting now will discard them. Exit without saving?'
+          ),
+          confirmText: tr('خروج بدون حفظ', 'Exit Without Saving'),
+          cancelText: tr('البقاء وإكمال الحفظ', 'Stay & Save'),
+          isDestructive: true,
+          onConfirm: () => {
+            setIsWorkspaceDirty(false);
+            setCurrentView('dashboard');
+          },
+        });
+        return true;
+      }
       setCurrentView('dashboard');
       return true;
     }
@@ -622,6 +643,8 @@ export default function App() {
     mobileMenuOpen,
     selectedStudent,
     currentView,
+    isWorkspaceDirty,
+    tr,
   ]);
 
   /* Keyboard shortcuts: Ctrl+K (Quick Search) & Escape (Step Back) */
@@ -1926,15 +1949,23 @@ export default function App() {
   const requestGoogleLogout = () => {
     setConfirmModalConfig({
       isOpen: true,
-      title: tr('تأكيد تسجيل الخروج', 'Confirm Sign Out'),
-      message: tr(
-        'هل أنت متأكد من رغبتك في تسجيل الخروج من حسابك؟ يمكنك تسجيل الدخول مجددًا في أي وقت عبر حساب Google الرسمي.',
-        'Are you sure you want to sign out? You can sign back in anytime using your official Google account.'
-      ),
+      title: isWorkspaceDirty
+        ? tr('تحذير قبل تسجيل الخروج — تغييرات غير محفوظة', 'Sign Out Warning — Unsaved Changes')
+        : tr('تأكيد تسجيل الخروج', 'Confirm Sign Out'),
+      message: isWorkspaceDirty
+        ? tr(
+            'رسالة تحذيرية: لديك تعديلات غير محفوظة في قائمة المهام! تسجيل الخروج الآن سيلغي التعديلات غير المحفوظة. هل تريد المتابعة أم البقاء للحفظ؟',
+            'Warning: You have unsaved edits in your task list! Signing out now will discard unsaved changes. Continue anyway?'
+          )
+        : tr(
+            'هل أنت متأكد من رغبتك في تسجيل الخروج من حسابك؟ يمكنك تسجيل الدخول مجددًا في أي وقت عبر حساب Google الرسمي.',
+            'Are you sure you want to sign out? You can sign back in anytime using your official Google account.'
+          ),
       confirmText: tr('تسجيل الخروج', 'Sign Out'),
-      cancelText: tr('إلغاء', 'Cancel'),
+      cancelText: isWorkspaceDirty ? tr('البقاء وحفظ التعديلات', 'Stay & Save') : tr('إلغاء', 'Cancel'),
       isDestructive: true,
       onConfirm: async () => {
+        setIsWorkspaceDirty(false);
         await handleGoogleLogout();
       },
     });
@@ -2003,9 +2034,7 @@ export default function App() {
      NAVIGATION
      ======================================================= */
 
-  const navigateTo = (
-    view: ViewMode
-  ) => {
+  const performNavigateTo = (view: ViewMode) => {
     setCurrentView(view);
     setMobileMenuOpen(false);
     const labels: Record<string, string> = {
@@ -2025,6 +2054,33 @@ export default function App() {
         actionLabel: labels[view],
       });
     }
+  };
+
+  const navigateTo = (
+    view: ViewMode
+  ) => {
+    if (currentView === 'workspace' && view !== 'workspace' && isWorkspaceDirty) {
+      setConfirmModalConfig({
+        isOpen: true,
+        title: tr('تحذير قبل الخروج — تعديلات غير محفوظة', 'Exit Warning — Unsaved Changes'),
+        message: tr(
+          'رسالة تحذيرية: لديك تغييرات غير محفوظة في قائمة المهام (مساحة عمل المعلم). إذا انتقلت الآن فسيتم تجاهلها. هل تريد الخروج بدون حفظ؟',
+          'Warning: You have unsaved edits in your task list. Navigating away now will discard them. Exit without saving?'
+        ),
+        confirmText: tr('خروج بدون حفظ', 'Exit Without Saving'),
+        cancelText: tr('البقاء وإكمال الحفظ', 'Stay & Save'),
+        isDestructive: true,
+        onConfirm: () => {
+          setIsWorkspaceDirty(false);
+          performNavigateTo(view);
+        },
+      });
+      return;
+    }
+    if (view !== 'workspace') {
+      setIsWorkspaceDirty(false);
+    }
+    performNavigateTo(view);
   };
 
   /* =======================================================
@@ -3199,6 +3255,7 @@ export default function App() {
               onSaveNote={saveTeacherNote}
               onDeleteNote={deleteTeacherNote}
               onNotify={addToast}
+              onDirtyChange={setIsWorkspaceDirty}
             />
           )}
 
