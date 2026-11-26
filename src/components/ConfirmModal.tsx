@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { useLanguage } from '../utils/i18n';
 
@@ -28,15 +28,28 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   onClose,
 }) => {
   const { dir, tr } = useLanguage();
-  if (!isOpen) return null;
-
-  const resolvedConfirm = confirmText || tr('تأكيد', 'Confirm');
-  const resolvedCancel = cancelText || tr('إلغاء', 'Cancel');
 
   const handleCancel = () => {
     if (onCancel) onCancel();
     if (onClose) onClose();
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      handleCancel();
+    };
+    document.addEventListener('keydown', handleEsc, { capture: true });
+    return () => document.removeEventListener('keydown', handleEsc, { capture: true });
+  });
+
+  if (!isOpen) return null;
+
+  const resolvedConfirm = confirmText || tr('تأكيد', 'Confirm');
+  const resolvedCancel = cancelText || tr('إلغاء', 'Cancel');
 
   return (
     <div 

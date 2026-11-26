@@ -57,6 +57,7 @@ interface ScoreEntryModalProps {
   ) => Promise<void>;
   onDeleteResult?: (resultId: string) => Promise<void>;
   onUpdateResultAttachment?: (resultId: string, attachment: ResultAttachment | null) => Promise<void>;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 interface ScoreRowState {
@@ -92,6 +93,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   onSaveScores,
   onDeleteResult,
   onUpdateResultAttachment,
+  onDirtyChange,
 }) => {
   const [rows, setRows] = useState<ScoreRowState[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -336,6 +338,27 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
 
   const modifiedRowsCount = rows.filter((r) => r.isModified).length;
   const hasUnsavedChanges = modifiedRowsCount > 0;
+
+  useEffect(() => {
+    onDirtyChange?.(isOpen && hasUnsavedChanges);
+  }, [isOpen, hasUnsavedChanges, onDirtyChange]);
+
+  useEffect(() => {
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [onDirtyChange]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isOpen && hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isOpen, hasUnsavedChanges]);
 
   // Auto-save progress draft whenever rows are modified
   useEffect(() => {

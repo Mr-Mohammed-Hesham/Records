@@ -24,6 +24,7 @@ import {
 import { getStructureStatusLabel } from '../utils/structureStatus';
 import { exportStructureRemindersExcel } from '../utils/excel';
 import { useLanguage, translateGrade, translateSubject } from '../utils/i18n';
+import { ConfirmModal } from './ConfirmModal';
 
 export type ReminderAudiencePreset =
   | 'custom'
@@ -152,6 +153,7 @@ interface StructureReminderModalProps {
   teacherName?: string;
   initialStudentIds?: string[];
   initialAudienceLabel?: string;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export const StructureReminderModal: React.FC<StructureReminderModalProps> = ({
@@ -163,6 +165,7 @@ export const StructureReminderModal: React.FC<StructureReminderModalProps> = ({
   teacherName = 'أ/ محمد هشام',
   initialStudentIds,
   initialAudienceLabel,
+  onDirtyChange,
 }) => {
   const { lang, dir, tr } = useLanguage();
   const [audiencePreset, setAudiencePreset] = useState<ReminderAudiencePreset>(
@@ -186,6 +189,7 @@ export const StructureReminderModal: React.FC<StructureReminderModalProps> = ({
   const [reminderLogs, setReminderLogs] = useState<Record<string, ReminderLogEntry>>(() =>
     loadReminderLogs()
   );
+  const [confirmExitOpen, setConfirmExitOpen] = useState(false);
 
   // Build eligible student rows for this structure
   const cohortRows = useMemo<StudentReminderRow[]>(() => {
@@ -275,7 +279,58 @@ export const StructureReminderModal: React.FC<StructureReminderModalProps> = ({
     setTemplateId(defaultTpl.id);
     setMessageTemplate(defaultTpl.body);
     setSearchQuery('');
+    setConfirmExitOpen(false);
   }, [isOpen, structure.id, initialStudentIds]);
+
+  const activePresetTemplateBody =
+    MESSAGE_TEMPLATES.find((t) => t.id === templateId)?.body || MESSAGE_TEMPLATES[0].body;
+  const isTemplateModified =
+    isOpen && messageTemplate.trim() !== activePresetTemplateBody.trim();
+
+  useEffect(() => {
+    onDirtyChange?.(isTemplateModified);
+  }, [isTemplateModified, onDirtyChange]);
+
+  useEffect(() => {
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [onDirtyChange]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isTemplateModified) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isTemplateModified]);
+
+  const requestSafeClose = () => {
+    if (!isTemplateModified) {
+      onClose();
+      return;
+    }
+    setConfirmExitOpen(true);
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (confirmExitOpen) {
+        setConfirmExitOpen(false);
+      } else {
+        requestSafeClose();
+      }
+    };
+    window.addEventListener('keydown', handleEsc, { capture: true });
+    return () => window.removeEventListener('keydown', handleEsc, { capture: true });
+  });
 
   const applyAudiencePreset = (preset: ReminderAudiencePreset) => {
     setAudiencePreset(preset);
@@ -441,7 +496,7 @@ export const StructureReminderModal: React.FC<StructureReminderModalProps> = ({
     <div
       className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 overflow-hidden"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) requestSafeClose();
       }}
       dir={dir}
     >
@@ -474,7 +529,7 @@ export const StructureReminderModal: React.FC<StructureReminderModalProps> = ({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestSafeClose}
             className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-700 cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
@@ -860,13 +915,33 @@ export const StructureReminderModal: React.FC<StructureReminderModalProps> = ({
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestSafeClose}
             className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 font-bold cursor-pointer whitespace-nowrap"
           >
             {tr('إغلاق', 'Close')}
           </button>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmExitOpen}
+        zIndexClass="z-[85]"
+        title={tr('تحذير قبل الخروج — تعديل نص التذكير', 'Exit Warning — Unsaved Reminder Edit')}
+        message={tr(
+          'قمت بتعديل نص رسالة التذكير المخصصة. إذا أغلقت النافذة الآن فستفقد التعديلات على النص. هل تريد الإغلاق؟',
+          'You modified the custom reminder message text. Closing now will discard your message edits. Close anyway?'
+        )}
+        confirmText={tr('إغلاق وتجاهل التعديل', 'Close & Discard')}
+        cancelText={tr('البقاء في التذكير', 'Stay')}
+        isDestructive={true}
+        onConfirm={() => {
+          setConfirmExitOpen(false);
+          onDirtyChange?.(false);
+          onClose();
+        }}
+        onCancel={() => setConfirmExitOpen(false)}
+        onClose={() => setConfirmExitOpen(false)}
+      />
     </div>
   );
 };

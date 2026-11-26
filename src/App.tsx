@@ -236,6 +236,27 @@ export default function App() {
   const [isWorkspaceDirty, setIsWorkspaceDirty] =
     useState(false);
 
+  const [isOvertimeDirty, setIsOvertimeDirty] =
+    useState(false);
+
+  const [isSettingsDirty, setIsSettingsDirty] =
+    useState(false);
+
+  const [isStructuresDirty, setIsStructuresDirty] =
+    useState(false);
+
+  const [isProfileDirty, setIsProfileDirty] =
+    useState(false);
+
+  const [isStudentModalDirty, setIsStudentModalDirty] =
+    useState(false);
+
+  const [isExamModalDirty, setIsExamModalDirty] =
+    useState(false);
+
+  const [isScoreModalDirty, setIsScoreModalDirty] =
+    useState(false);
+
   const [loading, setLoading] =
     useState(true);
 
@@ -558,6 +579,125 @@ export default function App() {
      STEP BACK (PHONE BACK BUTTON & ESC KEY)
      ======================================================= */
 
+  const clearAllDirtyFlags = useCallback(() => {
+    setIsWorkspaceDirty(false);
+    setIsOvertimeDirty(false);
+    setIsSettingsDirty(false);
+    setIsStructuresDirty(false);
+    setIsProfileDirty(false);
+    setIsStudentModalDirty(false);
+    setIsExamModalDirty(false);
+    setIsScoreModalDirty(false);
+  }, []);
+
+  const getDirtyExitConfig = useCallback(
+    (scope: 'any' | 'view' | 'modal' = 'any') => {
+      if (scope === 'any' || scope === 'modal') {
+        if (isScoreModalOpen && isScoreModalDirty) {
+          return {
+            title: tr('تحذير قبل الخروج — درجات غير محفوظة', 'Exit Warning — Unsaved Scores'),
+            message: tr(
+              'لديك درجات أو تعديلات غير محفوظة في نافذة رصد الدرجات. إذا خرجت الآن فسيتم تجاهلها. هل تريد الخروج بدون حفظ؟',
+              'You have unsaved scores in the Score Entry modal. Exiting now will discard them. Exit without saving?'
+            ),
+            clear: () => setIsScoreModalDirty(false),
+          };
+        }
+        if (isStudentModalOpen && isStudentModalDirty) {
+          return {
+            title: tr('تحذير قبل الخروج — بيانات طالب غير محفوظة', 'Exit Warning — Unsaved Student Data'),
+            message: tr(
+              'لديك بيانات طالب غير محفوظة. إذا أغلقت الآن فسيتم تجاهل التعديلات. هل تريد الخروج بدون حفظ؟',
+              'You have unsaved student form changes. Closing now will discard them. Exit without saving?'
+            ),
+            clear: () => setIsStudentModalDirty(false),
+          };
+        }
+        if (isExamModalOpen && isExamModalDirty) {
+          return {
+            title: tr('تحذير قبل الخروج — بيانات امتحان غير محفوظة', 'Exit Warning — Unsaved Exam Data'),
+            message: tr(
+              'لديك بيانات امتحان غير محفوظة. إذا أغلقت الآن فسيتم تجاهل التعديلات. هل تريد الخروج بدون حفظ؟',
+              'You have unsaved exam form changes. Closing now will discard them. Exit without saving?'
+            ),
+            clear: () => setIsExamModalDirty(false),
+          };
+        }
+      }
+
+      if (scope === 'any' || scope === 'view') {
+        if (currentView === 'workspace' && isWorkspaceDirty) {
+          return {
+            title: tr('تحذير قبل الخروج — تعديلات غير محفوظة', 'Exit Warning — Unsaved Changes'),
+            message: tr(
+              'رسالة تحذيرية: لديك تغييرات غير محفوظة في قائمة المهام أو الملاحظات (مساحة عمل المعلم). إذا خرجت الآن فسيتم تجاهلها. هل تريد الخروج بدون حفظ؟',
+              'Warning: You have unsaved edits in Teacher Workspace. Exiting now will discard them. Exit without saving?'
+            ),
+            clear: () => setIsWorkspaceDirty(false),
+          };
+        }
+        if (currentView === 'overtime' && isOvertimeDirty) {
+          return {
+            title: tr('تحذير قبل الخروج — بيانات مالية غير محفوظة', 'Exit Warning — Unsaved Finance Edits'),
+            message: tr(
+              'رسالة تحذيرية: لديك تعديلات أو إدخالات غير محفوظة في قسم المالية والأوفر تايم. إذا غادرت الآن فستفقدها. هل تريد الخروج بدون حفظ؟',
+              'Warning: You have unsaved entries or edits in Finance & Overtime. Leaving now will discard them. Exit without saving?'
+            ),
+            clear: () => setIsOvertimeDirty(false),
+          };
+        }
+        if (currentView === 'settings' && isSettingsDirty) {
+          return {
+            title: tr('تحذير قبل الخروج — إعدادات غير محفوظة', 'Exit Warning — Unsaved Settings'),
+            message: tr(
+              'رسالة تحذيرية: لديك تغييرات غير محفوظة في إعدادات المنصة. هل تريد المغادرة وتجاهل التعديلات؟',
+              'Warning: You have unsaved changes in Platform Settings. Leave and discard edits?'
+            ),
+            clear: () => setIsSettingsDirty(false),
+          };
+        }
+        if (currentView === 'structures' && isStructuresDirty) {
+          return {
+            title: tr('تحذير قبل الخروج — تعديلات غير محفوظة بالهياكل', 'Exit Warning — Unsaved Structure Edits'),
+            message: tr(
+              'رسالة تحذيرية: لديك تعديلات غير محفوظة داخل قسم الهياكل. هل تريد الخروج وتجاهل التعديلات؟',
+              'Warning: You have unsaved changes inside Structures. Exit and discard edits?'
+            ),
+            clear: () => setIsStructuresDirty(false),
+          };
+        }
+        if ((currentView === 'profile' || selectedStudent) && isProfileDirty) {
+          return {
+            title: tr('تحذير قبل الخروج — تعديلات غير محفوظة بملف الطالب', 'Exit Warning — Unsaved Student Profile Edits'),
+            message: tr(
+              'رسالة تحذيرية: لديك تعديلات غير محفوظة في ملف الطالب الحالي. هل تريد المغادرة بدون حفظ؟',
+              'Warning: You have unsaved edits on this student profile. Leave without saving?'
+            ),
+            clear: () => setIsProfileDirty(false),
+          };
+        }
+      }
+
+      return null;
+    },
+    [
+      isScoreModalOpen,
+      isScoreModalDirty,
+      isStudentModalOpen,
+      isStudentModalDirty,
+      isExamModalOpen,
+      isExamModalDirty,
+      currentView,
+      isWorkspaceDirty,
+      isOvertimeDirty,
+      isSettingsDirty,
+      isStructuresDirty,
+      selectedStudent,
+      isProfileDirty,
+      tr,
+    ]
+  );
+
   const handleStepBack = useCallback((): boolean => {
     // 1. Confirm dialog
     if (confirmModalConfig.isOpen) {
@@ -580,6 +720,26 @@ export default function App() {
     }
     // 3. Score Entry modal
     if (isScoreModalOpen) {
+      if (isScoreModalDirty) {
+        const cfg = getDirtyExitConfig('modal');
+        if (cfg) {
+          setConfirmModalConfig({
+            isOpen: true,
+            title: cfg.title,
+            message: cfg.message,
+            confirmText: tr('خروج بدون حفظ', 'Exit Without Saving'),
+            cancelText: tr('البقاء وإكمال الحفظ', 'Stay & Save'),
+            isDestructive: true,
+            onConfirm: () => {
+              cfg.clear();
+              setIsScoreModalOpen(false);
+              setActiveScoringExam(null);
+              setPreselectedStudentForScore(null);
+            },
+          });
+          return true;
+        }
+      }
       setIsScoreModalOpen(false);
       setActiveScoringExam(null);
       setPreselectedStudentForScore(null);
@@ -587,12 +747,50 @@ export default function App() {
     }
     // 4. Student form modal
     if (isStudentModalOpen) {
+      if (isStudentModalDirty) {
+        const cfg = getDirtyExitConfig('modal');
+        if (cfg) {
+          setConfirmModalConfig({
+            isOpen: true,
+            title: cfg.title,
+            message: cfg.message,
+            confirmText: tr('خروج بدون حفظ', 'Exit Without Saving'),
+            cancelText: tr('البقاء وإكمال الحفظ', 'Stay & Save'),
+            isDestructive: true,
+            onConfirm: () => {
+              cfg.clear();
+              setIsStudentModalOpen(false);
+              setStudentToEdit(null);
+            },
+          });
+          return true;
+        }
+      }
       setIsStudentModalOpen(false);
       setStudentToEdit(null);
       return true;
     }
     // 5. Exam form modal
     if (isExamModalOpen) {
+      if (isExamModalDirty) {
+        const cfg = getDirtyExitConfig('modal');
+        if (cfg) {
+          setConfirmModalConfig({
+            isOpen: true,
+            title: cfg.title,
+            message: cfg.message,
+            confirmText: tr('خروج بدون حفظ', 'Exit Without Saving'),
+            cancelText: tr('البقاء وإكمال الحفظ', 'Stay & Save'),
+            isDestructive: true,
+            onConfirm: () => {
+              cfg.clear();
+              setIsExamModalOpen(false);
+              setExamToEdit(null);
+            },
+          });
+          return true;
+        }
+      }
       setIsExamModalOpen(false);
       setExamToEdit(null);
       return true;
@@ -604,25 +802,42 @@ export default function App() {
     }
     // 7. Student profile view
     if (selectedStudent || currentView === 'profile') {
+      if (isProfileDirty) {
+        const cfg = getDirtyExitConfig('view');
+        if (cfg) {
+          setConfirmModalConfig({
+            isOpen: true,
+            title: cfg.title,
+            message: cfg.message,
+            confirmText: tr('خروج بدون حفظ', 'Exit Without Saving'),
+            cancelText: tr('البقاء وإكمال الحفظ', 'Stay & Save'),
+            isDestructive: true,
+            onConfirm: () => {
+              cfg.clear();
+              setSelectedStudent(null);
+              setCurrentView('students');
+            },
+          });
+          return true;
+        }
+      }
       setSelectedStudent(null);
       setCurrentView('students');
       return true;
     }
     // 8. If in any other section than dashboard
     if (currentView !== 'dashboard') {
-      if (currentView === 'workspace' && isWorkspaceDirty) {
+      const dirtyCfg = getDirtyExitConfig('view');
+      if (dirtyCfg) {
         setConfirmModalConfig({
           isOpen: true,
-          title: tr('تحذير قبل الخروج — تعديلات غير محفوظة', 'Exit Warning — Unsaved Changes'),
-          message: tr(
-            'رسالة تحذيرية: لديك تغييرات غير محفوظة في قائمة المهام (مساحة عمل المعلم). إذا خرجت الآن فسيتم تجاهلها. هل تريد الخروج بدون حفظ؟',
-            'Warning: You have unsaved edits in your task list. Exiting now will discard them. Exit without saving?'
-          ),
+          title: dirtyCfg.title,
+          message: dirtyCfg.message,
           confirmText: tr('خروج بدون حفظ', 'Exit Without Saving'),
           cancelText: tr('البقاء وإكمال الحفظ', 'Stay & Save'),
           isDestructive: true,
           onConfirm: () => {
-            setIsWorkspaceDirty(false);
+            dirtyCfg.clear();
             setCurrentView('dashboard');
           },
         });
@@ -638,12 +853,16 @@ export default function App() {
     isAlertsDrawerOpen,
     isSearchModalOpen,
     isScoreModalOpen,
+    isScoreModalDirty,
     isStudentModalOpen,
+    isStudentModalDirty,
     isExamModalOpen,
+    isExamModalDirty,
     mobileMenuOpen,
     selectedStudent,
     currentView,
-    isWorkspaceDirty,
+    isProfileDirty,
+    getDirtyExitConfig,
     tr,
   ]);
 
@@ -675,6 +894,8 @@ export default function App() {
   useEffect(() => {
     const isStepActive =
       confirmModalConfig.isOpen ||
+      globalReminderState.isOpen ||
+      isAlertsDrawerOpen ||
       isSearchModalOpen ||
       isScoreModalOpen ||
       isStudentModalOpen ||
@@ -688,6 +909,8 @@ export default function App() {
     }
   }, [
     confirmModalConfig.isOpen,
+    globalReminderState.isOpen,
+    isAlertsDrawerOpen,
     isSearchModalOpen,
     isScoreModalOpen,
     isStudentModalOpen,
@@ -702,7 +925,14 @@ export default function App() {
       const handled = handleStepBack();
       if (handled) {
         const stillActive =
-          currentView !== 'dashboard' || !!selectedStudent;
+          currentView !== 'dashboard' ||
+          !!selectedStudent ||
+          isScoreModalOpen ||
+          isStudentModalOpen ||
+          isExamModalOpen ||
+          isAlertsDrawerOpen ||
+          globalReminderState.isOpen ||
+          confirmModalConfig.isOpen;
         if (stillActive && !window.history.state?.stepActive) {
           window.history.pushState({ stepActive: true }, '');
         }
@@ -711,7 +941,17 @@ export default function App() {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [handleStepBack, currentView, selectedStudent]);
+  }, [
+    handleStepBack,
+    currentView,
+    selectedStudent,
+    isScoreModalOpen,
+    isStudentModalOpen,
+    isExamModalOpen,
+    isAlertsDrawerOpen,
+    globalReminderState.isOpen,
+    confirmModalConfig.isOpen,
+  ]);
 
   /* =======================================================
      INITIAL LOAD + REALTIME FIRESTORE
@@ -973,9 +1213,14 @@ export default function App() {
   ) => {
     setConfirmModalConfig({
       isOpen: true,
-      title: 'حذف الطالب ونتائجه',
-      message:
-        `هل أنت متأكد من رغبتك في حذف الطالب "${student.name}" نهائياً؟ سيتم أيضاً إزالة كافة نتائج امتحاناته المسجلة.`,
+      title: tr('تحذير: حذف الطالب ونتائجه نهائياً', 'Warning: Permanently Delete Student'),
+      message: tr(
+        `هل أنت متأكد من رغبتك في حذف الطالب "${student.name}" نهائياً؟ سيتم أيضاً إزالة كافة نتائج امتحاناته وسجلات الهياكل المرتبطة به.`,
+        `Are you sure you want to permanently delete "${student.name}"? All recorded exam results and structure records for this student will also be deleted.`
+      ),
+      confirmText: tr('تأكيد الحذف النهائي', 'Confirm Permanent Delete'),
+      cancelText: tr('تراجع', 'Cancel'),
+      isDestructive: true,
       onConfirm: async () => {
         try {
           /*
@@ -1008,7 +1253,10 @@ export default function App() {
           );
 
           addToast(
-            `تم حذف الطالب "${student.name}" وجميع نتائجه بنجاح`
+            tr(
+              `تم حذف الطالب "${student.name}" وجميع نتائجه بنجاح`,
+              `Deleted student "${student.name}" and all records`
+            )
           );
 
           if (
@@ -1016,6 +1264,7 @@ export default function App() {
             selectedStudent.id ===
               student.id
           ) {
+            setIsProfileDirty(false);
             setSelectedStudent(
               null
             );
@@ -1031,7 +1280,7 @@ export default function App() {
           );
 
           addToast(
-            'تعذر حذف الطالب أو بعض نتائجه',
+            tr('تعذر حذف الطالب أو بعض نتائجه', 'Failed to delete student or some records'),
             'error'
           );
         }
@@ -1039,9 +1288,7 @@ export default function App() {
     });
   };
 
-  const handleOpenStudentProfile = (
-    student: Student
-  ) => {
+  const openStudentProfileNow = (student: Student) => {
     setSelectedStudent(student);
     setCurrentView('profile');
     recordLastActivity({
@@ -1050,6 +1297,28 @@ export default function App() {
       studentName: student.name,
       actionLabel: `ملف الطالب: ${student.name}`,
     });
+  };
+
+  const handleOpenStudentProfile = (
+    student: Student
+  ) => {
+    const dirtyCfg = getDirtyExitConfig('view');
+    if (dirtyCfg && !(currentView === 'profile' && selectedStudent?.id === student.id)) {
+      setConfirmModalConfig({
+        isOpen: true,
+        title: dirtyCfg.title,
+        message: dirtyCfg.message,
+        confirmText: tr('الانتقال بدون حفظ', 'Proceed Without Saving'),
+        cancelText: tr('البقاء وإكمال الحفظ', 'Stay & Save'),
+        isDestructive: true,
+        onConfirm: () => {
+          dirtyCfg.clear();
+          openStudentProfileNow(student);
+        },
+      });
+      return;
+    }
+    openStudentProfileNow(student);
   };
 
   const handleUpdateStudentStatus = async (
@@ -1199,9 +1468,14 @@ export default function App() {
   ) => {
     setConfirmModalConfig({
       isOpen: true,
-      title: 'حذف الامتحان ودرجاته',
-      message:
-        `هل أنت متأكد من حذف امتحان "${exam.title}"؟ سيتم حذف جميع النتائج المرتبطة بهذا الامتحان.`,
+      title: tr('تحذير: حذف الامتحان ودرجاته نهائياً', 'Warning: Delete Exam & Scores'),
+      message: tr(
+        `هل أنت متأكد من حذف امتحان "${exam.title}"؟ سيتم حذف جميع النتائج والدرجات المرتبطة بهذا الامتحان نهائياً.`,
+        `Are you sure you want to delete "${exam.title}"? All student scores and results linked to this exam will be permanently removed.`
+      ),
+      confirmText: tr('تأكيد الحذف النهائي', 'Confirm Delete'),
+      cancelText: tr('تراجع', 'Cancel'),
+      isDestructive: true,
       onConfirm: async () => {
         try {
           /*
@@ -1564,15 +1838,26 @@ export default function App() {
   const handleDeleteStructure = (structure: ExamStructure) => {
     setConfirmModalConfig({
       isOpen: true,
-      title: 'حذف الهيكل وسجلاته',
-      message: `هل أنت متأكد من حذف الهيكل "${structure.title}"؟ سيتم حذف كافة سجلات حل الطلاب المرتبطة بهذا الهيكل.`,
+      title: tr('تحذير: حذف الهيكل وسجلاته نهائياً', 'Warning: Delete Structure & Records'),
+      message: tr(
+        `هل أنت متأكد من حذف الهيكل "${structure.title}"؟ سيتم حذف كافة سجلات حل الطلاب المرتبطة بهذا الهيكل ولا يمكن التراجع.`,
+        `Are you sure you want to delete structure "${structure.title}"? All student progress records linked to this structure will be permanently deleted.`
+      ),
+      confirmText: tr('تأكيد الحذف النهائي', 'Confirm Delete'),
+      cancelText: tr('تراجع', 'Cancel'),
+      isDestructive: true,
       onConfirm: async () => {
         try {
           await deleteStructure(structure.id);
-          addToast(`تم حذف الهيكل "${structure.title}" وجميع سجلاته بنجاح`);
+          addToast(
+            tr(
+              `تم حذف الهيكل "${structure.title}" وجميع سجلاته بنجاح`,
+              `Structure "${structure.title}" and all its records deleted`
+            )
+          );
         } catch (err) {
           console.error('Delete structure error:', err);
-          addToast('تعذر حذف الهيكل', 'error');
+          addToast(tr('تعذر حذف الهيكل', 'Failed to delete structure'), 'error');
         }
       },
     });
@@ -1616,24 +1901,35 @@ export default function App() {
       (progress.attemptNumber !== undefined && progress.attemptNumber > 1);
     setConfirmModalConfig({
       isOpen: true,
-      title: isImp ? 'حذف محاولة تحسين من الهيكل' : 'حذف سجل الطالب في الهيكل',
+      title: isImp
+        ? tr('تحذير: حذف محاولة تحسين من الهيكل', 'Warning: Delete Retake Attempt')
+        : tr('تحذير: حذف سجل الطالب في الهيكل', 'Warning: Delete Structure Score Record'),
       message: isImp
-        ? `هل أنت متأكد من حذف محاولة التحسين رقم (${progress.attemptNumber || 2}) للطالب "${progress.studentName}" في هيكل "${progress.structureTitle}"؟ سيتم حذف هذه المحاولة من هذا الهيكل فقط مع بقاء ملف الطالب وباقي بياناته على المنصة.`
-        : `هل أنت متأكد من حذف سجل الطالب "${progress.studentName}" من هيكل "${progress.structureTitle}"؟ سيتم مسح درجات هذا السجل من الهيكل فقط ولن يتم حذف ملف الطالب من المنصة.`,
-      confirmText: isImp ? 'حذف المحاولة' : 'مسح الدرجات فقط',
-      cancelText: 'تراجع',
+        ? tr(
+            `هل أنت متأكد من حذف محاولة التحسين رقم (${progress.attemptNumber || 2}) للطالب "${progress.studentName}" في هيكل "${progress.structureTitle}"؟ سيتم حذف هذه المحاولة من هذا الهيكل فقط مع بقاء ملف الطالب وباقي بياناته على المنصة.`,
+            `Are you sure you want to delete retake attempt #${progress.attemptNumber || 2} for "${progress.studentName}" in "${progress.structureTitle}"? Only this attempt is removed while the student profile remains intact.`
+          )
+        : tr(
+            `هل أنت متأكد من حذف سجل الطالب "${progress.studentName}" من هيكل "${progress.structureTitle}"؟ سيتم مسح درجات هذا السجل من الهيكل فقط ولن يتم حذف ملف الطالب من المنصة.`,
+            `Are you sure you want to delete "${progress.studentName}"'s record from "${progress.structureTitle}"? Only these structure scores are cleared; the student profile stays safe.`
+          ),
+      confirmText: isImp ? tr('حذف المحاولة', 'Delete Attempt') : tr('مسح الدرجات فقط', 'Clear Scores Only'),
+      cancelText: tr('تراجع', 'Cancel'),
       isDestructive: true,
       onConfirm: async () => {
         try {
           await deleteStudentStructureProgress(progress.id);
           addToast(
             isImp
-              ? 'تم حذف محاولة التحسين من الهيكل بنجاح'
-              : 'تم مسح درجات الطالب من الهيكل بنجاح (ملف الطالب باقٍ على المنصة)'
+              ? tr('تم حذف محاولة التحسين من الهيكل بنجاح', 'Retake attempt deleted from structure')
+              : tr(
+                  'تم مسح درجات الطالب من الهيكل بنجاح (ملف الطالب باقٍ على المنصة)',
+                  'Student structure scores cleared (profile preserved)'
+                )
           );
         } catch (err) {
           console.error('Delete structure progress error:', err);
-          addToast('تعذر حذف سجل الهيكل', 'error');
+          addToast(tr('تعذر حذف سجل الهيكل', 'Failed to delete structure record'), 'error');
         }
       },
     });
@@ -1947,25 +2243,23 @@ export default function App() {
     };
 
   const requestGoogleLogout = () => {
+    const dirtyCfg = getDirtyExitConfig('any');
     setConfirmModalConfig({
       isOpen: true,
-      title: isWorkspaceDirty
-        ? tr('تحذير قبل تسجيل الخروج — تغييرات غير محفوظة', 'Sign Out Warning — Unsaved Changes')
+      title: dirtyCfg
+        ? tr('تحذير قبل تسجيل الخروج — تعديلات غير محفوظة', 'Sign Out Warning — Unsaved Changes')
         : tr('تأكيد تسجيل الخروج', 'Confirm Sign Out'),
-      message: isWorkspaceDirty
-        ? tr(
-            'رسالة تحذيرية: لديك تعديلات غير محفوظة في قائمة المهام! تسجيل الخروج الآن سيلغي التعديلات غير المحفوظة. هل تريد المتابعة أم البقاء للحفظ؟',
-            'Warning: You have unsaved edits in your task list! Signing out now will discard unsaved changes. Continue anyway?'
-          )
+      message: dirtyCfg
+        ? dirtyCfg.message
         : tr(
             'هل أنت متأكد من رغبتك في تسجيل الخروج من حسابك؟ يمكنك تسجيل الدخول مجددًا في أي وقت عبر حساب Google الرسمي.',
             'Are you sure you want to sign out? You can sign back in anytime using your official Google account.'
           ),
       confirmText: tr('تسجيل الخروج', 'Sign Out'),
-      cancelText: isWorkspaceDirty ? tr('البقاء وحفظ التعديلات', 'Stay & Save') : tr('إلغاء', 'Cancel'),
+      cancelText: dirtyCfg ? tr('البقاء وحفظ التعديلات', 'Stay & Save') : tr('إلغاء', 'Cancel'),
       isDestructive: true,
       onConfirm: async () => {
-        setIsWorkspaceDirty(false);
+        clearAllDirtyFlags();
         await handleGoogleLogout();
       },
     });
@@ -2059,27 +2353,29 @@ export default function App() {
   const navigateTo = (
     view: ViewMode
   ) => {
-    if (currentView === 'workspace' && view !== 'workspace' && isWorkspaceDirty) {
-      setConfirmModalConfig({
-        isOpen: true,
-        title: tr('تحذير قبل الخروج — تعديلات غير محفوظة', 'Exit Warning — Unsaved Changes'),
-        message: tr(
-          'رسالة تحذيرية: لديك تغييرات غير محفوظة في قائمة المهام (مساحة عمل المعلم). إذا انتقلت الآن فسيتم تجاهلها. هل تريد الخروج بدون حفظ؟',
-          'Warning: You have unsaved edits in your task list. Navigating away now will discard them. Exit without saving?'
-        ),
-        confirmText: tr('خروج بدون حفظ', 'Exit Without Saving'),
-        cancelText: tr('البقاء وإكمال الحفظ', 'Stay & Save'),
-        isDestructive: true,
-        onConfirm: () => {
-          setIsWorkspaceDirty(false);
-          performNavigateTo(view);
-        },
-      });
-      return;
+    if (view !== currentView) {
+      const dirtyCfg = getDirtyExitConfig('view');
+      if (dirtyCfg) {
+        setConfirmModalConfig({
+          isOpen: true,
+          title: dirtyCfg.title,
+          message: dirtyCfg.message,
+          confirmText: tr('خروج بدون حفظ', 'Exit Without Saving'),
+          cancelText: tr('البقاء وإكمال الحفظ', 'Stay & Save'),
+          isDestructive: true,
+          onConfirm: () => {
+            dirtyCfg.clear();
+            performNavigateTo(view);
+          },
+        });
+        return;
+      }
     }
-    if (view !== 'workspace') {
-      setIsWorkspaceDirty(false);
-    }
+    if (view !== 'workspace') setIsWorkspaceDirty(false);
+    if (view !== 'overtime') setIsOvertimeDirty(false);
+    if (view !== 'settings') setIsSettingsDirty(false);
+    if (view !== 'structures') setIsStructuresDirty(false);
+    if (view !== 'profile') setIsProfileDirty(false);
     performNavigateTo(view);
   };
 
@@ -2195,17 +2491,42 @@ export default function App() {
   };
 
   const handleStartAllFresh = () => {
-    clearAllActivityAndDrafts();
-    clearLastActivity();
-    clearViewState('MAIN_NAV_STATE');
-    clearViewState('STUDENTS_VIEW');
-    clearViewState('EXAMS_VIEW');
-    clearViewState('STRUCTURES_VIEW_STATE');
-    clearViewState('REPORTS_VIEW');
-    setSelectedStudent(null);
-    setCurrentView('dashboard');
-    setLastActivityBannerDismissed(true);
-    addToast('تمت إعادة ضبط النشاط للبدء من جديد من الصفحة الرئيسية', 'info');
+    const dirtyCfg = getDirtyExitConfig('any');
+    setConfirmModalConfig({
+      isOpen: true,
+      title: dirtyCfg
+        ? tr('تحذير: تغييرات غير محفوظة وإعادة ضبط التصفح', 'Warning: Unsaved Changes & Reset Navigation')
+        : tr('تأكيد البدء من جديد ومسح المسودات المؤقتة', 'Confirm Start Fresh & Clear Drafts'),
+      message: dirtyCfg
+        ? dirtyCfg.message
+        : tr(
+            'هل تريد مسح مسودات العمل المؤقتة وإعادة ضبط الفلاتر والعودة للوحة التحكم الرئيسية؟ (بياناتك المحفوظة سحابياً لن تتأثر).',
+            'Clear temporary local drafts, reset filters, and return to main dashboard? (Your saved cloud records remain safe).'
+          ),
+      confirmText: tr('تأكيد البدء من جديد', 'Confirm Reset'),
+      cancelText: tr('تراجع', 'Cancel'),
+      isDestructive: true,
+      onConfirm: () => {
+        clearAllDirtyFlags();
+        clearAllActivityAndDrafts();
+        clearLastActivity();
+        clearViewState('MAIN_NAV_STATE');
+        clearViewState('STUDENTS_VIEW');
+        clearViewState('EXAMS_VIEW');
+        clearViewState('STRUCTURES_VIEW_STATE');
+        clearViewState('REPORTS_VIEW');
+        setSelectedStudent(null);
+        setCurrentView('dashboard');
+        setLastActivityBannerDismissed(true);
+        addToast(
+          tr(
+            'تمت إعادة ضبط النشاط للبدء من جديد من الصفحة الرئيسية',
+            'Activity reset to start fresh from dashboard'
+          ),
+          'info'
+        );
+      },
+    });
   };
 
   const activeTasksCount = teacherTasks.filter((t) => t.status !== 'done').length;
@@ -3156,6 +3477,7 @@ export default function App() {
                 onSaveStructureProgress={handleSaveStructureProgress}
                 onDeleteStructureProgress={handleDeleteStructureProgress}
                 onOpenStructures={() => navigateTo('structures')}
+                onDirtyChange={setIsProfileDirty}
               />
             )}
 
@@ -3208,6 +3530,7 @@ export default function App() {
               onDeleteStudentsFromStructure={handleDeleteStudentsFromStructure}
               onRestoreStudentsToStructure={handleRestoreStudentsToStructure}
               onOpenStudentProfile={handleOpenStudentProfile}
+              onDirtyChange={setIsStructuresDirty}
             />
           )}
 
@@ -3242,6 +3565,7 @@ export default function App() {
               onSaveMonthlyConfig={saveOvertimeMonthlyConfig}
               onImportBackupMerge={importOvertimeBackupMerge}
               onNotify={addToast}
+              onDirtyChange={setIsOvertimeDirty}
             />
           )}
 
@@ -3286,6 +3610,7 @@ export default function App() {
               onImportJsonBackup={
                 handleImportJsonBackup
               }
+              onDirtyChange={setIsSettingsDirty}
             />
           )}
         </main>
@@ -3322,6 +3647,7 @@ export default function App() {
         settings={
           settings
         }
+        onDirtyChange={setIsStudentModalDirty}
       />
 
       <ExamFormModal
@@ -3348,6 +3674,7 @@ export default function App() {
         settings={
           settings
         }
+        onDirtyChange={setIsExamModalDirty}
       />
 
       <ScoreEntryModal
@@ -3401,6 +3728,7 @@ export default function App() {
         preselectedStudent={
           preselectedStudentForScore
         }
+        onDirtyChange={setIsScoreModalDirty}
       />
 
       <QuickSearchModal

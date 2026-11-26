@@ -103,9 +103,15 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleRemoveImage = (id: string, e: React.MouseEvent) => {
+  const [pendingDeleteAction, setPendingDeleteAction] = useState<
+    | { type: "image"; id: string; name: string }
+    | { type: "clearText" }
+    | null
+  >(null);
+
+  const handleRemoveImage = (id: string, name: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    onImagesChange(images.filter((img) => img.id !== id));
+    setPendingDeleteAction({ type: "image", id, name });
   };
 
   // Detect count of questions in the entered text
@@ -339,8 +345,8 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                             )}
                             <button
                               type="button"
-                              onClick={(e) => handleRemoveImage(item.id, e)}
-                              className="p-1 bg-rose-600/90 hover:bg-rose-500 text-white rounded-lg text-xs"
+                              onClick={(e) => handleRemoveImage(item.id, item.name || "الملف", e)}
+                              className="p-1 bg-rose-600/90 hover:bg-rose-500 text-white rounded-lg text-xs cursor-pointer"
                               title="حذف"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -376,8 +382,8 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
               {examText.trim() && (
                 <button
                   type="button"
-                  onClick={() => onExamTextChange("")}
-                  className="text-[11px] text-rose-400 hover:text-rose-300 font-semibold hover:underline"
+                  onClick={() => setPendingDeleteAction({ type: "clearText" })}
+                  className="text-[11px] text-rose-400 hover:text-rose-300 font-semibold hover:underline cursor-pointer"
                 >
                   مسح النص
                 </button>
@@ -434,6 +440,53 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
         </div>
       )}
 
+      {/* Delete/Clear Confirmation Modal */}
+      {pendingDeleteAction && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs"
+          onClick={() => setPendingDeleteAction(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-5 shadow-2xl space-y-4 text-right"
+            dir="rtl"
+          >
+            <h4 className="text-sm font-black text-white">
+              {pendingDeleteAction.type === "image"
+                ? "تحذير: حذف الملف المرفق"
+                : "تحذير: مسح نص الامتحان"}
+            </h4>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {pendingDeleteAction.type === "image"
+                ? `هل أنت متأكد من حذف "${pendingDeleteAction.name}" من مصادر الامتحان؟`
+                : "هل أنت متأكد من مسح نص الامتحان المكتوب بالكامل؟ لن يمكنك التراجع بعد المسح."}
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteAction(null)}
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold cursor-pointer"
+              >
+                تراجع
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (pendingDeleteAction.type === "image") {
+                    onImagesChange(images.filter((img) => img.id !== pendingDeleteAction.id));
+                  } else {
+                    onExamTextChange("");
+                  }
+                  setPendingDeleteAction(null);
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black cursor-pointer"
+              >
+                {pendingDeleteAction.type === "image" ? "تأكيد الحذف" : "تأكيد المسح"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

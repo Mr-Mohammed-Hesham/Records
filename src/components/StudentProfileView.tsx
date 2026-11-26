@@ -82,6 +82,7 @@ interface StudentProfileViewProps {
   ) => Promise<StudentStructureProgress>;
   onDeleteStructureProgress?: (progress: StudentStructureProgress) => void;
   onOpenStructures?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
@@ -101,6 +102,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   onSaveStructureProgress,
   onDeleteStructureProgress,
   onOpenStructures,
+  onDirtyChange,
 }) => {
   const { lang, dir, isRtl, tr } = useLanguage();
   const [editingResultId, setEditingResultId] = useState<string | null>(null);
@@ -109,6 +111,23 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   const [showAcademicReportModal, setShowAcademicReportModal] = useState(false);
   const [activeAttachmentResult, setActiveAttachmentResult] = useState<ExamResult | null>(null);
   const [pendingDeleteResult, setPendingDeleteResult] = useState<ExamResult | null>(null);
+  const [isStructureScoringDirty, setIsStructureScoringDirty] = useState(false);
+  const [isAttachmentDirty, setIsAttachmentDirty] = useState(false);
+  const [profileConfirmState, setProfileConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: tr('تأكيد', 'Confirm'),
+    cancelText: tr('تراجع', 'Cancel'),
+    onConfirm: () => {},
+  });
   const [structureModalState, setStructureModalState] = useState<{
     isOpen: boolean;
     structure: ExamStructure | null;
@@ -132,6 +151,9 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   const [enrollmentNote, setEnrollmentNote] = useState<string>(
     () => getEffectiveEnrollmentNote(student)
   );
+  const [savedEnrollmentNote, setSavedEnrollmentNote] = useState<string>(
+    () => getEffectiveEnrollmentNote(student)
+  );
   const [statusSavedToast, setStatusSavedToast] = useState<string | null>(null);
 
   // Excel Export Quick Preferences
@@ -140,13 +162,96 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   const [excelIncludeChart, setExcelIncludeChart] = useState<boolean>(initialExcelPrefs.includeChart);
 
   useEffect(() => {
+    const note = getEffectiveEnrollmentNote(student);
     setCurrentEnrollmentStatus(getEffectiveEnrollmentStatus(student));
-    setEnrollmentNote(getEffectiveEnrollmentNote(student));
+    setEnrollmentNote(note);
+    setSavedEnrollmentNote(note);
+    setEditingResultId(null);
   }, [student]);
+
+  const activeEditingResult = editingResultId
+    ? results.find((r) => r.id === editingResultId) || null
+    : null;
+  const isInlineResultModified = Boolean(
+    activeEditingResult &&
+      (editScoreVal !== String(activeEditingResult.score) ||
+        editNotesVal !== (activeEditingResult.notes || ''))
+  );
+  const isNoteDirty = enrollmentNote.trim() !== (savedEnrollmentNote || '').trim();
+  const isProfileDirty =
+    isInlineResultModified || isNoteDirty || isStructureScoringDirty || isAttachmentDirty;
+
+  useEffect(() => {
+    onDirtyChange?.(isProfileDirty);
+  }, [isProfileDirty, onDirtyChange]);
+
+  useEffect(() => {
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [onDirtyChange]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isProfileDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isProfileDirty]);
+
+  const requestSafeExitProfile = (action: () => void) => {
+    if (!isProfileDirty) {
+      action();
+      return;
+    }
+    setProfileConfirmState({
+      isOpen: true,
+      title: tr('تحذير قبل الخروج — تعديلات غير محفوظة', 'Exit Warning — Unsaved Edits'),
+      message: tr(
+        `لديك تعديلات غير محفوظة في ملف الطالب "${student.name}". إذا غادرت الآن فسيتم تجاهلها. هل تريد المغادرة بدون حفظ؟`,
+        `You have unsaved edits on "${student.name}" profile. Leaving now will discard them. Exit without saving?`
+      ),
+      confirmText: tr('تجاهل التعديلات والخروج', 'Discard & Exit'),
+      cancelText: tr('البقاء وحفظ التعديلات', 'Stay & Save'),
+      onConfirm: () => {
+        setEditingResultId(null);
+        setEnrollmentNote(savedEnrollmentNote);
+        setProfileConfirmState((prev) => ({ ...prev, isOpen: false }));
+        onDirtyChange?.(false);
+        action();
+      },
+    });
+  };
+
+  const requestCancelInlineEdit = (res: ExamResult) => {
+    const changed = editScoreVal !== String(res.score) || editNotesVal !== (res.notes || '');
+    if (!changed) {
+      setEditingResultId(null);
+      return;
+    }
+    setProfileConfirmState({
+      isOpen: true,
+      title: tr('تحذير: إلغاء تعديل النتيجة', 'Warning: Discard Score Edit'),
+      message: tr(
+        `هل تريد إلغاء التعديلات التي أجريتها على نتيجة "${res.examTitle}" دون حفظ؟`,
+        `Discard your unsaved changes to "${res.examTitle}" score?`
+      ),
+      confirmText: tr('تجاهل التعديل', 'Discard Edit'),
+      cancelText: tr('العودة للتعديل', 'Keep Editing'),
+      onConfirm: () => {
+        setEditingResultId(null);
+        setProfileConfirmState((prev) => ({ ...prev, isOpen: false }));
+      },
+    });
+  };
 
   const handleSelectEnrollmentStatus = (newStatus: StudentEnrollmentStatus, customNote?: string) => {
     const noteToSave = customNote !== undefined ? customNote : enrollmentNote;
     setCurrentEnrollmentStatus(newStatus);
+    setSavedEnrollmentNote(noteToSave);
     saveLocalStudentStatus(student.id, newStatus, noteToSave);
     if (onUpdateStudentStatus) {
       onUpdateStudentStatus(student, newStatus, noteToSave);
@@ -158,6 +263,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
 
   const handleSaveEnrollmentNote = () => {
     saveLocalStudentStatus(student.id, currentEnrollmentStatus, enrollmentNote);
+    setSavedEnrollmentNote(enrollmentNote);
     if (onUpdateStudentStatus) {
       onUpdateStudentStatus(student, currentEnrollmentStatus, enrollmentNote);
     }
@@ -266,7 +372,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-3">
           <button
-            onClick={onBack}
+            onClick={() => requestSafeExitProfile(onBack)}
             className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer flex items-center gap-1 font-semibold text-sm"
           >
             {isRtl ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
@@ -1045,7 +1151,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                                 {tr('حفظ', 'Save')}
                               </button>
                               <button
-                                onClick={() => setEditingResultId(null)}
+                                onClick={() => requestCancelInlineEdit(res)}
                                 className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[11px] cursor-pointer"
                               >
                                 {tr('إلغاء', 'Cancel')}
@@ -1126,7 +1232,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             {onOpenStructures && (
               <button
                 type="button"
-                onClick={onOpenStructures}
+                onClick={() => requestSafeExitProfile(onOpenStructures)}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-800 rounded-xl transition cursor-pointer"
               >
                 <Layers className="w-3.5 h-3.5" />
@@ -1368,6 +1474,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           title={tr('إثبات ومرفق مصداقية الامتحان', 'Exam Verification Attachment')}
           subtitle={`${tr('طالب:', 'Student:')} ${student.name} | ${tr('امتحان:', 'Exam:')} ${activeAttachmentResult.examTitle} | ${tr('الدرجة:', 'Score:')} ${activeAttachmentResult.score} / ${activeAttachmentResult.totalScore}`}
           attachment={activeAttachmentResult.attachment || null}
+          onDirtyChange={setIsAttachmentDirty}
           onSave={async (attachment) => {
             if (onUpdateResultAttachment) {
               await onUpdateResultAttachment(activeAttachmentResult.id, attachment);
@@ -1392,6 +1499,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           subjectsList={settings.subjects && settings.subjects.length > 0 ? settings.subjects : ['Mathematics']}
           tracksList={ACADEMIC_TRACKS}
           yearsList={ACADEMIC_YEARS}
+          onDirtyChange={setIsStructureScoringDirty}
           onClose={() =>
             setStructureModalState({
               isOpen: false,
@@ -1438,6 +1546,20 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           setPendingDeleteResult(null);
         }}
         onCancel={() => setPendingDeleteResult(null)}
+        onClose={() => setPendingDeleteResult(null)}
+      />
+
+      <ConfirmModal
+        isOpen={profileConfirmState.isOpen}
+        zIndexClass="z-[80]"
+        title={profileConfirmState.title}
+        message={profileConfirmState.message}
+        confirmText={profileConfirmState.confirmText}
+        cancelText={profileConfirmState.cancelText}
+        isDestructive={true}
+        onConfirm={profileConfirmState.onConfirm}
+        onCancel={() => setProfileConfirmState((prev) => ({ ...prev, isOpen: false }))}
+        onClose={() => setProfileConfirmState((prev) => ({ ...prev, isOpen: false }))}
       />
     </div>
   );

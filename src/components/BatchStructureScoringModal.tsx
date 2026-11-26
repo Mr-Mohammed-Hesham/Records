@@ -50,6 +50,7 @@ export interface BatchStructureScoringModalProps {
   onSaveBatch: (
     records: Array<Omit<StudentStructureProgress, 'id'> & { id?: string }>
   ) => Promise<void>;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 type ConflictPolicy = 'keep_existing' | 'higher_wins' | 'replace_selected';
@@ -89,6 +90,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
   yearsList,
   onClose,
   onSaveBatch,
+  onDirtyChange,
 }) => {
   const { lang, dir, tr } = useLanguage();
   const totalQ = Math.max(1, structure.totalQuestions || structure.questions?.length || 1);
@@ -197,6 +199,27 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
     }
     hydratedRef.current = true;
   }, [isOpen, structure.id]);
+
+  useEffect(() => {
+    onDirtyChange?.(isOpen && isDirty);
+  }, [isOpen, isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [onDirtyChange]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isOpen && isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isOpen, isDirty]);
 
   // Auto-save progress draft whenever dirty
   useEffect(() => {

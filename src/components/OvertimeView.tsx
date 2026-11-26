@@ -45,6 +45,7 @@ import {
 } from '../types';
 import { exportOvertimeFinancialExcel } from '../utils/excel';
 import { useLanguage, AppLanguage } from '../utils/i18n';
+import { ConfirmModal } from './ConfirmModal';
 
 interface OvertimeViewProps {
   entries: OvertimeEntry[];
@@ -62,6 +63,7 @@ interface OvertimeViewProps {
     configs: OvertimeMonthlyConfig[]
   ) => Promise<{ entriesAdded: number; monthsUpdated: number }>;
   onNotify?: (message: string, type?: 'success' | 'error' | 'info') => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 const CURRENCY_OPTIONS = [
@@ -281,6 +283,7 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
   onSaveMonthlyConfig,
   onImportBackupMerge,
   onNotify,
+  onDirtyChange,
 }) => {
   const { lang, dir, tr } = useLanguage();
   const [selectedMonthKey, setSelectedMonthKey] = useState<string>(() => getCurrentMonthKey());
@@ -415,12 +418,63 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
   const [entryNotes, setEntryNotes] = useState<string>('');
   const [savingEntry, setSavingEntry] = useState(false);
 
+  const [entryInitialSnapshot, setEntryInitialSnapshot] = useState<string>(() =>
+    JSON.stringify({
+      editingEntryId: null,
+      entryDate: defaultEntryDateForMonth(getCurrentMonthKey()),
+      entryHours: '2',
+      startTime: '',
+      endTime: '',
+      entryDayType: 'regular',
+      entryMultiplier: String(configDraft.regularMultiplier || 1.25),
+      useCustomFixedAmount: false,
+      customFixedAmount: '',
+      entryCategory: WORK_CATEGORIES[0],
+      entryNotes: '',
+    })
+  );
+
+  // Unified ConfirmModal state for delete, archive & exit warnings
+  const [overtimeConfirmModal, setOvertimeConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText: string;
+    onConfirm: () => Promise<void> | void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    cancelText: '',
+    onConfirm: () => {},
+  });
+
   // When selectedMonthKey changes and not editing an entry, align entryDate to that month
   useEffect(() => {
     if (!editingEntryId) {
-      setEntryDate(defaultEntryDateForMonth(selectedMonthKey));
+      const nextDate = defaultEntryDateForMonth(selectedMonthKey);
+      const nextMult = String((storedConfig || buildDefaultMonthConfig(selectedMonthKey, monthlyConfigs)).regularMultiplier || 1.25);
+      setEntryDate(nextDate);
+      setEntryMultiplier(nextMult);
+      setEntryInitialSnapshot(
+        JSON.stringify({
+          editingEntryId: null,
+          entryDate: nextDate,
+          entryHours: '2',
+          startTime: '',
+          endTime: '',
+          entryDayType: 'regular',
+          entryMultiplier: nextMult,
+          useCustomFixedAmount: false,
+          customFixedAmount: '',
+          entryCategory: WORK_CATEGORIES[0],
+          entryNotes: '',
+        })
+      );
     }
-  }, [selectedMonthKey, editingEntryId]);
+  }, [selectedMonthKey, editingEntryId, storedConfig]);
 
   // Auto-update day type & multiplier when date changes for a new entry
   const handleEntryDateChange = (newDate: string) => {
@@ -490,19 +544,36 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
   }, [useCustomFixedAmount, customFixedAmount, previewHoursNum, effectiveHourlyRate, previewMultiplierNum]);
 
   const resetEntryForm = () => {
+    const nextDate = defaultEntryDateForMonth(selectedMonthKey);
+    const nextMult = String(configDraft.regularMultiplier || 1.25);
     setEditingEntryId(null);
-    setEntryDate(defaultEntryDateForMonth(selectedMonthKey));
+    setEntryDate(nextDate);
     setEntryHours('2');
     setStartTime('');
     setEndTime('');
     setCalcHoursInput('');
     setCalcMinutesInput('');
     setEntryDayType('regular');
-    setEntryMultiplier(String(configDraft.regularMultiplier || 1.25));
+    setEntryMultiplier(nextMult);
     setUseCustomFixedAmount(false);
     setCustomFixedAmount('');
     setEntryCategory(WORK_CATEGORIES[0]);
     setEntryNotes('');
+    setEntryInitialSnapshot(
+      JSON.stringify({
+        editingEntryId: null,
+        entryDate: nextDate,
+        entryHours: '2',
+        startTime: '',
+        endTime: '',
+        entryDayType: 'regular',
+        entryMultiplier: nextMult,
+        useCustomFixedAmount: false,
+        customFixedAmount: '',
+        entryCategory: WORK_CATEGORIES[0],
+        entryNotes: '',
+      })
+    );
   };
 
   const handleSaveSalaryConfig = async (silent = false) => {
@@ -623,23 +694,39 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
     }
   };
 
-  const handleStartEditEntry = (entry: OvertimeEntry) => {
+  const applyStartEditEntry = (entry: OvertimeEntry) => {
+    const useCustom = entry.customFixedAmount !== undefined && entry.customFixedAmount > 0;
+    const customStr = useCustom ? String(entry.customFixedAmount) : '';
+    const cat = entry.category || WORK_CATEGORIES[0];
+    const nts = entry.notes || '';
     setEditingEntryId(entry.id);
     setEntryDate(entry.date);
     setEntryHours(String(entry.hours));
     setStartTime(entry.startTime || '');
     setEndTime(entry.endTime || '');
+    setCalcHoursInput('');
+    setCalcMinutesInput('');
     setEntryDayType(entry.dayType);
     setEntryMultiplier(String(entry.multiplier));
-    if (entry.customFixedAmount !== undefined && entry.customFixedAmount > 0) {
-      setUseCustomFixedAmount(true);
-      setCustomFixedAmount(String(entry.customFixedAmount));
-    } else {
-      setUseCustomFixedAmount(false);
-      setCustomFixedAmount('');
-    }
-    setEntryCategory(entry.category || WORK_CATEGORIES[0]);
-    setEntryNotes(entry.notes || '');
+    setUseCustomFixedAmount(useCustom);
+    setCustomFixedAmount(customStr);
+    setEntryCategory(cat);
+    setEntryNotes(nts);
+    setEntryInitialSnapshot(
+      JSON.stringify({
+        editingEntryId: entry.id,
+        entryDate: entry.date,
+        entryHours: String(entry.hours),
+        startTime: entry.startTime || '',
+        endTime: entry.endTime || '',
+        entryDayType: entry.dayType,
+        entryMultiplier: String(entry.multiplier),
+        useCustomFixedAmount: useCustom,
+        customFixedAmount: customStr,
+        entryCategory: cat,
+        entryNotes: nts,
+      })
+    );
     setActiveTab('daily');
   };
 
@@ -649,6 +736,158 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
   const [adjAmount, setAdjAmount] = useState('');
   const [adjDate, setAdjDate] = useState('');
   const [adjNotes, setAdjNotes] = useState('');
+
+  const currentEntrySnapshot = useMemo(
+    () =>
+      JSON.stringify({
+        editingEntryId,
+        entryDate,
+        entryHours,
+        startTime,
+        endTime,
+        entryDayType,
+        entryMultiplier,
+        useCustomFixedAmount,
+        customFixedAmount,
+        entryCategory,
+        entryNotes,
+      }),
+    [
+      editingEntryId,
+      entryDate,
+      entryHours,
+      startTime,
+      endTime,
+      entryDayType,
+      entryMultiplier,
+      useCustomFixedAmount,
+      customFixedAmount,
+      entryCategory,
+      entryNotes,
+    ]
+  );
+
+  const isEntryFormDirty =
+    currentEntrySnapshot !== entryInitialSnapshot ||
+    calcHoursInput.trim() !== '' ||
+    calcMinutesInput.trim() !== '';
+
+  const isAdjustmentFormDirty =
+    adjTitle.trim() !== '' ||
+    adjAmount.trim() !== '' ||
+    adjDate.trim() !== '' ||
+    adjNotes.trim() !== '';
+
+  const hasUnsavedOvertimeChanges =
+    configDirty || isEntryFormDirty || isAdjustmentFormDirty;
+
+  useEffect(() => {
+    onDirtyChange?.(hasUnsavedOvertimeChanges);
+  }, [hasUnsavedOvertimeChanges, onDirtyChange]);
+
+  useEffect(() => {
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [onDirtyChange]);
+
+  useEffect(() => {
+    if (!hasUnsavedOvertimeChanges) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedOvertimeChanges]);
+
+  const handleStartEditEntry = (entry: OvertimeEntry) => {
+    if (isEntryFormDirty && editingEntryId !== entry.id) {
+      setOvertimeConfirmModal({
+        isOpen: true,
+        title: tr('تحذير قبل الخروج من التعديل الحالي', 'Unsaved Entry Warning'),
+        message: tr(
+          'رسالة تحذيرية: لديك تعديلات أو بيانات غير محفوظة في نموذج الأوفر تايم الحالي. فتح سجل آخر الآن سيتجاهل هذه التعديلات. هل تريد المتابعة؟',
+          'Warning: You have unsaved overtime entry edits. Opening another record will discard them. Continue?'
+        ),
+        confirmText: tr('تجاهل وفتح السجل', 'Discard & Open'),
+        cancelText: tr('البقاء وحفظ السجل', 'Stay & Save'),
+        onConfirm: () => applyStartEditEntry(entry),
+      });
+      return;
+    }
+    applyStartEditEntry(entry);
+  };
+
+  const requestResetEntryForm = () => {
+    if (isEntryFormDirty) {
+      setOvertimeConfirmModal({
+        isOpen: true,
+        title: tr('تحذير قبل إلغاء التعديل', 'Exit Edit Warning'),
+        message: tr(
+          'رسالة تحذيرية: لديك تعديلات غير محفوظة على سجل الأوفر تايم. هل تريد إلغاء التعديل وتجاهل التغييرات؟',
+          'Warning: You have unsaved changes to this overtime entry. Cancel editing and discard?'
+        ),
+        confirmText: tr('تجاهل التعديلات', 'Discard Changes'),
+        cancelText: tr('البقاء وإكمال الحفظ', 'Stay & Save'),
+        onConfirm: () => resetEntryForm(),
+      });
+      return;
+    }
+    resetEntryForm();
+  };
+
+  const requestSelectMonth = (nextMonthKey: string, nextTab?: typeof activeTab) => {
+    if (!nextMonthKey || (nextMonthKey === selectedMonthKey && (!nextTab || nextTab === activeTab))) {
+      return;
+    }
+    if (configDirty || isEntryFormDirty || isAdjustmentFormDirty) {
+      setOvertimeConfirmModal({
+        isOpen: true,
+        title: tr('تحذير: تعديلات مالية غير محفوظة', 'Warning: Unsaved Financial Edits'),
+        message: tr(
+          `لديك بيانات أو إعدادات راتب غير محفوظة لشهر ${formatArabicMonthLabel(selectedMonthKey, lang)}. الانتقال لشهر آخر الآن سيلغي التعديلات غير المحفوظة. هل تريد المتابعة بدون حفظ؟`,
+          `You have unsaved salary settings or entries for ${formatArabicMonthLabel(selectedMonthKey, lang)}. Switching months now will discard unsaved edits. Continue without saving?`
+        ),
+        confirmText: tr('تجاهل والانتقال', 'Discard & Switch'),
+        cancelText: tr('البقاء وحفظ البيانات', 'Stay & Save'),
+        onConfirm: () => {
+          setConfigDirty(false);
+          setAdjTitle('');
+          setAdjAmount('');
+          setAdjDate('');
+          setAdjNotes('');
+          setSelectedMonthKey(nextMonthKey);
+          if (nextTab) setActiveTab(nextTab);
+        },
+      });
+      return;
+    }
+    setSelectedMonthKey(nextMonthKey);
+    if (nextTab) setActiveTab(nextTab);
+  };
+
+  const requestArchiveEntry = (entry: OvertimeEntry) => {
+    setOvertimeConfirmModal({
+      isOpen: true,
+      title: tr('تحذير قبل أرشفة سجل الأوفر تايم', 'Archive Entry Warning'),
+      message: tr(
+        `هل تريد نقل سجل يوم ${getDisplayDayName(entry.date, lang, entry.dayNameAr)} (${entry.date}) بعدد ${entry.hours} ساعة إلى الأرشيف الآمن؟ (لن يتم حذف البيانات نهائياً ويمكنك استعادتها من تبويب الأرشيف في أي وقت).`,
+        `Move entry for ${getDisplayDayName(entry.date, lang, entry.dayNameAr)} (${entry.date}) (${entry.hours} hrs) to the Safe Archive? You can restore it anytime from the Archive tab.`
+      ),
+      confirmText: tr('نعم، نقل للأرشيف', 'Yes, Move to Archive'),
+      cancelText: tr('إلغاء والاحتفاظ', 'Cancel & Keep'),
+      onConfirm: async () => {
+        await onArchiveEntry(entry.id, true);
+        onNotify?.(
+          tr(
+            'تم نقل السجل إلى الأرشيف الآمن ويمكن استعادته في أي وقت',
+            'Entry moved to safe archive and can be restored anytime'
+          )
+        );
+      },
+    });
+  };
 
   const handleAddAdjustment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -694,6 +933,20 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
     await onSaveMonthlyConfig(updatedCfg);
     setConfigDirty(false);
     onNotify?.(tr('تم تحديث قائمة البدلات والاستقطاعات', 'Allowances & deductions updated'));
+  };
+
+  const requestRemoveAdjustment = (adj: FinancialAdjustmentItem) => {
+    setOvertimeConfirmModal({
+      isOpen: true,
+      title: tr('تحذير قبل حذف البند المالي', 'Delete Financial Item Warning'),
+      message: tr(
+        `هل أنت متأكد من حذف البند "${adj.title}" (${formatMoney(adj.amount, configDraft.currency || 'AED')}) من كشف شهر ${formatArabicMonthLabel(selectedMonthKey, lang)}؟`,
+        `Are you sure you want to delete "${adj.title}" (${formatMoney(adj.amount, configDraft.currency || 'AED')}) from ${formatArabicMonthLabel(selectedMonthKey, lang)}?`
+      ),
+      confirmText: tr('نعم، حذف البند', 'Yes, Delete Item'),
+      cancelText: tr('إلغاء والاحتفاظ', 'Cancel & Keep'),
+      onConfirm: () => handleRemoveAdjustment(adj.id),
+    });
   };
 
   // Goal Seek & Budget Helpers
@@ -940,7 +1193,7 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setSelectedMonthKey(shiftMonthKey(selectedMonthKey, -1))}
+              onClick={() => requestSelectMonth(shiftMonthKey(selectedMonthKey, -1))}
               className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer"
               title={tr('الشهر السابق', 'Previous month')}
             >
@@ -952,7 +1205,7 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
               <input
                 type="month"
                 value={selectedMonthKey}
-                onChange={(e) => e.target.value && setSelectedMonthKey(e.target.value)}
+                onChange={(e) => e.target.value && requestSelectMonth(e.target.value)}
                 className="bg-transparent text-xs sm:text-sm font-black font-mono text-slate-900 dark:text-white focus:outline-hidden cursor-pointer"
               />
               <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
@@ -962,7 +1215,7 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
 
             <button
               type="button"
-              onClick={() => setSelectedMonthKey(shiftMonthKey(selectedMonthKey, 1))}
+              onClick={() => requestSelectMonth(shiftMonthKey(selectedMonthKey, 1))}
               className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer"
               title={tr('الشهر التالي', 'Next month')}
             >
@@ -972,7 +1225,7 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
             {selectedMonthKey !== getCurrentMonthKey() && (
               <button
                 type="button"
-                onClick={() => setSelectedMonthKey(getCurrentMonthKey())}
+                onClick={() => requestSelectMonth(getCurrentMonthKey())}
                 className="px-3 py-1.5 text-xs font-bold rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 cursor-pointer"
               >
                 {tr('الشهر الحالي', 'Current Month')}
@@ -988,7 +1241,7 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
                 <button
                   key={m.monthKey}
                   type="button"
-                  onClick={() => setSelectedMonthKey(m.monthKey)}
+                  onClick={() => requestSelectMonth(m.monthKey)}
                   className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer font-mono tabular-nums ${
                     active
                       ? 'bg-amber-500 text-slate-950 font-black'
@@ -1471,7 +1724,7 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
               {editingEntryId && (
                 <button
                   type="button"
-                  onClick={resetEntryForm}
+                  onClick={requestResetEntryForm}
                   className="text-[11px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-white cursor-pointer"
                 >
                   {tr('إلغاء التعديل', 'Cancel Edit')}
@@ -1807,15 +2060,7 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={async () => {
-                            await onArchiveEntry(item.id, true);
-                            onNotify?.(
-                              tr(
-                                'تم نقل السجل إلى الأرشيف الآمن ويمكن استعادته في أي وقت',
-                                'Entry moved to safe archive and can be restored anytime'
-                              )
-                            );
-                          }}
+                          onClick={() => requestArchiveEntry(item)}
                           className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-lg cursor-pointer"
                         >
                           <Archive className="w-3.5 h-3.5" />
@@ -1909,15 +2154,7 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={async () => {
-                                  await onArchiveEntry(item.id, true);
-                                  onNotify?.(
-                                    tr(
-                                      'تم نقل السجل إلى الأرشيف الآمن ويمكن استعادته في أي وقت',
-                                      'Entry moved to safe archive and can be restored anytime'
-                                    )
-                                  );
-                                }}
+                                onClick={() => requestArchiveEntry(item)}
                                 className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-lg cursor-pointer"
                                 title={tr('نقل إلى الأرشيف الآمن (بدون فقدان البيانات)', 'Move to safe archive (no data loss)')}
                               >
@@ -2090,7 +2327,7 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
                         </span>
                         <button
                           type="button"
-                          onClick={() => handleRemoveAdjustment(adj.id)}
+                          onClick={() => requestRemoveAdjustment(adj)}
                           className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
                           title={tr('إزالة البند', 'Remove Item')}
                         >
@@ -2457,10 +2694,7 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        setSelectedMonthKey(row.monthKey);
-                        setActiveTab('daily');
-                      }}
+                      onClick={() => requestSelectMonth(row.monthKey, 'daily')}
                       className="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-white font-bold text-xs cursor-pointer transition shrink-0"
                     >
                       {tr('فتح الشهر', 'Open Month')}
@@ -2539,10 +2773,7 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
                       <td className="py-2.5 px-3 text-center">
                         <button
                           type="button"
-                          onClick={() => {
-                            setSelectedMonthKey(row.monthKey);
-                            setActiveTab('daily');
-                          }}
+                          onClick={() => requestSelectMonth(row.monthKey, 'daily')}
                           className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-amber-500 hover:text-slate-950 font-bold text-[11px] cursor-pointer transition"
                         >
                           {tr('فتح', 'Open')}
@@ -2756,6 +2987,24 @@ export const OvertimeView: React.FC<OvertimeViewProps> = ({
           </div>
         </div>
       )}
+      {/* Confirmation Modal for Deleting Adjustments, Archiving Entries, or Unsaved Exits */}
+      <ConfirmModal
+        isOpen={overtimeConfirmModal.isOpen}
+        title={overtimeConfirmModal.title}
+        message={overtimeConfirmModal.message}
+        confirmText={overtimeConfirmModal.confirmText || tr('تأكيد', 'Confirm')}
+        cancelText={overtimeConfirmModal.cancelText || tr('إلغاء', 'Cancel')}
+        isDestructive={true}
+        zIndexClass="z-[80]"
+        onConfirm={async () => {
+          const action = overtimeConfirmModal.onConfirm;
+          setOvertimeConfirmModal((prev) => ({ ...prev, isOpen: false }));
+          await action();
+        }}
+        onCancel={() =>
+          setOvertimeConfirmModal((prev) => ({ ...prev, isOpen: false }))
+        }
+      />
     </div>
   );
 };

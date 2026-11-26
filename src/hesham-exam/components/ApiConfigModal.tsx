@@ -68,7 +68,14 @@ export const ApiConfigModal: React.FC<ApiConfigModalProps> = ({
     }, 1200);
   };
 
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+
   const handleClear = () => {
+    if (!confirmClearOpen && (apiKey.trim() || backendUrl.trim())) {
+      setConfirmClearOpen(true);
+      return;
+    }
+    setConfirmClearOpen(false);
     setApiKey("");
     setBackendUrl("");
     setGeminiApiKey("");
@@ -284,14 +291,34 @@ export const ApiConfigModal: React.FC<ApiConfigModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={handleClear}
-            className="px-3 py-2 text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 rounded-lg transition"
-          >
-            مسح البيانات المحفوظة
-          </button>
+        <div className="p-4 border-t border-slate-800 bg-slate-950/60 flex flex-wrap items-center justify-between gap-2">
+          {confirmClearOpen ? (
+            <div className="flex items-center gap-2 bg-rose-950/50 border border-rose-800 px-3 py-1.5 rounded-xl text-xs">
+              <span className="text-rose-200 font-bold">مسح المفاتيح المحفوظة؟</span>
+              <button
+                type="button"
+                onClick={handleClear}
+                className="px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-lg cursor-pointer"
+              >
+                تأكيد
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmClearOpen(false)}
+                className="px-2 py-0.5 bg-slate-800 text-slate-300 font-bold rounded-lg cursor-pointer"
+              >
+                إلغاء
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="px-3 py-2 text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 rounded-lg transition cursor-pointer"
+            >
+              مسح البيانات المحفوظة
+            </button>
+          )}
 
           <div className="flex items-center gap-2">
             <button

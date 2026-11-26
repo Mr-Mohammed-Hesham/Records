@@ -249,6 +249,21 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
     onConfirmExit: () => {},
   });
 
+  // Delete Confirmation Modal State
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    onConfirmDelete: () => Promise<void> | void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    onConfirmDelete: () => {},
+  });
+
   // Export Modal State
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportScope, setExportScope] = useState<WorkspaceExportScope>('all');
@@ -589,10 +604,31 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
     setActiveTab(nextTab);
   };
 
+  const requestDeleteConfirm = (
+    title: string,
+    message: string,
+    confirmText: string,
+    onConfirmDelete: () => Promise<void> | void
+  ) => {
+    setDeleteConfirmModal({
+      isOpen: true,
+      title,
+      message,
+      confirmText,
+      onConfirmDelete,
+    });
+  };
+
   // Capture Escape key so App.tsx doesn't silently leave the workspace without triggering exit warning
   React.useEffect(() => {
     const handleKeyDownCapture = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      if (deleteConfirmModal.isOpen) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        setDeleteConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        return;
+      }
       if (exitWarningModal.isOpen) {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -1358,7 +1394,20 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => onDeleteTask(task.id)}
+                                  onClick={() =>
+                                    requestDeleteConfirm(
+                                      tr('تحذير قبل حذف المهمة', 'Delete Task Warning'),
+                                      tr(
+                                        `هل أنت متأكد من حذف المهمة "${task.title}" نهائياً؟ لن يمكنك التراجع عن هذا الإجراء.`,
+                                        `Are you sure you want to permanently delete task "${task.title}"? This action cannot be undone.`
+                                      ),
+                                      tr('نعم، حذف المهمة', 'Yes, Delete Task'),
+                                      async () => {
+                                        await onDeleteTask(task.id);
+                                        onNotify?.(tr('تم حذف المهمة بنجاح', 'Task deleted'), 'info');
+                                      }
+                                    )
+                                  }
                                   className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg cursor-pointer"
                                   title={tr('حذف المهمة', 'Delete Task')}
                                 >
@@ -1684,10 +1733,24 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
                           <button
                             type="button"
                             onClick={() =>
-                              onSaveNote({
-                                ...list,
-                                checklistItems: items.filter((i) => !i.done),
-                              })
+                              requestDeleteConfirm(
+                                tr('تحذير قبل حذف البنود المنجزة', 'Clear Completed Items Warning'),
+                                tr(
+                                  `هل أنت متأكد من حذف (${doneCount}) بنود منجزة نهائياً من قائمة "${list.title}"؟`,
+                                  `Are you sure you want to permanently delete (${doneCount}) completed item(s) from "${list.title}"?`
+                                ),
+                                tr('نعم، حذف المنجز', 'Yes, Clear Done'),
+                                async () => {
+                                  await onSaveNote({
+                                    ...list,
+                                    checklistItems: items.filter((i) => !i.done),
+                                  });
+                                  onNotify?.(
+                                    tr('تم حذف البنود المنجزة من القائمة', 'Completed items cleared'),
+                                    'info'
+                                  );
+                                }
+                              )
                             }
                             className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-600 dark:text-slate-300 cursor-pointer hover:text-rose-600"
                           >
@@ -1696,7 +1759,20 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
                         )}
                         <button
                           type="button"
-                          onClick={() => onDeleteNote(list.id)}
+                          onClick={() =>
+                            requestDeleteConfirm(
+                              tr('تحذير قبل حذف قائمة المهام', 'Delete To-Do List Warning'),
+                              tr(
+                                `هل أنت متأكد من حذف قائمة "${list.title}" بالكامل (${items.length} بند)؟ لن يمكن استعادتها بعد الحذف.`,
+                                `Are you sure you want to permanently delete "${list.title}" (${items.length} items)? This cannot be undone.`
+                              ),
+                              tr('نعم، حذف القائمة', 'Yes, Delete List'),
+                              async () => {
+                                await onDeleteNote(list.id);
+                                onNotify?.(tr('تم حذف القائمة بنجاح', 'List deleted'), 'info');
+                              }
+                            )
+                          }
                           className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
                           title={tr('حذف القائمة', 'Delete List')}
                         >
@@ -1884,7 +1960,15 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    handleDeleteChecklistItem(list, item.id)
+                                    requestDeleteConfirm(
+                                      tr('تحذير قبل حذف البند', 'Delete To-Do Item Warning'),
+                                      tr(
+                                        `هل أنت متأكد من حذف البند "${item.text}" من قائمة "${list.title}"؟`,
+                                        `Are you sure you want to delete "${item.text}" from "${list.title}"?`
+                                      ),
+                                      tr('نعم، حذف البند', 'Yes, Delete Item'),
+                                      () => handleDeleteChecklistItem(list, item.id)
+                                    )
                                   }
                                   className="p-1 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
                                   title={tr('حذف البند', 'Delete Item')}
@@ -1983,8 +2067,22 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
                           </button>
                           <button
                             type="button"
-                            onClick={() => onDeleteNote(note.id)}
+                            onClick={() =>
+                              requestDeleteConfirm(
+                                tr('تحذير قبل حذف الملاحظة', 'Delete Note Warning'),
+                                tr(
+                                  `هل أنت متأكد من حذف الملاحظة "${note.title}" نهائياً؟`,
+                                  `Are you sure you want to permanently delete note "${note.title}"?`
+                                ),
+                                tr('نعم، حذف الملاحظة', 'Yes, Delete Note'),
+                                async () => {
+                                  await onDeleteNote(note.id);
+                                  onNotify?.(tr('تم حذف الملاحظة بنجاح', 'Note deleted'), 'info');
+                                }
+                              )
+                            }
                             className="p-1 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
+                            title={tr('حذف الملاحظة', 'Delete Note')}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -2484,11 +2582,21 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
                         <button
                           type="button"
                           onClick={() =>
-                            setTaskSubtasks((prev) =>
-                              prev.filter((item) => item.id !== st.id)
+                            requestDeleteConfirm(
+                              tr('تحذير قبل حذف الخطوة الفرعية', 'Delete Subtask Warning'),
+                              tr(
+                                `هل تريد حذف الخطوة الفرعية "${st.text || tr('بدون نص', 'Empty step')}" من المهمة؟`,
+                                `Remove subtask "${st.text || 'Empty step'}" from this task?`
+                              ),
+                              tr('نعم، حذف الخطوة', 'Yes, Remove'),
+                              () =>
+                                setTaskSubtasks((prev) =>
+                                  prev.filter((item) => item.id !== st.id)
+                                )
                             )
                           }
                           className="text-slate-400 hover:text-rose-600 cursor-pointer shrink-0"
+                          title={tr('حذف الخطوة الفرعية', 'Delete Subtask')}
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -2705,6 +2813,25 @@ export const TeacherWorkspaceView: React.FC<TeacherWorkspaceViewProps> = ({
         }}
         onCancel={() =>
           setExitWarningModal((prev) => ({ ...prev, isOpen: false }))
+        }
+      />
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteConfirmModal.isOpen}
+        title={deleteConfirmModal.title}
+        message={deleteConfirmModal.message}
+        confirmText={deleteConfirmModal.confirmText || tr('تأكيد الحذف', 'Confirm Delete')}
+        cancelText={tr('إلغاء والاحتفاظ', 'Cancel & Keep')}
+        isDestructive={true}
+        zIndexClass="z-[85]"
+        onConfirm={async () => {
+          const action = deleteConfirmModal.onConfirmDelete;
+          setDeleteConfirmModal((prev) => ({ ...prev, isOpen: false }));
+          await action();
+        }}
+        onCancel={() =>
+          setDeleteConfirmModal((prev) => ({ ...prev, isOpen: false }))
         }
       />
     </div>

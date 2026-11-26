@@ -42,6 +42,7 @@ interface StudentFormModalProps {
   existingStudents?: Student[];
   settings?: TeacherSettings;
   onClose: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
   onSave: (
     studentData: Omit<Student, 'id'>,
     studentId?: string
@@ -55,6 +56,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
   existingStudents = [],
   settings = DEFAULT_SETTINGS,
   onClose,
+  onDirtyChange,
   onSave,
 }) => {
   const { lang, dir, tr } = useLanguage();
@@ -334,6 +336,17 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
     initialSnapshot,
   ]);
 
+  // Report dirty state to App.tsx and reset on close/unmount
+  useEffect(() => {
+    onDirtyChange?.(isOpen && isDirty);
+  }, [isOpen, isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [onDirtyChange]);
+
   // Prevent accidental tab/browser closure if form has unsaved edits
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -360,6 +373,23 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
     setShowConfirmClose(false);
     onClose();
   };
+
+  // Capture Escape key so App.tsx doesn't silently close without unsaved confirmation
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (showConfirmClose) {
+        setShowConfirmClose(false);
+      } else {
+        handleRequestClose();
+      }
+    };
+    window.addEventListener('keydown', handleEsc, { capture: true });
+    return () => window.removeEventListener('keydown', handleEsc, { capture: true });
+  });
 
   // Auto-save draft when adding a new student
   useEffect(() => {

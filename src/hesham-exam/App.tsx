@@ -508,17 +508,34 @@ export default function App({ onBackToRecords, externalUser }: HeshamExamAppProp
   // ============================================================
   // RESET SESSION
   // ============================================================
-  const handleReset = () => {
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+
+  const performReset = () => {
     setImages([]);
     setExamText("");
     setExamTitle("");
     setInstructions("");
     setCurrentResult(null);
     setErrorMsg(null);
+    setIsResetConfirmOpen(false);
     setSuccessNotice("تم بدء جلسة جديدة وتصفير النموذج بنجاح.");
     try {
       localStorage.removeItem(EXAM_DRAFT_STORAGE_KEY);
     } catch {}
+  };
+
+  const handleReset = () => {
+    const hasContent =
+      images.length > 0 ||
+      examText.trim().length > 0 ||
+      examTitle.trim().length > 0 ||
+      instructions.trim().length > 0 ||
+      currentResult !== null;
+    if (!hasContent) {
+      performReset();
+      return;
+    }
+    setIsResetConfirmOpen(true);
   };
 
   // ============================================================
@@ -910,6 +927,43 @@ export default function App({ onBackToRecords, externalUser }: HeshamExamAppProp
         isOpen={isApiConfigOpen}
         onClose={() => setIsApiConfigOpen(false)}
       />
+
+      {/* Reset Session Warning Modal */}
+      {isResetConfirmOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs"
+          onClick={() => setIsResetConfirmOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-5 shadow-2xl space-y-4 text-right"
+            dir="rtl"
+          >
+            <h4 className="text-base font-black text-white">
+              تحذير: تصفير النموذج وبدء جلسة جديدة
+            </h4>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              هل أنت متأكد من تصفير المدخلات الحالية (الصور، نص الامتحان، والعنوان) ومسح المسودة المؤقتة؟ لن يتم حذف الامتحانات المحفوظة مسبقاً في السجل السحابي.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsResetConfirmOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={performReset}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black cursor-pointer"
+              >
+                تأكيد التصفير والبدء من جديد
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating Quick Install Button */}
       {!isAppInstalled && (

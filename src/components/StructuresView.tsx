@@ -109,6 +109,7 @@ interface StructuresViewProps {
     studentDocIds?: string[]
   ) => Promise<void>;
   onOpenStudentProfile: (student: Student) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export const StructuresView: React.FC<StructuresViewProps> = ({
@@ -125,6 +126,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
   onDeleteStudentsFromStructure,
   onRestoreStudentsToStructure,
   onOpenStudentProfile,
+  onDirtyChange,
 }) => {
   const { lang, dir, tr } = useLanguage();
 
@@ -253,6 +255,47 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
   });
   const [isDeletingRows, setIsDeletingRows] = useState(false);
   const [isExcludedModalOpen, setIsExcludedModalOpen] = useState(false);
+  const [isStructureFormDirty, setIsStructureFormDirty] = useState(false);
+  const [isSingleScoringDirty, setIsSingleScoringDirty] = useState(false);
+  const [isBatchScoringDirty, setIsBatchScoringDirty] = useState(false);
+  const [isReminderDirty, setIsReminderDirty] = useState(false);
+
+  const anyStructureModalDirty =
+    isStructureFormDirty || isSingleScoringDirty || isBatchScoringDirty || isReminderDirty;
+
+  useEffect(() => {
+    onDirtyChange?.(anyStructureModalDirty);
+  }, [anyStructureModalDirty, onDirtyChange]);
+
+  useEffect(() => {
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [onDirtyChange]);
+
+  useEffect(() => {
+    if (!rowDeleteModal.isOpen && !isExcludedModalOpen && !isExcelExportModalOpen && !isHonorBoardOpen) {
+      return;
+    }
+    const handleModalEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (rowDeleteModal.isOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isDeletingRows) {
+          setRowDeleteModal({ isOpen: false, studentsToDelete: [], progressToClearOnly: null });
+        }
+        return;
+      }
+      if (isExcludedModalOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsExcludedModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleModalEsc, { capture: true });
+    return () => window.removeEventListener('keydown', handleModalEsc, { capture: true });
+  }, [rowDeleteModal.isOpen, isDeletingRows, isExcludedModalOpen, isExcelExportModalOpen, isHonorBoardOpen]);
 
   // Persist StructuresView filters & selected structure whenever they change
   useEffect(() => {
@@ -2794,6 +2837,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
         subjectsList={subjectsList}
         tracksList={tracksList}
         yearsList={yearsList}
+        onDirtyChange={setIsStructureFormDirty}
         onClose={() => {
           setIsStructureModalOpen(false);
           setEditingStructure(null);
@@ -2825,6 +2869,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
           subjectsList={subjectsList}
           tracksList={tracksList}
           yearsList={yearsList}
+          onDirtyChange={setIsSingleScoringDirty}
           onClose={() =>
             setScoringModalState({
               isOpen: false,
@@ -2906,6 +2951,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
           subjectsList={subjectsList}
           tracksList={tracksList}
           yearsList={yearsList}
+          onDirtyChange={setIsBatchScoringDirty}
           onClose={() => setIsBatchScoringOpen(false)}
           onSaveBatch={async (records) => {
             if (onSaveBatchProgress) {
@@ -3158,6 +3204,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
           teacherName={settings?.teacherName}
           initialStudentIds={reminderModalState.studentIds}
           initialAudienceLabel={reminderModalState.audienceLabel}
+          onDirtyChange={setIsReminderDirty}
         />
       )}
     </div>
@@ -3178,6 +3225,7 @@ interface StructureFormModalProps {
   yearsList: string[];
   onClose: () => void;
   onSave: (data: Omit<ExamStructure, 'id'>, editId?: string) => Promise<void>;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 const StructureFormModal: React.FC<StructureFormModalProps> = ({
@@ -3190,6 +3238,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
   yearsList,
   onClose,
   onSave,
+  onDirtyChange,
 }) => {
   const { lang, dir, tr } = useLanguage();
   const [title, setTitle] = useState('');
@@ -3324,6 +3373,27 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
       setPendingDraft(null);
     }
   }, [isOpen, structureToEdit]);
+
+  useEffect(() => {
+    onDirtyChange?.(isOpen && isDirty);
+  }, [isOpen, isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [onDirtyChange]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isOpen && isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isOpen, isDirty]);
 
   // Auto-save form draft whenever dirty
   useEffect(() => {

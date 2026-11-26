@@ -18,6 +18,7 @@ interface ExamFormModalProps {
   existingExams?: Exam[];
   settings?: TeacherSettings;
   onClose: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
   onSave: (examData: Omit<Exam, 'id'>, examId?: string, openGrading?: boolean) => Promise<void>;
 }
 
@@ -28,6 +29,7 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
   existingExams = [],
   settings = DEFAULT_SETTINGS,
   onClose,
+  onDirtyChange,
   onSave,
 }) => {
   const { lang, dir, tr } = useLanguage();
@@ -196,6 +198,17 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
     initialSnapshot,
   ]);
 
+  // Report dirty state to parent and clear on unmount
+  useEffect(() => {
+    onDirtyChange?.(isOpen && isDirty);
+  }, [isOpen, isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [onDirtyChange]);
+
   // Before unload protection
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -221,6 +234,23 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
     setShowConfirmClose(false);
     onClose();
   };
+
+  // Capture Escape key so App.tsx doesn't silently close without unsaved confirmation
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (showConfirmClose) {
+        setShowConfirmClose(false);
+      } else {
+        handleRequestClose();
+      }
+    };
+    window.addEventListener('keydown', handleEsc, { capture: true });
+    return () => window.removeEventListener('keydown', handleEsc, { capture: true });
+  });
 
   // When total score changes, auto-suggest pass score (default 60%)
   const handleTotalScoreChange = (val: number) => {

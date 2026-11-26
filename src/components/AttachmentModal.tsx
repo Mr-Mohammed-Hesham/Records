@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   Upload,
@@ -25,6 +25,7 @@ import {
   downloadAttachment,
 } from '../utils/attachment';
 import { useLanguage } from '../utils/i18n';
+import { ConfirmModal } from './ConfirmModal';
 
 interface AttachmentModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ interface AttachmentModalProps {
   readOnly?: boolean;
   onSave?: (attachment: ResultAttachment | null) => Promise<void> | void;
   onClose: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export const AttachmentModal: React.FC<AttachmentModalProps> = ({
@@ -44,6 +46,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
   readOnly = false,
   onSave,
   onClose,
+  onDirtyChange,
 }) => {
   const { dir, tr } = useLanguage();
   const resolvedTitle = title || tr('إثبات ومرفق مصداقية الامتحان', 'Exam Credibility Attachment & Proof');
@@ -57,12 +60,104 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [showFullImage, setShowFullImage] = useState(false);
-  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText: string;
+    isDestructive: boolean;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: tr('تأكيد', 'Confirm'),
+    cancelText: tr('تراجع', 'Cancel'),
+    isDestructive: true,
+    onConfirm: () => {},
+  });
   const [attachmentNotes, setAttachmentNotes] = useState<string>(
     initialAttachment?.notes || ''
   );
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setCurrentAttachment(initialAttachment || null);
+    setPendingFile(null);
+    setAttachmentNotes(initialAttachment?.notes || '');
+    setError(null);
+    setZoomLevel(1);
+    setConfirmState((prev) => ({ ...prev, isOpen: false }));
+  }, [isOpen, initialAttachment]);
+
+  const hasUnsavedChanges =
+    isOpen &&
+    !readOnly &&
+    (pendingFile !== null || attachmentNotes !== (initialAttachment?.notes || ''));
+
+  useEffect(() => {
+    onDirtyChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onDirtyChange]);
+
+  useEffect(() => {
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [onDirtyChange]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const requestSafeClose = () => {
+    if (!hasUnsavedChanges) {
+      onClose();
+      return;
+    }
+    setConfirmState({
+      isOpen: true,
+      title: tr('تحذير قبل الخروج — تعديلات غير محفوظة', 'Warning — Unsaved Attachment Edits'),
+      message: tr(
+        'لديك ملف مرفق أو ملاحظات لم يتم حفظها بعد. إذا أغلقت النافذة الآن فسيتم تجاهل التعديلات. هل تريد الإغلاق بدون حفظ؟',
+        'You have an unsaved attachment or notes. Closing now will discard your changes. Close without saving?'
+      ),
+      confirmText: tr('تجاهل التعديلات وأغلق', 'Discard & Close'),
+      cancelText: tr('البقاء وحفظ المرفق', 'Stay & Save'),
+      isDestructive: true,
+      onConfirm: () => {
+        setPendingFile(null);
+        setAttachmentNotes(initialAttachment?.notes || '');
+        setConfirmState((prev) => ({ ...prev, isOpen: false }));
+        onClose();
+      },
+    });
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (confirmState.isOpen) {
+        setConfirmState((prev) => ({ ...prev, isOpen: false }));
+      } else {
+        requestSafeClose();
+      }
+    };
+    window.addEventListener('keydown', handleEsc, { capture: true });
+    return () => window.removeEventListener('keydown', handleEsc, { capture: true });
+  });
 
   if (!isOpen) return null;
 
@@ -133,8 +228,6 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
 
   // Remove attachment
   const handleRemove = async () => {
-    setConfirmingRemove(false);
-
     if (pendingFile && !currentAttachment) {
       setPendingFile(null);
       return;
@@ -160,13 +253,33 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
     }
   };
 
+  const requestConfirmRemoveAttachment = () => {
+    const fileLabel = displayAttachment?.name || tr('الملف المرفق', 'this attachment');
+    setConfirmState({
+      isOpen: true,
+      title: tr('تحذير: حذف المرفق نهائياً', 'Warning: Delete Attachment'),
+      message: tr(
+        `هل أنت متأكد من حذف المرفق "${fileLabel}"؟ لن يمكنك التراجع بعد الحذف.`,
+        `Are you sure you want to permanently delete "${fileLabel}"? This cannot be undone.`
+      ),
+      confirmText: tr('تأكيد الحذف', 'Confirm Delete'),
+      cancelText: tr('تراجع', 'Cancel'),
+      isDestructive: true,
+      onConfirm: async () => {
+        setConfirmState((prev) => ({ ...prev, isOpen: false }));
+        await handleRemove();
+      },
+    });
+  };
+
   return (
+    <>
     <div
       id="attachment-modal-overlay"
       className="fixed inset-0 z-[70] flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200"
       onClick={(e) => {
         e.stopPropagation();
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) requestSafeClose();
       }}
     >
       <div
@@ -199,7 +312,8 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
           </div>
 
           <button
-            onClick={onClose}
+            type="button"
+            onClick={requestSafeClose}
             className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
             title={tr('إغلاق', 'Close')}
           >
@@ -296,34 +410,14 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                         <RefreshCw className="w-4 h-4" />
                       </button>
 
-                      {confirmingRemove ? (
-                        <div className="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-xl px-2 py-1">
-                          <button
-                            type="button"
-                            onClick={handleRemove}
-                            className="text-[11px] font-black text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
-                          >
-                            {tr('تأكيد الحذف', 'Confirm Delete')}
-                          </button>
-                          <span className="text-slate-300 dark:text-slate-700">|</span>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmingRemove(false)}
-                            className="text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:underline cursor-pointer"
-                          >
-                            {tr('إلغاء', 'Cancel')}
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setConfirmingRemove(true)}
-                          className="p-1.5 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer"
-                          title={tr('حذف الملف المرفق', 'Delete attachment')}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={requestConfirmRemoveAttachment}
+                        className="p-1.5 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer"
+                        title={tr('حذف الملف المرفق', 'Delete attachment')}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </>
                   )}
                 </div>
@@ -555,7 +649,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestSafeClose}
               className="px-4 py-2 text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
             >
               {tr('إغلاق', 'Close')}
@@ -585,5 +679,19 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
         </div>
       </div>
     </div>
+
+    <ConfirmModal
+      isOpen={confirmState.isOpen}
+      zIndexClass="z-[85]"
+      title={confirmState.title}
+      message={confirmState.message}
+      confirmText={confirmState.confirmText}
+      cancelText={confirmState.cancelText}
+      isDestructive={confirmState.isDestructive}
+      onConfirm={confirmState.onConfirm}
+      onCancel={() => setConfirmState((prev) => ({ ...prev, isOpen: false }))}
+      onClose={() => setConfirmState((prev) => ({ ...prev, isOpen: false }))}
+    />
+    </>
   );
 };

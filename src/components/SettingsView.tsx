@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Settings,
   Save,
@@ -12,6 +12,7 @@ import {
   Check,
   Sparkles,
   AlertCircle,
+  AlertTriangle,
   LogOut,
   ShieldCheck,
   LockKeyhole,
@@ -20,6 +21,7 @@ import {
 import { TeacherSettings, GradingScaleItem, Student, Exam, ExamResult } from '../types';
 import { DEFAULT_SETTINGS } from '../services/firebase';
 import { LanguageSwitcher, useLanguage } from '../utils/i18n';
+import { ConfirmModal } from './ConfirmModal';
 
 interface SettingsViewProps {
   settings: TeacherSettings;
@@ -37,7 +39,18 @@ interface SettingsViewProps {
     results: ExamResult[];
     settings?: TeacherSettings;
   }) => Promise<void>;
+  onDirtyChange?: (dirty: boolean) => void;
 }
+
+const normalizeSettingsSnapshot = (s?: TeacherSettings): TeacherSettings => ({
+  ...DEFAULT_SETTINGS,
+  ...(s || {}),
+  grades: s?.grades || DEFAULT_SETTINGS.grades,
+  groups: s?.groups || DEFAULT_SETTINGS.groups,
+  subjects: s?.subjects || DEFAULT_SETTINGS.subjects,
+  examTypes: s?.examTypes || DEFAULT_SETTINGS.examTypes,
+  gradingScale: s?.gradingScale || DEFAULT_SETTINGS.gradingScale,
+});
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   settings,
@@ -50,29 +63,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onSeedSampleData,
   onClearAllData,
   onImportJsonBackup,
+  onDirtyChange,
 }) => {
   const { dir, tr } = useLanguage();
-  const [formData, setFormData] = useState<TeacherSettings>({
-    ...DEFAULT_SETTINGS,
-    ...(settings || {}),
-    grades: settings?.grades || DEFAULT_SETTINGS.grades,
-    groups: settings?.groups || DEFAULT_SETTINGS.groups,
-    subjects: settings?.subjects || DEFAULT_SETTINGS.subjects,
-    examTypes: settings?.examTypes || DEFAULT_SETTINGS.examTypes,
-    gradingScale: settings?.gradingScale || DEFAULT_SETTINGS.gradingScale,
-  });
+  const [formData, setFormData] = useState<TeacherSettings>(() =>
+    normalizeSettingsSnapshot(settings)
+  );
+  const [baselineSnapshot, setBaselineSnapshot] = useState<string>(() =>
+    JSON.stringify(normalizeSettingsSnapshot(settings))
+  );
 
   useEffect(() => {
     if (settings) {
-      setFormData({
-        ...DEFAULT_SETTINGS,
-        ...settings,
-        grades: settings.grades || DEFAULT_SETTINGS.grades,
-        groups: settings.groups || DEFAULT_SETTINGS.groups,
-        subjects: settings.subjects || DEFAULT_SETTINGS.subjects,
-        examTypes: settings.examTypes || DEFAULT_SETTINGS.examTypes,
-        gradingScale: settings.gradingScale || DEFAULT_SETTINGS.gradingScale,
-      });
+      const normalized = normalizeSettingsSnapshot(settings);
+      setFormData(normalized);
+      setBaselineSnapshot(JSON.stringify(normalized));
     }
   }, [settings]);
 
@@ -89,6 +94,63 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [pendingAction, setPendingAction] = useState<
     null | 'seed' | 'clear' | { type: 'import'; data: any }
   >(null);
+  const [settingsConfirmModal, setSettingsConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    isDestructive: boolean;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: tr('تأكيد الحذف', 'Confirm Delete'),
+    isDestructive: true,
+    onConfirm: () => {},
+  });
+
+  const isDirty = useMemo(() => {
+    return (
+      JSON.stringify(formData) !== baselineSnapshot ||
+      newGrade.trim() !== '' ||
+      newGroup.trim() !== '' ||
+      newSubject.trim() !== ''
+    );
+  }, [formData, baselineSnapshot, newGrade, newGroup, newSubject]);
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [onDirtyChange]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  useEffect(() => {
+    if (!pendingAction) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      setPendingAction(null);
+    };
+    document.addEventListener('keydown', handleEsc, { capture: true });
+    return () => document.removeEventListener('keydown', handleEsc, { capture: true });
+  }, [pendingAction]);
 
   const showNotice = (
     text: string,
@@ -103,6 +165,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     try {
       setSaving(true);
       await onUpdateSettings(formData);
+      setBaselineSnapshot(JSON.stringify(formData));
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 2500);
     } catch (err) {
@@ -124,10 +187,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const handleRemoveGrade = (g: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      grades: prev.grades.filter((x) => x !== g),
-    }));
+    setSettingsConfirmModal({
+      isOpen: true,
+      title: tr('تحذير: حذف صف دراسي', 'Warning: Delete Grade'),
+      message: tr(
+        `هل أنت متأكد من حذف الصف الدراسي "${g}" من قائمة الصفوف في الإعدادات؟ تذكّر الضغط على "حفظ الإعدادات" لتثبيت التغيير.`,
+        `Are you sure you want to remove grade "${g}" from the list? Remember to click "Save Settings" to persist.`
+      ),
+      confirmText: tr('تأكيد الحذف', 'Confirm Delete'),
+      isDestructive: true,
+      onConfirm: () => {
+        setFormData((prev) => ({
+          ...prev,
+          grades: prev.grades.filter((x) => x !== g),
+        }));
+      },
+    });
   };
 
   // Add/Remove Group
@@ -138,10 +213,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const handleRemoveGroup = (grp: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      groups: prev.groups.filter((x) => x !== grp),
-    }));
+    setSettingsConfirmModal({
+      isOpen: true,
+      title: tr('تحذير: حذف مجموعة / فصل', 'Warning: Delete Group / Class'),
+      message: tr(
+        `هل أنت متأكد من حذف المجموعة "${grp}" من قائمة المجموعات؟`,
+        `Are you sure you want to remove group "${grp}" from the list?`
+      ),
+      confirmText: tr('تأكيد الحذف', 'Confirm Delete'),
+      isDestructive: true,
+      onConfirm: () => {
+        setFormData((prev) => ({
+          ...prev,
+          groups: prev.groups.filter((x) => x !== grp),
+        }));
+      },
+    });
   };
 
   // Add/Remove Subject
@@ -155,10 +242,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const handleRemoveSubject = (s: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      subjects: prev.subjects.filter((x) => x !== s),
-    }));
+    setSettingsConfirmModal({
+      isOpen: true,
+      title: tr('تحذير: حذف مادة دراسية', 'Warning: Delete Subject'),
+      message: tr(
+        `هل أنت متأكد من حذف المادة الدراسية "${s}" من قائمة المواد؟`,
+        `Are you sure you want to remove subject "${s}" from the list?`
+      ),
+      confirmText: tr('تأكيد الحذف', 'Confirm Delete'),
+      isDestructive: true,
+      onConfirm: () => {
+        setFormData((prev) => ({
+          ...prev,
+          subjects: prev.subjects.filter((x) => x !== s),
+        }));
+      },
+    });
+  };
+
+  const handleRequestRestoreGradingDefaults = () => {
+    setSettingsConfirmModal({
+      isOpen: true,
+      title: tr('تحذير: استعادة نظام التقييم الافتراضي', 'Warning: Restore Default Grading Scale'),
+      message: tr(
+        'سيتم استبدال كافة تعديلات التقديرات والنسب المئوية الحالية بالقيم الافتراضية للنظام. هل تريد المتابعة؟',
+        'All custom grading labels and percentage thresholds will be replaced with defaults. Continue?'
+      ),
+      confirmText: tr('استعادة الافتراضي', 'Restore Defaults'),
+      isDestructive: true,
+      onConfirm: () => {
+        setFormData((prev) => ({
+          ...prev,
+          gradingScale: DEFAULT_SETTINGS.gradingScale,
+        }));
+      },
+    });
   };
 
   // Grading scale adjustments
@@ -254,6 +372,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </span>
         </button>
       </div>
+
+      {isDirty && (
+        <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs font-bold rounded-xl flex flex-wrap items-center justify-between gap-2">
+          <span className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span>
+              {tr(
+                'تنبيه: لديك تعديلات غير محفوظة في الإعدادات — اضغط "حفظ الإعدادات" قبل المغادرة.',
+                'Warning: You have unsaved settings changes — click "Save Settings" before leaving.'
+              )}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] cursor-pointer disabled:opacity-50"
+          >
+            <Save className="w-3.5 h-3.5" />
+            <span>{tr('حفظ الآن', 'Save Now')}</span>
+          </button>
+        </div>
+      )}
 
       {savedSuccess && (
         <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-bold rounded-xl flex items-center gap-2">
@@ -368,12 +509,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
           <button
             type="button"
-            onClick={() =>
-              setFormData((prev) => ({
-                ...prev,
-                gradingScale: DEFAULT_SETTINGS.gradingScale,
-              }))
-            }
+            onClick={handleRequestRestoreGradingDefaults}
             className="text-xs text-indigo-600 dark:text-amber-400 hover:underline font-semibold cursor-pointer"
           >
             {tr('استعادة الافتراضي', 'Restore Defaults')}
@@ -811,6 +947,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
       )}
+      <ConfirmModal
+        isOpen={settingsConfirmModal.isOpen}
+        zIndexClass="z-[80]"
+        title={settingsConfirmModal.title}
+        message={settingsConfirmModal.message}
+        confirmText={settingsConfirmModal.confirmText}
+        cancelText={tr('تراجع', 'Cancel')}
+        isDestructive={settingsConfirmModal.isDestructive}
+        onConfirm={async () => {
+          await settingsConfirmModal.onConfirm();
+          setSettingsConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        }}
+        onCancel={() =>
+          setSettingsConfirmModal((prev) => ({ ...prev, isOpen: false }))
+        }
+        onClose={() =>
+          setSettingsConfirmModal((prev) => ({ ...prev, isOpen: false }))
+        }
+      />
     </div>
   );
 };
