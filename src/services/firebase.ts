@@ -39,6 +39,8 @@ import {
   StudentStructureProgress,
   OvertimeEntry,
   OvertimeMonthlyConfig,
+  TeacherTask,
+  TeacherNote,
 } from '../types';
 
 import { DEFAULT_GRADING_SCALE } from '../utils/grading';
@@ -409,7 +411,35 @@ export const CACHE_KEYS = {
   STRUCTURE_PROGRESS: 'mmh_cached_structure_progress',
   OVERTIME_ENTRIES: 'mmh_cached_overtime_entries',
   OVERTIME_MONTHS: 'mmh_cached_overtime_months',
+  TEACHER_TASKS: 'mmh_cached_teacher_tasks',
+  TEACHER_NOTES: 'mmh_cached_teacher_notes',
 };
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+function handleFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+): void {
+  const errInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    operationType,
+    path,
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+    },
+  };
+  console.warn('Firestore Operation Notice:', JSON.stringify(errInfo));
+}
 
 export function getCachedData<T>(key: string, fallback: T): T {
   try {
@@ -465,6 +495,8 @@ export function notifySubscribers(): void {
   const currentStructureProgress = getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []);
   const currentOvertimeEntries = getCachedData<OvertimeEntry[]>(CACHE_KEYS.OVERTIME_ENTRIES, []);
   const currentOvertimeMonthlyConfigs = getCachedData<OvertimeMonthlyConfig[]>(CACHE_KEYS.OVERTIME_MONTHS, []);
+  const currentTeacherTasks = getCachedData<TeacherTask[]>(CACHE_KEYS.TEACHER_TASKS, []);
+  const currentTeacherNotes = getCachedData<TeacherNote[]>(CACHE_KEYS.TEACHER_NOTES, []);
 
   const data: RealtimeData = {
     students: currentStudents,
@@ -475,6 +507,8 @@ export function notifySubscribers(): void {
     structureProgress: currentStructureProgress,
     overtimeEntries: currentOvertimeEntries,
     overtimeMonthlyConfigs: currentOvertimeMonthlyConfigs,
+    teacherTasks: currentTeacherTasks,
+    teacherNotes: currentTeacherNotes,
   };
 
   realtimeSubscribers.forEach((cb) => {
@@ -1740,6 +1774,108 @@ export async function importOvertimeBackupMerge(
 }
 
 /* =========================================================
+   TEACHER WORKSPACE (KANBAN TASKS, TO-DO & PERSONAL NOTES)
+   ========================================================= */
+
+export async function saveTeacherTask(
+  task: Omit<TeacherTask, 'id'> & { id?: string }
+): Promise<TeacherTask> {
+  const docId =
+    task.id && task.id.trim() !== ''
+      ? task.id
+      : doc(collection(db, 'teacherTasks')).id;
+  const now = new Date().toISOString();
+
+  const fullTask: TeacherTask = {
+    ...task,
+    id: docId,
+    createdAt: task.createdAt || now,
+    updatedAt: now,
+    completedAt:
+      task.status === 'done' ? task.completedAt || now : undefined,
+  };
+
+  const current = getCachedData<TeacherTask[]>(CACHE_KEYS.TEACHER_TASKS, []);
+  const updated = [fullTask, ...current.filter((t) => t.id !== docId)];
+  setCachedData(CACHE_KEYS.TEACHER_TASKS, updated);
+  notifySubscribers();
+
+  try {
+    const { id: _ignoreId, ...payload } = fullTask;
+    await setDoc(doc(db, 'teacherTasks', docId), sanitizeForFirestore(payload), {
+      merge: true,
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `teacherTasks/${docId}`);
+  }
+
+  return fullTask;
+}
+
+export async function deleteTeacherTask(taskId: string): Promise<void> {
+  const current = getCachedData<TeacherTask[]>(CACHE_KEYS.TEACHER_TASKS, []);
+  setCachedData(
+    CACHE_KEYS.TEACHER_TASKS,
+    current.filter((t) => t.id !== taskId)
+  );
+  notifySubscribers();
+
+  try {
+    await deleteDoc(doc(db, 'teacherTasks', taskId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `teacherTasks/${taskId}`);
+  }
+}
+
+export async function saveTeacherNote(
+  note: Omit<TeacherNote, 'id'> & { id?: string }
+): Promise<TeacherNote> {
+  const docId =
+    note.id && note.id.trim() !== ''
+      ? note.id
+      : doc(collection(db, 'teacherNotes')).id;
+  const now = new Date().toISOString();
+
+  const fullNote: TeacherNote = {
+    ...note,
+    id: docId,
+    createdAt: note.createdAt || now,
+    updatedAt: now,
+  };
+
+  const current = getCachedData<TeacherNote[]>(CACHE_KEYS.TEACHER_NOTES, []);
+  const updated = [fullNote, ...current.filter((n) => n.id !== docId)];
+  setCachedData(CACHE_KEYS.TEACHER_NOTES, updated);
+  notifySubscribers();
+
+  try {
+    const { id: _ignoreId, ...payload } = fullNote;
+    await setDoc(doc(db, 'teacherNotes', docId), sanitizeForFirestore(payload), {
+      merge: true,
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `teacherNotes/${docId}`);
+  }
+
+  return fullNote;
+}
+
+export async function deleteTeacherNote(noteId: string): Promise<void> {
+  const current = getCachedData<TeacherNote[]>(CACHE_KEYS.TEACHER_NOTES, []);
+  setCachedData(
+    CACHE_KEYS.TEACHER_NOTES,
+    current.filter((n) => n.id !== noteId)
+  );
+  notifySubscribers();
+
+  try {
+    await deleteDoc(doc(db, 'teacherNotes', noteId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `teacherNotes/${noteId}`);
+  }
+}
+
+/* =========================================================
    ALL DATA REALTIME
    ========================================================= */
 
@@ -1752,11 +1888,13 @@ export interface RealtimeData {
   structureProgress: StudentStructureProgress[];
   overtimeEntries: OvertimeEntry[];
   overtimeMonthlyConfigs: OvertimeMonthlyConfig[];
+  teacherTasks: TeacherTask[];
+  teacherNotes: TeacherNote[];
 }
 
 /**
  * مزامنة مباشرة وشاملة مع قاعدة بيانات Firestore
- * تجلب أحدث السجلات (طلاب، امتحانات، نتائج، هياكل، أوفر تايم، إعدادات) وتحدث الكاش والمشتركين
+ * تجلب أحدث السجلات (طلاب، امتحانات، نتائج، هياكل، أوفر تايم، مهام وملاحظات، إعدادات) وتحدث الكاش والمشتركين
  */
 export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
   try {
@@ -1769,6 +1907,8 @@ export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
       progressSnap,
       overtimeEntriesSnap,
       overtimeMonthsSnap,
+      teacherTasksSnap,
+      teacherNotesSnap,
     ] = await Promise.allSettled([
       getDocs(collection(db, 'students')),
       getDocs(collection(db, 'exams')),
@@ -1778,6 +1918,8 @@ export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
       getDocs(collection(db, 'structureProgress')),
       getDocs(collection(db, 'overtimeEntries')),
       getDocs(collection(db, 'overtimeMonthlyConfigs')),
+      getDocs(collection(db, 'teacherTasks')),
+      getDocs(collection(db, 'teacherNotes')),
     ]);
 
     let students = getCachedData<Student[]>(CACHE_KEYS.STUDENTS, []);
@@ -1874,6 +2016,30 @@ export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
       }
     }
 
+    let teacherTasks = getCachedData<TeacherTask[]>(CACHE_KEYS.TEACHER_TASKS, []);
+    if (teacherTasksSnap.status === 'fulfilled') {
+      const items = teacherTasksSnap.value.docs.map((item) => ({
+        id: item.id,
+        ...item.data(),
+      })) as TeacherTask[];
+      if (items.length > 0 || teacherTasks.length === 0) {
+        teacherTasks = items;
+        setCachedData(CACHE_KEYS.TEACHER_TASKS, teacherTasks);
+      }
+    }
+
+    let teacherNotes = getCachedData<TeacherNote[]>(CACHE_KEYS.TEACHER_NOTES, []);
+    if (teacherNotesSnap.status === 'fulfilled') {
+      const items = teacherNotesSnap.value.docs.map((item) => ({
+        id: item.id,
+        ...item.data(),
+      })) as TeacherNote[];
+      if (items.length > 0 || teacherNotes.length === 0) {
+        teacherNotes = items;
+        setCachedData(CACHE_KEYS.TEACHER_NOTES, teacherNotes);
+      }
+    }
+
     notifySubscribers();
 
     return {
@@ -1885,6 +2051,8 @@ export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
       structureProgress,
       overtimeEntries,
       overtimeMonthlyConfigs,
+      teacherTasks,
+      teacherNotes,
     };
   } catch (err) {
     console.warn('syncAllDataFromFirestore fallback to cache:', err);
@@ -1897,6 +2065,8 @@ export async function syncAllDataFromFirestore(): Promise<RealtimeData> {
       structureProgress: getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []),
       overtimeEntries: getCachedData<OvertimeEntry[]>(CACHE_KEYS.OVERTIME_ENTRIES, []),
       overtimeMonthlyConfigs: getCachedData<OvertimeMonthlyConfig[]>(CACHE_KEYS.OVERTIME_MONTHS, []),
+      teacherTasks: getCachedData<TeacherTask[]>(CACHE_KEYS.TEACHER_TASKS, []),
+      teacherNotes: getCachedData<TeacherNote[]>(CACHE_KEYS.TEACHER_NOTES, []),
     };
   }
 }
@@ -1918,6 +2088,8 @@ export function subscribeToRealtimeData(
       structureProgress: getCachedData<StudentStructureProgress[]>(CACHE_KEYS.STRUCTURE_PROGRESS, []),
       overtimeEntries: getCachedData<OvertimeEntry[]>(CACHE_KEYS.OVERTIME_ENTRIES, []),
       overtimeMonthlyConfigs: getCachedData<OvertimeMonthlyConfig[]>(CACHE_KEYS.OVERTIME_MONTHS, []),
+      teacherTasks: getCachedData<TeacherTask[]>(CACHE_KEYS.TEACHER_TASKS, []),
+      teacherNotes: getCachedData<TeacherNote[]>(CACHE_KEYS.TEACHER_NOTES, []),
     });
   };
   emitCurrent();
@@ -2151,6 +2323,54 @@ export function subscribeToRealtimeData(
       activeUnsubscribers.push(unsubOvertimeMonths);
     } catch (e) {
       console.warn('Error setting up overtimeMonthlyConfigs listener:', e);
+    }
+
+    // مستمع لوحة مهام المستر TeacherTasks Listener
+    try {
+      const unsubTeacherTasks = onSnapshot(
+        collection(db, 'teacherTasks'),
+        (snapshot) => {
+          const firestoreTasks = snapshot.docs.map((item) => ({
+            id: item.id,
+            ...item.data(),
+          })) as TeacherTask[];
+          const localCached = getCachedData<TeacherTask[]>(CACHE_KEYS.TEACHER_TASKS, []);
+          if (firestoreTasks.length > 0 || localCached.length === 0) {
+            setCachedData(CACHE_KEYS.TEACHER_TASKS, firestoreTasks);
+            notifySubscribers();
+          }
+        },
+        (err) => {
+          handleFirestoreError(err, OperationType.LIST, 'teacherTasks');
+        }
+      );
+      activeUnsubscribers.push(unsubTeacherTasks);
+    } catch (e) {
+      console.warn('Error setting up teacherTasks listener:', e);
+    }
+
+    // مستمع ملاحظات و To-Do المعلم TeacherNotes Listener
+    try {
+      const unsubTeacherNotes = onSnapshot(
+        collection(db, 'teacherNotes'),
+        (snapshot) => {
+          const firestoreNotes = snapshot.docs.map((item) => ({
+            id: item.id,
+            ...item.data(),
+          })) as TeacherNote[];
+          const localCached = getCachedData<TeacherNote[]>(CACHE_KEYS.TEACHER_NOTES, []);
+          if (firestoreNotes.length > 0 || localCached.length === 0) {
+            setCachedData(CACHE_KEYS.TEACHER_NOTES, firestoreNotes);
+            notifySubscribers();
+          }
+        },
+        (err) => {
+          handleFirestoreError(err, OperationType.LIST, 'teacherNotes');
+        }
+      );
+      activeUnsubscribers.push(unsubTeacherNotes);
+    } catch (e) {
+      console.warn('Error setting up teacherNotes listener:', e);
     }
   };
 

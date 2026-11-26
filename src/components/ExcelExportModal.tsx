@@ -39,6 +39,13 @@ import {
   STRUCTURE_STATUS_META,
 } from '../utils/structureStatus';
 import { ACADEMIC_TERMS, ACADEMIC_TRACKS, ACADEMIC_YEARS } from '../services/firebase';
+import {
+  useLanguage,
+  translateGrade,
+  translateTerm,
+  translateTrack,
+  translateSubject,
+} from '../utils/i18n';
 
 export type ExcelExportModalMode = 'academic_reports' | 'structures_reports' | 'all_data';
 export type SelectionScopeMode = 'all' | 'count' | 'specific';
@@ -96,6 +103,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
   defaultSelectedStructureIds,
   defaultStructureCompletionStatus,
 }) => {
+  const { lang, dir, tr } = useLanguage();
   const initialPrefs = useMemo(() => getSavedExcelPreferences(), []);
 
   const [selectedGrade, setSelectedGrade] = useState<string>(() => {
@@ -820,13 +828,14 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
 
   return (
     <div
+      dir={dir}
       className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden"
       onClick={onClose}
     >
       <div
         id="excel-export-modal"
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-2xl w-full flex flex-col max-h-[92dvh] sm:max-h-[90vh] shadow-2xl border border-slate-200 dark:border-slate-800 text-right overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-2xl w-full flex flex-col max-h-[92dvh] sm:max-h-[90vh] shadow-2xl border border-slate-200 dark:border-slate-800 text-start overflow-hidden animate-in fade-in zoom-in-95 duration-200"
       >
         {/* Header */}
         <div className="shrink-0 p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900">
@@ -836,10 +845,10 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
             </div>
             <div>
               <h3 className="font-extrabold text-slate-900 dark:text-white text-base sm:text-lg">
-                مركز تصدير Excel والرسوم البيانية
+                {tr('مركز تصدير Excel والرسوم البيانية', 'Excel & Charts Export Center')}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                إعداداتك محفوظة تلقائياً — يمكنك المتابعة أو البدء بإعدادات جديدة
+                {tr('إعداداتك محفوظة تلقائياً — يمكنك المتابعة أو البدء بإعدادات جديدة', 'Your preferences are auto-saved — continue or reset filters')}
               </p>
             </div>
           </div>
@@ -849,10 +858,10 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
               type="button"
               onClick={handleResetAll}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
-              title="البدء من جديد وإعادة ضبط إعدادات التصدير"
+              title={tr('البدء من جديد وإعادة ضبط إعدادات التصدير', 'Reset all export filters')}
             >
               <RotateCcw className="w-3.5 h-3.5 text-amber-500" />
-              <span>البدء من جديد</span>
+              <span>{tr('البدء من جديد', 'Reset')}</span>
             </button>
             <button
               onClick={onClose}
@@ -869,60 +878,60 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
           {/* Format Type Selection */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-              تنسيق ونوع التقرير المطلوب:
+              {tr('تنسيق ونوع التقرير المطلوب:', 'Report Format & Type:')}
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <button
                 type="button"
                 onClick={() => setExportMode('academic_reports')}
-                className={`p-3.5 rounded-2xl border text-right transition cursor-pointer flex flex-col justify-between gap-1.5 ${
+                className={`p-3.5 rounded-2xl border text-start transition cursor-pointer flex flex-col justify-between gap-1.5 ${
                   exportMode === 'academic_reports'
                     ? 'bg-amber-500/10 border-amber-500 text-amber-900 dark:text-amber-200 shadow-xs'
                     : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <div className="flex items-center justify-between gap-1">
-                  <span className="font-bold text-xs">تقارير الطلاب الأكاديمية (مع الرسم البياني)</span>
+                  <span className="font-bold text-xs">{tr('تقارير الطلاب الأكاديمية (مع الرسم البياني)', 'Academic Student Reports (with Chart)')}</span>
                   <CheckCircle2 className={`w-4 h-4 shrink-0 ${exportMode === 'academic_reports' ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600'}`} />
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
-                  ملخص أداء الطلاب + تقارير مفصلة لكل طالب ودرجة كل امتحان وملاحظات التقدم
+                  {tr('ملخص أداء الطلاب + تقارير مفصلة لكل طالب ودرجة كل امتحان وملاحظات التقدم', 'Student performance summary + per-student exam breakdown & notes')}
                 </p>
               </button>
 
               <button
                 type="button"
                 onClick={() => setExportMode('structures_reports')}
-                className={`p-3.5 rounded-2xl border text-right transition cursor-pointer flex flex-col justify-between gap-1.5 ${
+                className={`p-3.5 rounded-2xl border text-start transition cursor-pointer flex flex-col justify-between gap-1.5 ${
                   exportMode === 'structures_reports'
                     ? 'bg-amber-500/10 border-amber-500 text-amber-900 dark:text-amber-200 shadow-xs'
                     : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <div className="flex items-center justify-between gap-1">
-                  <span className="font-bold text-xs">تقارير قسم الهياكل ونسب الأسئلة</span>
+                  <span className="font-bold text-xs">{tr('تقارير قسم الهياكل ونسب الأسئلة', 'Structures & Question Mastery Reports')}</span>
                   <CheckCircle2 className={`w-4 h-4 shrink-0 ${exportMode === 'structures_reports' ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600'}`} />
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
-                  بنفس التقسيم: ملخص الهياكل + تقارير مفصلة لكل طالب وسؤال + مصفوفة النسب + الرسم البياني
+                  {tr('ملخص الهياكل + تقارير مفصلة لكل طالب وسؤال + مصفوفة النسب + الرسم البياني', 'Structures summary + student question matrix + completion chart')}
                 </p>
               </button>
 
               <button
                 type="button"
                 onClick={() => setExportMode('all_data')}
-                className={`p-3.5 rounded-2xl border text-right transition cursor-pointer flex flex-col justify-between gap-1.5 ${
+                className={`p-3.5 rounded-2xl border text-start transition cursor-pointer flex flex-col justify-between gap-1.5 ${
                   exportMode === 'all_data'
                     ? 'bg-amber-500/10 border-amber-500 text-amber-900 dark:text-amber-200 shadow-xs'
                     : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 <div className="flex items-center justify-between gap-1">
-                  <span className="font-bold text-xs">سجل الجداول الشامل (جميع الشيتات)</span>
+                  <span className="font-bold text-xs">{tr('سجل الجداول الشامل (جميع الشيتات)', 'Complete Workbook (All Sheets)')}</span>
                   <CheckCircle2 className={`w-4 h-4 shrink-0 ${exportMode === 'all_data' ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600'}`} />
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
-                  ملف شامل بـ 4 شيتات: قائمة الطلاب وحالاتهم، سجل الدرجات، بيانات الامتحانات، والإحصائيات
+                  {tr('ملف شامل بـ 4 شيتات: قائمة الطلاب وحالاتهم، سجل الدرجات، بيانات الامتحانات، والإحصائيات', '4-sheet workbook: students, grades ledger, exams directory & stats')}
                 </p>
               </button>
             </div>
@@ -933,10 +942,10 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-black text-indigo-950 dark:text-indigo-200 flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                <span>إعدادات الرسم البياني ومقاسات الشيت (وضع الهاتف والكمبيوتر):</span>
+                <span>{tr('إعدادات الرسم البياني ومقاسات الشيت (وضع الهاتف والكمبيوتر):', 'Chart & Sheet Sizing Settings (Mobile / Desktop):')}</span>
               </h4>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
-                محفوظ تلقائياً
+                {tr('محفوظ تلقائياً', 'Auto-saved')}
               </span>
             </div>
 
@@ -945,7 +954,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
               <button
                 type="button"
                 onClick={() => setLayoutMode('mobile')}
-                className={`p-3 rounded-xl border text-right transition-all cursor-pointer flex items-start gap-2.5 ${
+                className={`p-3 rounded-xl border text-start transition-all cursor-pointer flex items-start gap-2.5 ${
                   layoutMode === 'mobile'
                     ? 'bg-white dark:bg-slate-900 border-indigo-500 ring-2 ring-indigo-500/20 shadow-xs'
                     : 'bg-white/60 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 hover:bg-white'
@@ -954,10 +963,10 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                 <Smartphone className={`w-5 h-5 shrink-0 mt-0.5 ${layoutMode === 'mobile' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
                 <div>
                   <div className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <span>وضع الهاتف المحمول (موصى به)</span>
+                    <span>{tr('وضع الهاتف المحمول (موصى به)', 'Mobile Layout (Recommended)')}</span>
                   </div>
                   <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                    ضبط مساحات وأبعاد الشيت ودمج الأعمدة ليظهر التقرير والرسم البياني بوضوح تام على شاشة الهاتف بدون تمرير مزعج
+                    {tr('ضبط مساحات وأبعاد الشيت ودمج الأعمدة ليظهر التقرير والرسم البياني بوضوح تام على شاشة الهاتف بدون تمرير مزعج', 'Compact columns and merged cells optimized for crystal-clear mobile viewing')}
                   </p>
                 </div>
               </button>
@@ -965,7 +974,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
               <button
                 type="button"
                 onClick={() => setLayoutMode('desktop')}
-                className={`p-3 rounded-xl border text-right transition-all cursor-pointer flex items-start gap-2.5 ${
+                className={`p-3 rounded-xl border text-start transition-all cursor-pointer flex items-start gap-2.5 ${
                   layoutMode === 'desktop'
                     ? 'bg-white dark:bg-slate-900 border-indigo-500 ring-2 ring-indigo-500/20 shadow-xs'
                     : 'bg-white/60 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 hover:bg-white'
@@ -974,10 +983,10 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                 <Monitor className={`w-5 h-5 shrink-0 mt-0.5 ${layoutMode === 'desktop' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
                 <div>
                   <div className="font-bold text-xs text-slate-900 dark:text-white">
-                    الوضع المكتبي الواسع (كمبيوتر)
+                    {tr('الوضع المكتبي الواسع (كمبيوتر)', 'Desktop Wide Layout')}
                   </div>
                   <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                    جداول عريضة بـ 8 أعمدة منفصلة مع مساحات واسعة للشاشات الكبيرة والطباعة المكتبية
+                    {tr('جداول عريضة بـ 8 أعمدة منفصلة مع مساحات واسعة للشاشات الكبيرة والطباعة المكتبية', 'Wide tables with 8 separate columns tailored for large monitors and printing')}
                   </p>
                 </div>
               </button>
@@ -994,7 +1003,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                 />
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
                   <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                  إضافة الرسم البياني للدرجات والتقديرات داخل التقرير
+                  {tr('إضافة الرسم البياني للدرجات والتقديرات داخل التقرير', 'Include scores & grade distribution chart in workbook')}
                 </span>
               </label>
 
@@ -1004,9 +1013,9 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                   onChange={(e) => setChartType(e.target.value as any)}
                   className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-700 text-slate-800 dark:text-slate-200 rounded-xl text-[11px] font-bold cursor-pointer"
                 >
-                  <option value="bars_and_columns">أشرطة تقدم + مخطط أعمدة رأسي + توزيع نسبي</option>
-                  <option value="bars_only">أشرطة تقدم الدرجات وتوزيع التقديرات (مدمج)</option>
-                  <option value="distribution">توزيع التقديرات والنسب فقط</option>
+                  <option value="bars_and_columns">{tr('أشرطة تقدم + مخطط أعمدة رأسي + توزيع نسبي', 'Progress Bars + Column Chart + Distribution')}</option>
+                  <option value="bars_only">{tr('أشرطة تقدم الدرجات وتوزيع التقديرات (مدمج)', 'Score Progress Bars & Bands (Compact)')}</option>
+                  <option value="distribution">{tr('توزيع التقديرات والنسب فقط', 'Distribution Breakdown Only')}</option>
                 </select>
               )}
             </div>
@@ -1022,7 +1031,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                 />
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                   <span>🖼️</span>
-                  تضمين هوية وترويسة الشعار المعتمد في شيت الإكسيل
+                  {tr('تضمين هوية وترويسة الشعار المعتمد في شيت الإكسيل', 'Include official brand header & logo in Excel sheet')}
                 </span>
               </label>
 
@@ -1031,7 +1040,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                   ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
               }`}>
-                {includeLogoHeader ? 'مع الشعار ✔' : 'بدون إضافة'}
+                {includeLogoHeader ? tr('مع الشعار ✔', 'With Logo ✔') : tr('بدون إضافة', 'No Logo')}
               </span>
             </div>
           </div>
@@ -1041,11 +1050,11 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
                 <Filter className="w-3.5 h-3.5 text-amber-500" />
-                <span>فلاتر الاستخراج (الصف / الترم / المادة / حالة ملف الطالب / الفترة):</span>
+                <span>{tr('فلاتر الاستخراج (الصف / الترم / المادة / حالة ملف الطالب / الفترة):', 'Export Filters (Grade / Term / Subject / Status / Date):')}</span>
               </h4>
 
               {/* Quick status chips */}
-              <div className="flex items-center gap-1.5 text-[10px]">
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
                 <button
                   type="button"
                   onClick={() => setEnrollmentStatusFilter('exclude_completed')}
@@ -1054,9 +1063,9 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                       ? 'bg-emerald-500 text-white border-emerald-600 shadow-xs'
                       : 'bg-white dark:bg-slate-900 text-emerald-600 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50'
                   }`}
-                  title="منع تصدير تقارير للطلبة الذين انتهى الكورس لهم"
+                  title={tr('منع تصدير تقارير للطلبة الذين انتهى الكورس لهم', 'Exclude students who completed the course')}
                 >
-                  🚫 استبعاد منتهي الملف
+                  🚫 {tr('استبعاد منتهي الملف', 'Exclude Completed')}
                 </button>
                 <button
                   type="button"
@@ -1067,7 +1076,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                       : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                   }`}
                 >
-                  الفصل الأول
+                  {translateTerm('الفصل الأول', lang)}
                 </button>
                 <button
                   type="button"
@@ -1078,7 +1087,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                       : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                   }`}
                 >
-                  الفصل الثاني
+                  {translateTerm('الفصل الثاني', lang)}
                 </button>
                 <button
                   type="button"
@@ -1089,7 +1098,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                       : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                   }`}
                 >
-                  الفصل الثالث
+                  {translateTerm('الفصل الثالث', lang)}
                 </button>
               </div>
             </div>
@@ -1098,25 +1107,25 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                  الصف الدراسي:
+                  {tr('الصف الدراسي:', 'Grade:')}
                 </label>
                 <select
                   value={selectedGrade}
                   onChange={(e) => setSelectedGrade(e.target.value)}
                   className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
                 >
-                  <option value="الكل">كافة الصفوف</option>
+                  <option value="الكل">{tr('كافة الصفوف', 'All Grades')}</option>
                   {settings.grades.map((g) => (
-                    <option key={g} value={g}>{g}</option>
+                    <option key={g} value={g}>{translateGrade(g, lang)}</option>
                   ))}
                 </select>
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1 flex items-center justify-between">
-                  <span>الفصل الدراسي (الترم):</span>
+                  <span>{tr('الفصل الدراسي (الترم):', 'Academic Term:')}</span>
                   {selectedTerm !== 'الكل' && (
-                    <span className="text-[10px] text-amber-500 font-bold">محدد</span>
+                    <span className="text-[10px] text-amber-500 font-bold">{tr('محدد', 'Selected')}</span>
                   )}
                 </label>
                 <select
@@ -1124,34 +1133,34 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                   onChange={(e) => setSelectedTerm(e.target.value)}
                   className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-amber-300/80 dark:border-amber-700/80 text-slate-900 dark:text-white rounded-xl text-xs font-bold cursor-pointer"
                 >
-                  <option value="الكل">كافة الفصول الثلاثة</option>
+                  <option value="الكل">{tr('كافة الفصول الثلاثة', 'All Three Terms')}</option>
                   {ACADEMIC_TERMS.map((t) => (
-                    <option key={t} value={t}>{t}</option>
+                    <option key={t} value={t}>{translateTerm(t, lang)}</option>
                   ))}
                 </select>
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                  المادة الدراسية:
+                  {tr('المادة الدراسية:', 'Subject:')}
                 </label>
                 <select
                   value={selectedSubject}
                   onChange={(e) => setSelectedSubject(e.target.value)}
                   className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
                 >
-                  <option value="الكل">كافة المواد</option>
+                  <option value="الكل">{tr('كافة المواد', 'All Subjects')}</option>
                   {availableSubjects.map((s) => (
-                    <option key={s} value={s}>{s}</option>
+                    <option key={s} value={s}>{translateSubject(s, lang)}</option>
                   ))}
                 </select>
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1 flex items-center justify-between">
-                  <span>حالة ملف الطالب:</span>
+                  <span>{tr('حالة ملف الطالب:', 'Student Status:')}</span>
                   {enrollmentStatusFilter === 'exclude_completed' && (
-                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">استبعاد المنتهي</span>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">{tr('استبعاد المنتهي', 'Exclude Completed')}</span>
                   )}
                 </label>
                 <select
@@ -1159,12 +1168,12 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                   onChange={(e) => setEnrollmentStatusFilter(e.target.value)}
                   className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-emerald-300/80 dark:border-emerald-700/80 text-slate-900 dark:text-white rounded-xl text-xs font-bold cursor-pointer"
                 >
-                  <option value="exclude_completed">🚫 استبعاد منتهي الملف (الفعال فقط) [موصى به]</option>
-                  <option value="active">🟢 ملف فعال (مستمر بالكورس فقط)</option>
-                  <option value="completed">🎓 منتهي الكورس فقط (الخريجون)</option>
-                  <option value="paused">🟡 متوقف مؤقتاً / مؤجل</option>
-                  <option value="withdrawn">🔴 منقطع عن الكورس</option>
-                  <option value="الكل">🌐 كافة الطلاب (يشمل منتهي الملف)</option>
+                  <option value="exclude_completed">{tr('🚫 استبعاد منتهي الملف (الفعال فقط) [موصى به]', '🚫 Exclude Completed (Active Only) [Recommended]')}</option>
+                  <option value="active">{tr('🟢 ملف فعال (مستمر بالكورس فقط)', '🟢 Active (Currently Enrolled)')}</option>
+                  <option value="completed">{tr('🎓 منتهي الكورس فقط (الخريجون)', '🎓 Completed Course Only')}</option>
+                  <option value="paused">{tr('🟡 متوقف مؤقتاً / مؤجل', '🟡 Paused / Deferred')}</option>
+                  <option value="withdrawn">{tr('🔴 منقطع عن الكورس', '🔴 Withdrawn')}</option>
+                  <option value="الكل">{tr('🌐 كافة الطلاب (يشمل منتهي الملف)', '🌐 All Students (Includes Completed)')}</option>
                 </select>
               </div>
             </div>
@@ -1175,30 +1184,30 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                      المسار الدراسي:
+                      {tr('المسار الدراسي:', 'Academic Track:')}
                     </label>
                     <select
                       value={selectedTrack}
                       onChange={(e) => setSelectedTrack(e.target.value)}
                       className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-medium cursor-pointer"
                     >
-                      <option value="الكل">كافة المسارات</option>
-                      {availableTracks.map((tr) => (
-                        <option key={tr} value={tr}>{tr}</option>
+                      <option value="الكل">{tr('كافة المسارات', 'All Tracks')}</option>
+                      {availableTracks.map((trk) => (
+                        <option key={trk} value={trk}>{translateTrack(trk, lang)}</option>
                       ))}
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                      السنة الدراسية:
+                      {tr('السنة الدراسية:', 'Academic Year:')}
                     </label>
                     <select
                       value={selectedAcademicYear}
                       onChange={(e) => setSelectedAcademicYear(e.target.value)}
                       className="w-full px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs font-mono font-bold cursor-pointer"
                     >
-                      <option value="الكل">كل السنوات</option>
+                      <option value="الكل">{tr('كل السنوات', 'All Years')}</option>
                       {availableYears.map((yr) => (
                         <option key={yr} value={yr}>{yr}</option>
                       ))}
@@ -1206,11 +1215,11 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                   </div>
                 </div>
 
-                {/* Structure Completion Status Filter (Ongoing vs Studied Not Examined vs Completed vs All) */}
+                {/* Structure Completion Status Filter */}
                 <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700/80 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    <span>تصفية الهياكل حسب الحالة:</span>
+                    <span>{tr('تصفية الهياكل حسب الحالة:', 'Filter Structures by Status:')}</span>
                   </span>
                   <div className="inline-flex flex-wrap bg-slate-100 dark:bg-slate-800 p-1 rounded-xl gap-1 text-[11px]">
                     <button
@@ -1222,7 +1231,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                           : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
                       }`}
                     >
-                      جميع الهياكل ({structureCompletionCounts.all})
+                      {tr('جميع الهياكل', 'All Structures')} ({structureCompletionCounts.all})
                     </button>
                     <button
                       type="button"
@@ -1245,7 +1254,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                           : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
                       }`}
                     >
-                      مستمرة وجاري الدراسة ({structureCompletionCounts.ongoing})
+                      {tr('مستمرة وجاري الدراسة', 'Ongoing')} ({structureCompletionCounts.ongoing})
                     </button>
                     <button
                       type="button"
@@ -1270,7 +1279,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                           : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
                       }`}
                     >
-                      منتهية دراسة ولم تُمتحن ({structureCompletionCounts.studiedNotExamined})
+                      {tr('منتهية دراسة ولم تُمتحن', 'Studied • Not Examined')} ({structureCompletionCounts.studiedNotExamined})
                     </button>
                     <button
                       type="button"
@@ -1293,20 +1302,20 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                           : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
                       }`}
                     >
-                      منتهية وتم الامتحان ({structureCompletionCounts.completed})
+                      {tr('منتهية وتم الامتحان', 'Completed & Examined')} ({structureCompletionCounts.completed})
                     </button>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Structure Selection Scope (All / Specific Count / Specific One or Multiple Structures) */}
+            {/* Structure Selection Scope */}
             {exportMode === 'structures_reports' && (
               <div className="pt-3 border-t border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label className="text-xs font-extrabold text-slate-800 dark:text-white flex items-center gap-1.5">
                     <Layers className="w-4 h-4 text-amber-500" />
-                    <span>نطاق الهياكل المشمولة بالتصدير ({baseMatchingStructures.length} مطابق):</span>
+                    <span>{tr('نطاق الهياكل المشمولة بالتصدير', 'Structures Included in Export')} ({baseMatchingStructures.length} {tr('مطابق', 'matching')}):</span>
                   </label>
                   <div className="inline-flex bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px]">
                     <button
@@ -1318,7 +1327,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                           : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                       }`}
                     >
-                      كل الهياكل ({baseMatchingStructures.length})
+                      {tr('كل الهياكل', 'All Structures')} ({baseMatchingStructures.length})
                     </button>
                     <button
                       type="button"
@@ -1329,7 +1338,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                           : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                       }`}
                     >
-                      عدد معين من الهياكل
+                      {tr('عدد معين من الهياكل', 'Specific Count')}
                     </button>
                     <button
                       type="button"
@@ -1340,7 +1349,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                           : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                       }`}
                     >
-                      هيكل محدد / عدة هياكل ({selectedStructureIds.length})
+                      {tr('هيكل محدد / عدة هياكل', 'Pick Structures')} ({selectedStructureIds.length})
                     </button>
                   </div>
                 </div>
@@ -1350,7 +1359,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                     <div className="flex items-center gap-2">
                       <Hash className="w-4 h-4 text-amber-500 shrink-0" />
                       <span className="font-bold text-slate-700 dark:text-slate-200">
-                        تصدير أول
+                        {tr('تصدير أول', 'Export top')}
                       </span>
                       <input
                         type="number"
@@ -1361,7 +1370,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                         className="w-16 px-2 py-1 text-center font-mono tabular-nums font-black bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                       />
                       <span className="font-bold text-slate-700 dark:text-slate-200">
-                        هيكل من أصل {baseMatchingStructures.length}
+                        {tr(`هيكل من أصل ${baseMatchingStructures.length}`, `of ${baseMatchingStructures.length} structures`)}
                       </span>
                     </div>
 
@@ -1388,13 +1397,13 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                   <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-amber-300/70 dark:border-amber-800/70 space-y-2.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="relative flex-1 min-w-[160px]">
-                        <Search className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2 pointer-events-none" />
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute start-2.5 top-2 pointer-events-none" />
                         <input
                           type="text"
                           value={structureSearchQuery}
                           onChange={(e) => setStructureSearchQuery(e.target.value)}
-                          placeholder="بحث باسم الهيكل أو الصف أو المادة..."
-                          className="w-full pr-8 pl-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white"
+                          placeholder={tr('بحث باسم الهيكل أو الصف أو المادة...', 'Search by structure title, grade or subject...')}
+                          className="w-full ps-8 pe-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white text-start"
                         />
                       </div>
 
@@ -1404,7 +1413,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                           onClick={() => setSelectedStructureIds(searchableStructuresList.map(s => s.id))}
                           className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-amber-500/20 text-slate-700 dark:text-slate-200 font-bold cursor-pointer whitespace-nowrap"
                         >
-                          تحديد الكل ({searchableStructuresList.length})
+                          {tr('تحديد الكل', 'Select All')} ({searchableStructuresList.length})
                         </button>
 
                         <div className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-0.5">
@@ -1425,7 +1434,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                             }
                             className="px-1.5 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-black cursor-pointer whitespace-nowrap"
                           >
-                            تحديد عدد
+                            {tr('تحديد عدد', 'Pick N')}
                           </button>
                         </div>
 
@@ -1435,7 +1444,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                             onClick={() => setSelectedStructureIds([])}
                             className="px-2 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-bold cursor-pointer whitespace-nowrap"
                           >
-                            إلغاء التحديد
+                            {tr('إلغاء التحديد', 'Clear')}
                           </button>
                         )}
                       </div>
@@ -1444,13 +1453,19 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                     <div className="max-h-40 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg">
                       {searchableStructuresList.length === 0 ? (
                         <div className="p-4 text-center text-xs text-slate-400">
-                          لا توجد هياكل مطابقة للبحث والفلاتر
+                          {tr('لا توجد هياكل مطابقة للبحث والفلاتر', 'No structures match current filters')}
                         </div>
                       ) : (
                         searchableStructuresList.map((st) => {
                           const checked = selectedStructureIds.includes(st.id);
                           const stStatus = getEffectiveStructureStatus(st);
                           const stMeta = STRUCTURE_STATUS_META[stStatus];
+                          const stShortLabel =
+                            stStatus === 'ongoing'
+                              ? tr('جاري', 'Ongoing')
+                              : stStatus === 'studied_not_examined'
+                                ? tr('دُرس • لم يُمتحن', 'Studied')
+                                : tr('تم الامتحان', 'Done');
                           return (
                             <label
                               key={st.id}
@@ -1473,11 +1488,11 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                                 <span
                                   className={`px-1.5 py-0.5 rounded border text-[9px] font-bold shrink-0 ${stMeta.badgeClass}`}
                                 >
-                                  {stMeta.shortLabel}
+                                  {lang === 'ar' ? stMeta.shortLabel : stShortLabel}
                                 </span>
                               </div>
                               <span className="text-[10px] text-slate-500 dark:text-slate-400 shrink-0">
-                                {st.grade} • {st.track} • {st.term}
+                                {translateGrade(st.grade, lang)} • {translateTrack(st.track, lang)} • {translateTerm(st.term, lang)}
                               </span>
                             </label>
                           );
@@ -1487,7 +1502,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
 
                     {selectedStructureIds.length === 0 && (
                       <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400">
-                        يرجى تحديد هيكل واحد على الأقل أو اختيار «كل الهياكل» أو «عدد معين».
+                        {tr('يرجى تحديد هيكل واحد على الأقل أو اختيار «كل الهياكل» أو «عدد معين».', 'Please select at least one structure or choose All/Count.')}
                       </p>
                     )}
                   </div>
@@ -1495,12 +1510,12 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
               </div>
             )}
 
-            {/* Student Selection Scope (All / Specific Count / Specific One or Multiple Students) - ALL MODES */}
+            {/* Student Selection Scope */}
             <div className="pt-3 border-t border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="text-xs font-extrabold text-slate-800 dark:text-white flex items-center gap-1.5">
                   <Users className="w-4 h-4 text-emerald-500" />
-                  <span>نطاق الطلاب المشمولين بالتصدير ({candidateStudentsForPicker.length} متاح):</span>
+                  <span>{tr('نطاق الطلاب المشمولين بالتصدير', 'Students Included in Export')} ({candidateStudentsForPicker.length} {tr('متاح', 'available')}):</span>
                 </label>
 
                 <div className="inline-flex bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px]">
@@ -1513,7 +1528,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                         : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
-                    كل الطلاب ({candidateStudentsForPicker.length})
+                    {tr('كل الطلاب', 'All Students')} ({candidateStudentsForPicker.length})
                   </button>
                   <button
                     type="button"
@@ -1524,7 +1539,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                         : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
-                    عدد معين من الطلاب
+                    {tr('عدد معين من الطلاب', 'Specific Count')}
                   </button>
                   <button
                     type="button"
@@ -1535,7 +1550,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                         : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
-                    طالب محدد / طلاب ({selectedStudentIds.length})
+                    {tr('طالب محدد / طلاب', 'Pick Students')} ({selectedStudentIds.length})
                   </button>
                 </div>
               </div>
@@ -1545,7 +1560,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                   <div className="flex items-center gap-2">
                     <Hash className="w-4 h-4 text-emerald-500 shrink-0" />
                     <span className="font-bold text-slate-700 dark:text-slate-200">
-                      تصدير أول
+                      {tr('تصدير أول', 'Export top')}
                     </span>
                     <input
                       type="number"
@@ -1556,7 +1571,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                       className="w-16 px-2 py-1 text-center font-mono tabular-nums font-black bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                     />
                     <span className="font-bold text-slate-700 dark:text-slate-200">
-                      طالب من أصل {candidateStudentsForPicker.length}
+                      {tr(`طالب من أصل ${candidateStudentsForPicker.length}`, `of ${candidateStudentsForPicker.length} students`)}
                     </span>
                   </div>
 
@@ -1583,13 +1598,13 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                 <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-emerald-300/70 dark:border-emerald-800/70 space-y-2.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="relative flex-1 min-w-[160px]">
-                      <Search className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2 pointer-events-none" />
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute start-2.5 top-2 pointer-events-none" />
                       <input
                         type="text"
                         value={studentSearchQuery}
                         onChange={(e) => setStudentSearchQuery(e.target.value)}
-                        placeholder="ابحث باسم الطالب أو الكود أو الصف..."
-                        className="w-full pr-8 pl-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white"
+                        placeholder={tr('ابحث باسم الطالب أو الكود أو الصف...', 'Search by student name, ID or grade...')}
+                        className="w-full ps-8 pe-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-900 dark:text-white text-start"
                       />
                     </div>
 
@@ -1599,7 +1614,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                         onClick={() => setSelectedStudentIds(searchableStudentsList.map(s => s.id))}
                         className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-500/20 text-slate-700 dark:text-slate-200 font-bold cursor-pointer whitespace-nowrap"
                       >
-                        تحديد الكل ({searchableStudentsList.length})
+                        {tr('تحديد الكل', 'Select All')} ({searchableStudentsList.length})
                       </button>
 
                       <div className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-0.5">
@@ -1620,7 +1635,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                           }
                           className="px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-black cursor-pointer whitespace-nowrap"
                         >
-                          تحديد عدد
+                          {tr('تحديد عدد', 'Pick N')}
                         </button>
                       </div>
 
@@ -1630,7 +1645,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                           onClick={() => setSelectedStudentIds([])}
                           className="px-2 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-bold cursor-pointer whitespace-nowrap"
                         >
-                          إلغاء التحديد
+                          {tr('إلغاء التحديد', 'Clear')}
                         </button>
                       )}
                     </div>
@@ -1639,7 +1654,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                   <div className="max-h-44 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg">
                     {searchableStudentsList.length === 0 ? (
                       <div className="p-4 text-center text-xs text-slate-400">
-                        لا يوجد طلاب مطابقين للبحث والفلاتر الحالية
+                        {tr('لا يوجد طلاب مطابقين للبحث والفلاتر الحالية', 'No students match current filters')}
                       </div>
                     ) : (
                       searchableStudentsList.map((st) => {
@@ -1665,7 +1680,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                               </span>
                             </div>
                             <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 shrink-0">
-                              {st.grade}{st.group ? ` • ${st.group}` : ''} • #{st.studentId}
+                              {translateGrade(st.grade, lang)}{st.group ? ` • ${st.group}` : ''} • #{st.studentId}
                             </span>
                           </label>
                         );
@@ -1675,7 +1690,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
 
                   {selectedStudentIds.length === 0 && (
                     <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400">
-                      يرجى تحديد طالب واحد على الأقل أو اختيار «كل الطلاب» أو «عدد معين».
+                      {tr('يرجى تحديد طالب واحد على الأقل أو اختيار «كل الطلاب» أو «عدد معين».', 'Please select at least one student or choose All/Count.')}
                     </p>
                   )}
                 </div>
@@ -1689,8 +1704,8 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                   <Calendar className="w-3 h-3 text-slate-400" />
                   <span>
                     {exportMode === 'structures_reports'
-                      ? 'تحديد الفترة الزمنية لرصد الهياكل:'
-                      : 'تحديد الفترة الزمنية للامتحانات:'}
+                      ? tr('تحديد الفترة الزمنية لرصد الهياكل:', 'Structures Date Range:')
+                      : tr('تحديد الفترة الزمنية للامتحانات:', 'Exams Date Range:')}
                   </span>
                 </label>
                 <div className="flex items-center gap-2 text-[10px]">
@@ -1699,7 +1714,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                     onClick={() => handleQuickPreset('this_month')}
                     className="text-amber-600 dark:text-amber-400 hover:underline cursor-pointer font-bold"
                   >
-                    هذا الشهر
+                    {tr('هذا الشهر', 'This Month')}
                   </button>
                   <span className="text-slate-300 dark:text-slate-600">•</span>
                   <button
@@ -1707,7 +1722,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                     onClick={() => handleQuickPreset('last_30')}
                     className="text-amber-600 dark:text-amber-400 hover:underline cursor-pointer font-bold"
                   >
-                    آخر 30 يوم
+                    {tr('آخر 30 يوم', 'Last 30 Days')}
                   </button>
                   <span className="text-slate-300 dark:text-slate-600">•</span>
                   <button
@@ -1715,7 +1730,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                     onClick={() => handleQuickPreset('all')}
                     className="text-slate-500 dark:text-slate-400 hover:underline cursor-pointer"
                   >
-                    كافة الفترات
+                    {tr('كافة الفترات', 'All Time')}
                   </button>
                 </div>
               </div>
@@ -1727,9 +1742,9 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
                     className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs"
-                    placeholder="من تاريخ"
+                    placeholder={tr('من تاريخ', 'From date')}
                   />
-                  <span className="text-[10px] text-slate-400 block mt-0.5 pr-1">من تاريخ</span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5 ps-1">{tr('من تاريخ', 'From Date')}</span>
                 </div>
                 <div>
                   <input
@@ -1737,9 +1752,9 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
                     className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl text-xs"
-                    placeholder="إلى تاريخ"
+                    placeholder={tr('إلى تاريخ', 'To date')}
                   />
-                  <span className="text-[10px] text-slate-400 block mt-0.5 pr-1">إلى تاريخ</span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5 ps-1">{tr('إلى تاريخ', 'To Date')}</span>
                 </div>
               </div>
             </div>
@@ -1749,25 +1764,25 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
           <div className="bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/20 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200">
               <GraduationCap className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <span>بيانات التقرير المستخرج:</span>
+              <span>{tr('بيانات التقرير المستخرج:', 'Report Summary:')}</span>
             </div>
             {exportMode === 'structures_reports' ? (
               <div className="flex flex-wrap items-center gap-3 font-mono tabular-nums font-bold text-amber-800 dark:text-amber-300">
-                <span>{effectiveStructuresList.length} هيكل</span>
+                <span>{effectiveStructuresList.length} {tr('هيكل', 'structures')}</span>
                 <span>•</span>
-                <span>{uniqueStructureStudentsCount} طالب</span>
+                <span>{uniqueStructureStudentsCount} {tr('طالب', 'students')}</span>
                 <span>•</span>
-                <span>{effectiveStructureProgressList.length} سجل رصد</span>
+                <span>{effectiveStructureProgressList.length} {tr('سجل رصد', 'records')}</span>
                 <span>•</span>
-                <span>{layoutMode === 'mobile' ? '📱 مقاس الهاتف' : '💻 مقاس الكمبيوتر'}</span>
+                <span>{layoutMode === 'mobile' ? tr('📱 مقاس الهاتف', '📱 Mobile') : tr('💻 مقاس الكمبيوتر', '💻 Desktop')}</span>
               </div>
             ) : (
               <div className="flex flex-wrap items-center gap-3 font-mono tabular-nums font-bold text-amber-800 dark:text-amber-300">
-                <span>{effectiveStudentsList.length} طالب</span>
+                <span>{effectiveStudentsList.length} {tr('طالب', 'students')}</span>
                 <span>•</span>
-                <span>{filteredResults.length} نتيجة امتحان</span>
+                <span>{filteredResults.length} {tr('نتيجة امتحان', 'exam scores')}</span>
                 <span>•</span>
-                <span>{layoutMode === 'mobile' ? '📱 مقاس الهاتف' : '💻 مقاس الكمبيوتر'}</span>
+                <span>{layoutMode === 'mobile' ? tr('📱 مقاس الهاتف', '📱 Mobile') : tr('💻 مقاس الكمبيوتر', '💻 Desktop')}</span>
               </div>
             )}
           </div>
@@ -1781,7 +1796,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
             onClick={onClose}
             className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
           >
-            إلغاء
+            {tr('إلغاء', 'Cancel')}
           </button>
 
           <button
@@ -1791,7 +1806,7 @@ export const ExcelExportModal: React.FC<ExcelExportModalProps> = ({
             className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-98 rounded-xl shadow-md shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50"
           >
             <Download className="w-4 h-4" />
-            {isExporting ? 'جاري تجهيز Excel...' : 'تصدير ملف Excel الآن'}
+            {isExporting ? tr('جاري تجهيز Excel...', 'Generating Excel...') : tr('تصدير ملف Excel الآن', 'Export Excel Now')}
           </button>
         </div>
       </div>

@@ -25,6 +25,13 @@ import {
 } from '../utils/studentStatus';
 import { exportCompletedCourseStudentsExcel } from '../utils/excel';
 import { loadViewState, saveViewState, clearViewState } from '../utils/activityTracker';
+import {
+  useLanguage,
+  translateGrade,
+  translateTerm,
+  translateTrack,
+  translateSubject,
+} from '../utils/i18n';
 import { StudentAcademicReportModal } from './StudentAcademicReportModal';
 
 interface StudentsViewProps {
@@ -56,6 +63,16 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   onUpdateStudentStatus,
   initialEnrollmentTab,
 }) => {
+  const { lang, dir, tr } = useLanguage();
+
+  const formatAcademicStatus = (status: string) => {
+    if (lang === 'ar') return status;
+    if (status === 'ممتاز') return 'Excellent';
+    if (status === 'جيد') return 'Good';
+    if (status === 'يحتاج متابعة') return 'Needs Follow-up';
+    return status;
+  };
+
   const savedState = useMemo(
     () =>
       loadViewState('STUDENTS_VIEW_STATE', {
@@ -236,7 +253,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
       let comparison = 0;
 
       if (sortField === 'name') {
-        comparison = a.student.name.localeCompare(b.student.name, 'ar');
+        comparison = a.student.name.localeCompare(b.student.name, lang === 'en' ? 'en' : 'ar');
       } else if (sortField === 'studentId') {
         comparison = a.student.studentId.localeCompare(b.student.studentId);
       } else if (sortField === 'average') {
@@ -263,7 +280,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   }, [students]);
 
   return (
-    <div id="students-view" className="space-y-5 text-right">
+    <div id="students-view" dir={dir} className="space-y-5 text-start">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
         <div>
@@ -272,16 +289,28 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
               <Users className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             {enrollmentTab === 'completed'
-              ? `قائمة الطلبة الذين انتهى الكورس لهم (${tabCounts.completed})`
+              ? tr(
+                  `قائمة الطلبة الذين انتهى الكورس لهم (${tabCounts.completed})`,
+                  `Course-Completed Students (${tabCounts.completed})`
+                )
               : enrollmentTab === 'inactive'
-              ? `قائمة الطلبة المنقطعين والمتوقفين (${tabCounts.inactive})`
+              ? tr(
+                  `قائمة الطلبة المنقطعين والمتوقفين (${tabCounts.inactive})`,
+                  `Paused & Withdrawn Students (${tabCounts.inactive})`
+                )
               : enrollmentTab === 'active'
-              ? `الطلبة الفعالون بالكورس (${tabCounts.active})`
-              : `إدارة الطلاب (${students.length})`}
+              ? tr(
+                  `الطلبة الفعالون بالكورس (${tabCounts.active})`,
+                  `Active Students (${tabCounts.active})`
+                )
+              : tr(`إدارة الطلاب (${students.length})`, `Students Management (${students.length})`)}
           </h1>
 
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            سجل الطلاب المسجلين، حالة ملف كل طالب بالكورس (فعال / انتهى الكورس / منقطع)، ومعدلات أدائهم
+            {tr(
+              'سجل الطلاب المسجلين، حالة ملف كل طالب بالكورس (فعال / انتهى الكورس / منقطع)، ومعدلات أدائهم',
+              'Registered students directory, course enrollment status (Active / Completed / Withdrawn), and performance averages'
+            )}
           </p>
         </div>
 
@@ -289,15 +318,20 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
           {enrollmentTab === 'completed' && tabCounts.completed > 0 && (
             <div className="flex-1 sm:flex-initial inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 rounded-xl p-1 shadow-xs">
               <div className="inline-flex items-center gap-1 px-1.5">
-                <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300">العدد:</span>
+                <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300">
+                  {tr('العدد:', 'Count:')}
+                </span>
                 <input
                   type="number"
                   min={0}
                   max={tabCounts.completed}
                   value={completedExportCount}
                   onChange={(e) => setCompletedExportCount(Math.max(0, Number(e.target.value) || 0))}
-                  placeholder="الكل"
-                  title="أدخل عدد الطلاب المطلوب تصديره (0 = جميع منتهي الكورس)"
+                  placeholder={tr('الكل', 'All')}
+                  title={tr(
+                    'أدخل عدد الطلاب المطلوب تصديره (0 = جميع منتهي الكورس)',
+                    'Enter number of students to export (0 = all completed)'
+                  )}
                   className="w-12 px-1 py-0.5 text-center font-mono font-bold text-[11px] bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-700 rounded-lg text-slate-900 dark:text-white"
                 />
               </div>
@@ -312,8 +346,11 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                 <Award className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                 <span>
                   {completedExportCount > 0
-                    ? `تصدير منتهي الكورس (${completedExportCount} طالب)`
-                    : 'تصدير قائمة منتهي الكورس Excel'}
+                    ? tr(
+                        `تصدير منتهي الكورس (${completedExportCount} طالب)`,
+                        `Export Completed (${completedExportCount})`
+                      )
+                    : tr('تصدير قائمة منتهي الكورس Excel', 'Export Completed List (Excel)')}
                 </span>
               </button>
             </div>
@@ -324,7 +361,9 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-all cursor-pointer shadow-xs"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span className="hidden xs:inline sm:inline">تصدير الكل إلى Excel</span>
+            <span className="hidden xs:inline sm:inline">
+              {tr('تصدير الكل إلى Excel', 'Export All to Excel')}
+            </span>
             <span className="xs:hidden sm:hidden">Excel</span>
           </button>
 
@@ -334,14 +373,12 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-98 rounded-xl shadow-md shadow-amber-500/20 transition-all cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
-            <span>إضافة طالب جديد</span>
+            <span>{tr('إضافة طالب جديد', 'Add New Student')}</span>
           </button>
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          تبويبات حالة ملفات الطلبة (تشمل القائمة الخاصة بالطلبة الذين انتهى الكورس لهم)
-          ═══════════════════════════════════════════════════════════════════ */}
+      {/* Enrollment Status Tabs */}
       <div className="bg-white dark:bg-slate-900 p-2.5 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5 flex-1">
           <button
@@ -354,7 +391,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             }`}
           >
             <Users className="w-3.5 h-3.5" />
-            <span>كافة الطلبة</span>
+            <span>{tr('كافة الطلبة', 'All Students')}</span>
             <span className="px-1.5 py-0.5 rounded-md text-[10px] font-mono bg-white/20 dark:bg-black/15">
               {tabCounts.all}
             </span>
@@ -370,7 +407,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             }`}
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>الطلبة الفعالون (مستمر)</span>
+            <span>{tr('الطلبة الفعالون (مستمر)', 'Active Students')}</span>
             <span className="px-1.5 py-0.5 rounded-md text-[10px] font-mono bg-black/10 dark:bg-white/10">
               {tabCounts.active}
             </span>
@@ -386,7 +423,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             }`}
           >
             <GraduationCap className="w-4 h-4" />
-            <span>قائمة الطلبة الذين انتهى الكورس لهم</span>
+            <span>{tr('قائمة الطلبة الذين انتهى الكورس لهم', 'Course Completed')}</span>
             <span className="px-1.5 py-0.5 rounded-md text-[10px] font-mono bg-black/10 dark:bg-white/10">
               {tabCounts.completed}
             </span>
@@ -402,7 +439,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             }`}
           >
             <AlertCircle className="w-3.5 h-3.5" />
-            <span>منقطع / متوقف مؤقتاً</span>
+            <span>{tr('منقطع / متوقف مؤقتاً', 'Paused / Withdrawn')}</span>
             <span className="px-1.5 py-0.5 rounded-md text-[10px] font-mono bg-black/10 dark:bg-white/10">
               {tabCounts.inactive}
             </span>
@@ -414,15 +451,15 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             type="button"
             onClick={handleResetFilters}
             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition cursor-pointer"
-            title="البدء من جديد وإعادة ضبط كافة الفلاتر"
+            title={tr('البدء من جديد وإعادة ضبط كافة الفلاتر', 'Reset all filters')}
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>البدء من جديد (إعادة ضبط)</span>
+            <span>{tr('البدء من جديد (إعادة ضبط)', 'Reset Filters')}</span>
           </button>
         )}
       </div>
 
-      {/* Dedicated Banner when viewing "قائمة الطلبة الذين انتهى الكورس لهم" */}
+      {/* Dedicated Banner when viewing Course Completed */}
       {enrollmentTab === 'completed' && (
         <div className="bg-gradient-to-l from-indigo-950 via-indigo-900 to-slate-900 text-white rounded-2xl p-5 shadow-md border border-indigo-700/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-start gap-3.5">
@@ -431,13 +468,21 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             </div>
             <div>
               <h3 className="font-black text-base sm:text-lg text-white flex items-center gap-2">
-                <span>سجل وقائمة الطلبة الذين انتهى الكورس لهم</span>
+                <span>
+                  {tr(
+                    'سجل وقائمة الطلبة الذين انتهى الكورس لهم',
+                    'Course-Completed Students Directory'
+                  )}
+                </span>
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-extrabold">
-                  {tabCounts.completed} طالب
+                  {tabCounts.completed} {tr('طالب', 'students')}
                 </span>
               </h3>
               <p className="text-xs text-indigo-200 mt-1 leading-relaxed">
-                تضم هذه القائمة كافة الطلبة الذين أتموا الكورس بنجاح. يمكنك استعراض تقاريرهم الختامية، أو تصدير كشفهم الخاص إلى Excel، أو إعادة تفعيل ملف أي طالب لكورس جديد بضغطة زر.
+                {tr(
+                  'تضم هذه القائمة كافة الطلبة الذين أتموا الكورس بنجاح. يمكنك استعراض تقاريرهم الختامية، أو تصدير كشفهم الخاص إلى Excel، أو إعادة تفعيل ملف أي طالب لكورس جديد بضغطة زر.',
+                  'Includes all students who have completed the course. You can review final reports, export their Excel sheet, or reactivate any student for a new course.'
+                )}
               </p>
             </div>
           </div>
@@ -455,8 +500,11 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
               <FileSpreadsheet className="w-4 h-4" />
               <span>
                 {completedExportCount > 0
-                  ? `تصدير كشف منتهي الكورس (${completedExportCount} طالب)`
-                  : 'تصدير كشف منتهي الكورس'}
+                  ? tr(
+                      `تصدير كشف منتهي الكورس (${completedExportCount} طالب)`,
+                      `Export Completed (${completedExportCount})`
+                    )
+                  : tr('تصدير كشف منتهي الكورس', 'Export Completed List')}
               </span>
             </button>
           )}
@@ -473,10 +521,13 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="بحث بالاسم أو ID أو رقم الهاتف..."
-              className="w-full pr-9 pl-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all text-right font-medium text-slate-900 dark:text-white placeholder-slate-400"
+              placeholder={tr(
+                'بحث بالاسم أو ID أو رقم الهاتف...',
+                'Search by name, ID, or phone...'
+              )}
+              className="w-full ps-9 pe-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all text-start font-medium text-slate-900 dark:text-white placeholder-slate-400"
             />
-            <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+            <Search className="w-4 h-4 text-slate-400 absolute start-3 top-2.5 pointer-events-none" />
           </div>
 
           {/* Grade */}
@@ -484,12 +535,12 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             <select
               value={gradeFilter}
               onChange={(e) => setGradeFilter(e.target.value)}
-              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden text-right cursor-pointer text-slate-800 dark:text-slate-200"
+              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden text-start cursor-pointer text-slate-800 dark:text-slate-200"
             >
-              <option value="الكل">كل الصفوف</option>
+              <option value="الكل">{tr('كل الصفوف', 'All Grades')}</option>
               {settings.grades.map((grade) => (
                 <option key={grade} value={grade}>
-                  {grade}
+                  {translateGrade(grade, lang)}
                 </option>
               ))}
             </select>
@@ -500,9 +551,9 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             <select
               value={groupFilter}
               onChange={(e) => setGroupFilter(e.target.value)}
-              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden text-right cursor-pointer text-slate-800 dark:text-slate-200"
+              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden text-start cursor-pointer text-slate-800 dark:text-slate-200"
             >
-              <option value="الكل">كل المجموعات</option>
+              <option value="الكل">{tr('كل المجموعات', 'All Groups')}</option>
               {availableGroups.map((group) => (
                 <option key={group} value={group}>
                   {group}
@@ -516,12 +567,12 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             <select
               value={subjectFilter}
               onChange={(e) => setSubjectFilter(e.target.value)}
-              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden text-right cursor-pointer text-slate-800 dark:text-slate-200"
+              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden text-start cursor-pointer text-slate-800 dark:text-slate-200"
             >
-              <option value="الكل">كل المواد</option>
+              <option value="الكل">{tr('كل المواد', 'All Subjects')}</option>
               {settings.subjects.map((subject) => (
                 <option key={subject} value={subject}>
-                  {subject}
+                  {translateSubject(subject, lang)}
                 </option>
               ))}
             </select>
@@ -532,12 +583,12 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden text-right cursor-pointer font-medium text-slate-800 dark:text-slate-200"
+              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden text-start cursor-pointer font-medium text-slate-800 dark:text-slate-200"
             >
-              <option value="الكل">كل المستويات</option>
-              <option value="ممتاز">ممتاز (85%+)</option>
-              <option value="جيد">جيد (65-84%)</option>
-              <option value="يحتاج متابعة">يحتاج متابعة (&lt;65%)</option>
+              <option value="الكل">{tr('كل المستويات', 'All Levels')}</option>
+              <option value="ممتاز">{tr('ممتاز (85%+)', 'Excellent (85%+)')}</option>
+              <option value="جيد">{tr('جيد (65-84%)', 'Good (65-84%)')}</option>
+              <option value="يحتاج متابعة">{tr('يحتاج متابعة (<65%)', 'Needs Follow-up (<65%)')}</option>
             </select>
           </div>
         </div>
@@ -545,7 +596,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
         {/* Sorting */}
         <div className="flex flex-wrap items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 gap-2">
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            <span className="text-[11px]">الترتيب:</span>
+            <span className="text-[11px]">{tr('الترتيب:', 'Sort by:')}</span>
 
             <button
               onClick={() => toggleSort('name')}
@@ -555,7 +606,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                   : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
               }`}
             >
-              الاسم {sortField === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
+              {tr('الاسم', 'Name')} {sortField === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
             </button>
 
             <button
@@ -566,7 +617,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                   : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
               }`}
             >
-              المتوسط {sortField === 'average' && (sortDirection === 'asc' ? '↑' : '↓')}
+              {tr('المتوسط', 'Average')} {sortField === 'average' && (sortDirection === 'asc' ? '↑' : '↓')}
             </button>
 
             <button
@@ -577,12 +628,15 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                   : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
               }`}
             >
-              الامتحانات {sortField === 'examsCount' && (sortDirection === 'asc' ? '↑' : '↓')}
+              {tr('الامتحانات', 'Exams')} {sortField === 'examsCount' && (sortDirection === 'asc' ? '↑' : '↓')}
             </button>
           </div>
 
           <span className="text-[11px] text-slate-400 dark:text-slate-500">
-            عرض {sortedStudents.length} من أصل {students.length} طالب
+            {tr(
+              `عرض ${sortedStudents.length} من أصل ${students.length} طالب`,
+              `Showing ${sortedStudents.length} of ${students.length} students`
+            )}
           </span>
         </div>
       </div>
@@ -594,15 +648,24 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
             <Users className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
             <p className="font-bold text-slate-700 dark:text-slate-300 text-sm">
               {enrollmentTab === 'completed'
-                ? 'لا يوجد طلبة في قائمة منتهي الكورس حالياً'
+                ? tr(
+                    'لا يوجد طلبة في قائمة منتهي الكورس حالياً',
+                    'No students in the Course Completed list currently'
+                  )
                 : enrollmentTab === 'inactive'
-                ? 'لا يوجد طلبة منقطعون أو متوقفون حالياً'
+                ? tr(
+                    'لا يوجد طلبة منقطعون أو متوقفون حالياً',
+                    'No paused or withdrawn students currently'
+                  )
                 : students.length === 0
-                ? 'لا يوجد طلاب مسجلين حتى الآن'
-                : 'لا توجد نتائج مطابقة لشروط البحث'}
+                ? tr('لا يوجد طلاب مسجلين حتى الآن', 'No students registered yet')
+                : tr('لا توجد نتائج مطابقة لشروط البحث', 'No students match your search filters')}
             </p>
             <p className="text-xs text-slate-400 mt-1">
-              يمكنك تغيير حالة ملف أي طالب إلى "انتهى الكورس" أو "منقطع" من أداة الحالة بجانب اسم الطالب أو من ملفه الشخصي.
+              {tr(
+                'يمكنك تغيير حالة ملف أي طالب إلى "انتهى الكورس" أو "منقطع" من أداة الحالة بجانب اسم الطالب أو من ملفه الشخصي.',
+                'You can update any student’s file status to Completed or Withdrawn from the status selector or their profile.'
+              )}
             </p>
           </div>
         ) : (
@@ -630,7 +693,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${stMeta.badgeBg} ${stMeta.badgeText} ${stMeta.badgeBorder}`}
                         >
                           <span className={`w-1.5 h-1.5 rounded-full ${stMeta.dotColor}`} />
-                          {stMeta.shortLabel}
+                          {lang === 'en' ? stMeta.shortLabelEn : stMeta.shortLabel}
                         </span>
                       </div>
 
@@ -639,7 +702,9 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                           #{student.studentId}
                         </span>
                         <span>•</span>
-                        <span className="font-medium text-slate-700 dark:text-slate-300">{student.grade}</span>
+                        <span className="font-medium text-slate-700 dark:text-slate-300">
+                          {translateGrade(student.grade, lang)}
+                        </span>
                         {student.track && (
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
@@ -648,7 +713,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                                 : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                             }`}
                           >
-                            مسار {student.track}
+                            {tr('مسار', 'Track')} {translateTrack(student.track, lang)}
                           </span>
                         )}
                       </div>
@@ -659,28 +724,28 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                     <button
                       onClick={() => setAcademicModalStudent(student)}
                       className="p-1.5 text-slate-400 hover:text-amber-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                      title="التقرير الأكاديمي للطالب"
+                      title={tr('التقرير الأكاديمي للطالب', 'Student Academic Report')}
                     >
                       <GraduationCap className="w-4 h-4 text-amber-500" />
                     </button>
                     <button
                       onClick={() => onOpenProfile(student)}
                       className="p-1.5 text-slate-400 hover:text-amber-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                      title="فتح ملف الطالب"
+                      title={tr('فتح ملف الطالب', 'Open Student Profile')}
                     >
                       <Eye className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => onEditStudent(student)}
                       className="p-1.5 text-slate-400 hover:text-indigo-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                      title="تعديل بيانات الطالب"
+                      title={tr('تعديل بيانات الطالب', 'Edit Student')}
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => onDeleteStudent(student)}
                       className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                      title="حذف الطالب"
+                      title={tr('حذف الطالب', 'Delete Student')}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -689,7 +754,9 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
                 {/* Quick Enrollment Status Switcher on Mobile Card */}
                 <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px]">
-                  <span className="text-slate-400 font-medium">حالة ملف الكورس:</span>
+                  <span className="text-slate-400 font-medium">
+                    {tr('حالة ملف الكورس:', 'Course Status:')}
+                  </span>
                   <select
                     value={enrollmentStatus}
                     onChange={(e) =>
@@ -699,7 +766,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                   >
                     {ENROLLMENT_STATUS_LIST.map((opt) => (
                       <option key={opt.id} value={opt.id}>
-                        {opt.label}
+                        {lang === 'en' ? opt.labelEn : opt.label}
                       </option>
                     ))}
                   </select>
@@ -707,26 +774,26 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
                 {enrollmentNote && (
                   <div className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1.5 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
-                    ملاحظة الملف: {enrollmentNote}
+                    {tr('ملاحظة الملف:', 'File Note:')} {enrollmentNote}
                   </div>
                 )}
 
                 {/* Stats Grid */}
                 <div className="grid grid-cols-3 gap-2 py-2 px-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl text-center text-xs border border-slate-100 dark:border-slate-700/60">
                   <div>
-                    <span className="text-[10px] text-slate-400 block">المتوسط</span>
+                    <span className="text-[10px] text-slate-400 block">{tr('المتوسط', 'Average')}</span>
                     <span className="font-mono font-black text-amber-600 dark:text-amber-400">
                       {stats.totalExams > 0 ? `${stats.averagePercentage}%` : '-'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block">الامتحانات</span>
+                    <span className="text-[10px] text-slate-400 block">{tr('الامتحانات', 'Exams')}</span>
                     <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
                       {stats.totalExams}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block">آخر نتيجة</span>
+                    <span className="text-[10px] text-slate-400 block">{tr('آخر نتيجة', 'Latest')}</span>
                     <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
                       {stats.latestPercentage !== null ? `${stats.latestPercentage}%` : '-'}
                     </span>
@@ -735,13 +802,13 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
                 {subjects.length > 0 && (
                   <div className="flex flex-wrap gap-1 items-center">
-                    <span className="text-[11px] text-slate-400 ml-1">المواد:</span>
+                    <span className="text-[11px] text-slate-400 me-1">{tr('المواد:', 'Subjects:')}</span>
                     {subjects.map((sub) => (
                       <span
                         key={sub}
                         className="px-2 py-0.5 rounded-md text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium"
                       >
-                        {sub}
+                        {translateSubject(sub, lang)}
                       </span>
                     ))}
                   </div>
@@ -755,19 +822,19 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
       {/* Desktop Students Table (hidden md:block) */}
       <div className="hidden md:block bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200/80 dark:border-slate-800 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
+          <table className="w-full text-start text-xs">
             <thead className="bg-slate-50/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
               <tr>
-                <th className="py-3.5 px-4 w-24">الرقم التعريفي</th>
-                <th className="py-3.5 px-4">اسم الطالب</th>
-                <th className="py-3.5 px-3">حالة الملف بالكورس</th>
-                <th className="py-3.5 px-3">الصف الدراسي</th>
-                <th className="py-3.5 px-3">المواد</th>
-                <th className="py-3.5 px-3">الهاتف</th>
-                <th className="py-3.5 px-3 text-center">متوسط الدرجات</th>
-                <th className="py-3.5 px-3 text-center">الامتحانات</th>
-                <th className="py-3.5 px-3 text-center">المستوى</th>
-                <th className="py-3.5 px-4 text-center w-28">إجراءات</th>
+                <th className="py-3.5 px-4 w-24">{tr('الرقم التعريفي', 'Student ID')}</th>
+                <th className="py-3.5 px-4">{tr('اسم الطالب', 'Student Name')}</th>
+                <th className="py-3.5 px-3">{tr('حالة الملف بالكورس', 'Course Status')}</th>
+                <th className="py-3.5 px-3">{tr('الصف الدراسي', 'Grade')}</th>
+                <th className="py-3.5 px-3">{tr('المواد', 'Subjects')}</th>
+                <th className="py-3.5 px-3">{tr('الهاتف', 'Phone')}</th>
+                <th className="py-3.5 px-3 text-center">{tr('متوسط الدرجات', 'Average')}</th>
+                <th className="py-3.5 px-3 text-center">{tr('الامتحانات', 'Exams')}</th>
+                <th className="py-3.5 px-3 text-center">{tr('المستوى', 'Level')}</th>
+                <th className="py-3.5 px-4 text-center w-28">{tr('إجراءات', 'Actions')}</th>
               </tr>
             </thead>
 
@@ -779,27 +846,33 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                       <div className="space-y-2">
                         <GraduationCap className="w-8 h-8 text-indigo-400 mx-auto" />
                         <p className="font-bold text-slate-700 dark:text-slate-200">
-                          لا يوجد طلبة مدرجون في قائمة منتهي الكورس حالياً
+                          {tr(
+                            'لا يوجد طلبة مدرجون في قائمة منتهي الكورس حالياً',
+                            'No students listed under Course Completed currently'
+                          )}
                         </p>
                         <p className="text-xs text-slate-400">
-                          لتحديد أن طالب قد أنهى الكورس، اختر "انتهى الكورس" من عمود (حالة الملف بالكورس) أو من ملف الطالب الشخصي.
+                          {tr(
+                            'لتحديد أن طالب قد أنهى الكورس، اختر "انتهى الكورس" من عمود (حالة الملف بالكورس) أو من ملف الطالب الشخصي.',
+                            'To mark a student as completed, choose "Course Completed" from the Course Status column or the student profile.'
+                          )}
                         </p>
                       </div>
                     ) : students.length === 0 ? (
                       <div className="space-y-3">
                         <Users className="w-8 h-8 text-slate-300 mx-auto" />
                         <p className="font-semibold text-slate-600 dark:text-slate-300">
-                          لا يوجد طلاب مسجلين حتى الآن
+                          {tr('لا يوجد طلاب مسجلين حتى الآن', 'No students registered yet')}
                         </p>
                         <button
                           onClick={onAddStudent}
                           className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-colors cursor-pointer"
                         >
-                          إضافة أول طالب
+                          {tr('إضافة أول طالب', 'Add First Student')}
                         </button>
                       </div>
                     ) : (
-                      'لا توجد نتائج مطابقة لشروط البحث والفلترة'
+                      tr('لا توجد نتائج مطابقة لشروط البحث والفلترة', 'No matching results found')
                     )}
                   </td>
                 </tr>
@@ -849,7 +922,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                             handleQuickStatusChange(student, e.target.value as StudentEnrollmentStatus)
                           }
                           className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border cursor-pointer transition-colors ${stMeta.badgeBg} ${stMeta.badgeText} ${stMeta.badgeBorder}`}
-                          title="تغيير حالة ملف الطالب في الكورس"
+                          title={tr('تغيير حالة ملف الطالب في الكورس', 'Change student course status')}
                         >
                           {ENROLLMENT_STATUS_LIST.map((opt) => (
                             <option
@@ -857,7 +930,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                               value={opt.id}
                               className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                             >
-                              {opt.shortLabel}
+                              {lang === 'en' ? opt.shortLabelEn : opt.shortLabel}
                             </option>
                           ))}
                         </select>
@@ -865,7 +938,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
                       {/* Grade & Track */}
                       <td className="py-3.5 px-3 font-medium text-slate-700 dark:text-slate-200">
-                        <div>{student.grade}</div>
+                        <div>{translateGrade(student.grade, lang)}</div>
                         {(student.track || student.term) && (
                           <div className="flex flex-wrap items-center gap-1 mt-1">
                             {student.track && (
@@ -876,12 +949,12 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                                     : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                                 }`}
                               >
-                                {student.track}
+                                {translateTrack(student.track, lang)}
                               </span>
                             )}
                             {student.term && (
                               <span className="px-1.5 py-0.5 rounded text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                                {student.term}
+                                {translateTerm(student.term, lang)}
                               </span>
                             )}
                           </div>
@@ -890,7 +963,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
                       {/* Subjects */}
                       <td className="py-3.5 px-3 text-slate-700 dark:text-slate-300">
-                        <div className="flex flex-wrap gap-1 justify-end">
+                        <div className="flex flex-wrap gap-1 justify-start">
                           {subjects.length > 0 ? (
                             subjects.map((subject) => (
                               <span
@@ -901,7 +974,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                                     : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                                 }`}
                               >
-                                {subject}
+                                {translateSubject(subject, lang)}
                               </span>
                             ))
                           ) : (
@@ -938,7 +1011,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                               : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
                           }`}
                         >
-                          {stats.status}
+                          {formatAcademicStatus(stats.status)}
                         </span>
                       </td>
 
@@ -951,7 +1024,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                           <button
                             onClick={() => setAcademicModalStudent(student)}
                             className="p-1.5 text-slate-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                            title="التقرير الأكاديمي للطالب"
+                            title={tr('التقرير الأكاديمي للطالب', 'Student Academic Report')}
                           >
                             <GraduationCap className="w-4 h-4 text-amber-500" />
                           </button>
@@ -959,7 +1032,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                           <button
                             onClick={() => onOpenProfile(student)}
                             className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                            title="فتح ملف الطالب"
+                            title={tr('فتح ملف الطالب', 'Open Student Profile')}
                           >
                             <Eye className="w-4 h-4" />
                           </button>
@@ -967,7 +1040,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                           <button
                             onClick={() => onEditStudent(student)}
                             className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                            title="تعديل بيانات الطالب"
+                            title={tr('تعديل بيانات الطالب', 'Edit Student')}
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
@@ -975,7 +1048,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                           <button
                             onClick={() => onDeleteStudent(student)}
                             className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                            title="حذف الطالب"
+                            title={tr('حذف الطالب', 'Delete Student')}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>

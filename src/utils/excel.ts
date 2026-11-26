@@ -9,6 +9,10 @@ import {
   StudentStructureProgress,
   OvertimeEntry,
   OvertimeMonthlyConfig,
+  TeacherTask,
+  TeacherNote,
+  TeacherTaskCategory,
+  TeacherTaskPriority,
 } from '../types';
 import { calculateStudentStats } from './grading';
 import { getEffectiveEnrollmentStatus, ENROLLMENT_STATUS_META, getEffectiveEnrollmentNote } from './studentStatus';
@@ -2332,5 +2336,458 @@ export function exportOvertimeFinancialExcel(options: {
 
   XLSX.writeFile(wb, `تقرير_الأوفر_تايم_والمالية_${selectedMonthKey}.xlsx`);
 }
+
+export interface StructureReminderExportRow {
+  student: Student;
+  solvedCount: number;
+  totalQuestions: number;
+  remainingCount: number;
+  completionPercentage: number;
+  overallAccuracyPercentage: number;
+  missingQuestionsText: string;
+  remindedInfo?: { remindedAt: string; channel: string } | null;
+  messageText: string;
+}
+
+/**
+ * تصدير كشف تذكير ومتابعة الطلاب في الهيكل (مع أرقام التواصل والأسئلة المتبقية ونص التذكير الجاهز)
+ */
+export function exportStructureRemindersExcel(
+  structure: ExamStructure,
+  rows: StructureReminderExportRow[]
+) {
+  const wb = XLSX.utils.book_new();
+  const headerMeta: any[][] = [
+    [`كشف متابعة وتذكير الطلاب — ${structure.title}`, '', '', '', '', '', '', '', '', ''],
+    [
+      'الصف / المسار:',
+      `${structure.grade} (${structure.track})`,
+      'المادة:',
+      structure.subject,
+      'الحالة:',
+      getStructureStatusLabel(structure),
+      'تاريخ الكشف:',
+      new Date().toLocaleDateString('ar-EG'),
+      '',
+      '',
+    ],
+    [''],
+    [
+      'م',
+      'اسم الطالب',
+      'كود الطالب',
+      'هاتف الطالب',
+      'هاتف ولي الأمر',
+      'الأسئلة المحلولة',
+      'نسبة الإنجاز %',
+      'متوسط الصحة %',
+      'الأسئلة المتبقية',
+      'حالة التذكير ونص الرسالة',
+    ],
+  ];
+
+  const bodyRows = rows.map((r, idx) => [
+    idx + 1,
+    r.student.name,
+    r.student.studentId || '-',
+    r.student.phone || '-',
+    r.student.parentPhone || '-',
+    `${r.solvedCount} / ${r.totalQuestions} (متبقي ${r.remainingCount})`,
+    `${r.completionPercentage}%`,
+    `${r.overallAccuracyPercentage}%`,
+    r.missingQuestionsText,
+    r.remindedInfo
+      ? `تم التذكير (${new Date(r.remindedInfo.remindedAt).toLocaleDateString('ar-EG')} - ${r.remindedInfo.channel})\n${r.messageText}`
+      : `بانتظار التذكير\n${r.messageText}`,
+  ]);
+
+  const allRows = [...headerMeta, ...bodyRows];
+  const ws = XLSX.utils.aoa_to_sheet(allRows);
+  applyWorksheetFormatting(
+    ws,
+    allRows.length,
+    [6, 24, 14, 16, 16, 22, 15, 15, 24, 46],
+    [{ s: { r: 0, c: 0 }, e: { r: 0, c: 9 } }],
+    false
+  );
+  XLSX.utils.book_append_sheet(wb, ws, 'كشف التذكير والمتابعة');
+
+  const safeTitle = (structure.title || 'هيكل').replace(/[\\/:*?"<>|]/g, '_');
+  XLSX.writeFile(wb, `كشف_تذكير_الطلاب_${safeTitle}.xlsx`);
+}
+
+/* ============================================================================
+   TEACHER WORKSPACE EXCEL EXPORT (TASKS + TO-DO LISTS + NOTES WITH FILTERS)
+   ============================================================================ */
+
+export type WorkspaceExportScope = 'all' | 'tasks_only' | 'todo_only' | 'notes_only';
+export type WorkspaceTaskStatusFilter = 'all' | 'todo' | 'in_progress' | 'active' | 'done';
+export type WorkspaceTodoFilter = 'all' | 'pending' | 'done';
+export type WorkspaceNotesFilter = 'all' | 'pinned';
+
+export interface WorkspaceExportOptions {
+  scope: WorkspaceExportScope;
+  taskStatusFilter: WorkspaceTaskStatusFilter;
+  priorityFilter: 'all' | TeacherTaskPriority;
+  categoryFilter: 'all' | TeacherTaskCategory;
+  todoFilter: WorkspaceTodoFilter;
+  notesFilter: WorkspaceNotesFilter;
+  exportLang: 'ar' | 'en';
+  layoutMode?: 'mobile' | 'desktop';
+}
+
+export function filterTasksForWorkspaceExport(
+  tasks: TeacherTask[],
+  options: Pick<WorkspaceExportOptions, 'taskStatusFilter' | 'priorityFilter' | 'categoryFilter'>
+): TeacherTask[] {
+  return tasks.filter((t) => {
+    if (options.taskStatusFilter === 'todo' && t.status !== 'todo') return false;
+    if (options.taskStatusFilter === 'in_progress' && t.status !== 'in_progress') return false;
+    if (options.taskStatusFilter === 'active' && t.status === 'done') return false;
+    if (options.taskStatusFilter === 'done' && t.status !== 'done') return false;
+    if (options.priorityFilter !== 'all' && t.priority !== options.priorityFilter) return false;
+    if (options.categoryFilter !== 'all' && t.category !== options.categoryFilter) return false;
+    return true;
+  });
+}
+
+export function filterTodoItemsForWorkspaceExport(
+  notes: TeacherNote[],
+  todoFilter: WorkspaceTodoFilter
+): Array<{
+  listTitle: string;
+  pinned: boolean;
+  text: string;
+  done: boolean;
+  priority: TeacherTaskPriority;
+  dueDate: string;
+}> {
+  const rows: Array<{
+    listTitle: string;
+    pinned: boolean;
+    text: string;
+    done: boolean;
+    priority: TeacherTaskPriority;
+    dueDate: string;
+  }> = [];
+  notes
+    .filter((n) => n.noteType === 'todo_list')
+    .forEach((list) => {
+      (list.checklistItems || []).forEach((item) => {
+        if (todoFilter === 'pending' && item.done) return;
+        if (todoFilter === 'done' && !item.done) return;
+        rows.push({
+          listTitle: list.title,
+          pinned: Boolean(list.pinned),
+          text: item.text,
+          done: Boolean(item.done),
+          priority: item.priority || 'medium',
+          dueDate: item.dueDate || '-',
+        });
+      });
+    });
+  return rows;
+}
+
+export function filterNotesForWorkspaceExport(
+  notes: TeacherNote[],
+  notesFilter: WorkspaceNotesFilter
+): TeacherNote[] {
+  return notes
+    .filter((n) => n.noteType !== 'todo_list')
+    .filter((n) => (notesFilter === 'pinned' ? Boolean(n.pinned) : true));
+}
+
+export function exportTeacherWorkspaceExcel({
+  tasks,
+  notes,
+  options,
+  teacherName = 'Mr. Mohamed Hesham',
+}: {
+  tasks: TeacherTask[];
+  notes: TeacherNote[];
+  options: WorkspaceExportOptions;
+  teacherName?: string;
+}) {
+  const wb = XLSX.utils.book_new();
+  const isAr = options.exportLang === 'ar';
+  const isMobile = (options.layoutMode || 'desktop') === 'mobile';
+
+  const applyDirFormatting = (
+    ws: XLSX.WorkSheet,
+    totalRows: number,
+    colWidths: number[],
+    merges: XLSX.Range[] = []
+  ) => {
+    (ws as any)['!views'] = [{ rightToLeft: isAr, showGridLines: true }];
+    ws['!cols'] = colWidths.map((w) => ({ wch: w }));
+    ws['!rows'] = Array.from({ length: totalRows }, (_, r) => ({
+      hpt: r === 0 ? 32 : 24,
+    }));
+    if (merges.length > 0) {
+      ws['!merges'] = merges;
+    }
+  };
+
+  const filteredTasks =
+    options.scope === 'all' || options.scope === 'tasks_only'
+      ? filterTasksForWorkspaceExport(tasks, options)
+      : [];
+  const filteredTodos =
+    options.scope === 'all' || options.scope === 'todo_only'
+      ? filterTodoItemsForWorkspaceExport(notes, options.todoFilter)
+      : [];
+  const filteredNotes =
+    options.scope === 'all' || options.scope === 'notes_only'
+      ? filterNotesForWorkspaceExport(notes, options.notesFilter)
+      : [];
+
+  const statusLabel = (s: TeacherTask['status']) => {
+    if (isAr) {
+      return s === 'done' ? 'مكتملة' : s === 'in_progress' ? 'قيد التنفيذ' : 'مطلوبة (للتنفيذ)';
+    }
+    return s === 'done' ? 'Completed' : s === 'in_progress' ? 'In Progress' : 'Required (To-Do)';
+  };
+
+  const priorityLabel = (p: TeacherTaskPriority) => {
+    if (isAr) {
+      return p === 'high' ? 'عاجلة' : p === 'medium' ? 'متوسطة' : 'عادية';
+    }
+    return p === 'high' ? 'High' : p === 'medium' ? 'Medium' : 'Low';
+  };
+
+  const categoryLabel = (c: TeacherTaskCategory) => {
+    if (isAr) {
+      return {
+        structures: 'الهياكل',
+        exams: 'الامتحانات',
+        students: 'الطلاب',
+        finance: 'المالية',
+        general: 'عام',
+      }[c];
+    }
+    return {
+      structures: 'Structures',
+      exams: 'Exams',
+      students: 'Students',
+      finance: 'Finance',
+      general: 'General',
+    }[c];
+  };
+
+  const taskFilterDesc = isAr
+    ? {
+        all: 'جميع المهام',
+        todo: 'المطلوبة فقط',
+        in_progress: 'قيد التنفيذ فقط',
+        active: 'النشطة (المطلوبة + قيد التنفيذ)',
+        done: 'المنتهية فقط',
+      }[options.taskStatusFilter]
+    : {
+        all: 'All Tasks',
+        todo: 'Required Only',
+        in_progress: 'In Progress Only',
+        active: 'Active (Incomplete)',
+        done: 'Completed Only',
+      }[options.taskStatusFilter];
+
+  const todayStr = new Date().toLocaleDateString(isAr ? 'ar-EG' : 'en-US');
+
+  // Sheet 1: Summary
+  const doneCount = filteredTasks.filter((t) => t.status === 'done').length;
+  const todoCount = filteredTasks.filter((t) => t.status === 'todo').length;
+  const inProgCount = filteredTasks.filter((t) => t.status === 'in_progress').length;
+  const taskPct = filteredTasks.length > 0 ? Math.round((doneCount / filteredTasks.length) * 100) : 0;
+
+  const summaryRows: any[][] = [
+    [isAr ? `تقرير مساحة عمل المعلم — ${teacherName}` : `Teacher Workspace Report — ${teacherName}`, '', '', ''],
+    [isAr ? 'تاريخ التصدير:' : 'Export Date:', todayStr, isAr ? 'فلتر المهام:' : 'Task Filter:', taskFilterDesc],
+    [''],
+    [isAr ? 'البند' : 'Section', isAr ? 'العدد المصدّر' : 'Exported Count', isAr ? 'مؤشر الإنجاز' : 'Progress Bar', isAr ? 'ملاحظات' : 'Details'],
+    [
+      isAr ? 'المهام (Tasks)' : 'Tasks',
+      filteredTasks.length,
+      buildVisualScoreBar(taskPct, isMobile),
+      isAr
+        ? `مطلوبة: ${todoCount} | قيد التنفيذ: ${inProgCount} | منتهية: ${doneCount}`
+        : `Required: ${todoCount} | In Progress: ${inProgCount} | Completed: ${doneCount}`,
+    ],
+    [
+      isAr ? 'بنود To-Do' : 'To-Do Items',
+      filteredTodos.length,
+      buildVisualScoreBar(
+        filteredTodos.length > 0
+          ? Math.round((filteredTodos.filter((i) => i.done).length / filteredTodos.length) * 100)
+          : 0,
+        isMobile
+      ),
+      isAr
+        ? `منجزة: ${filteredTodos.filter((i) => i.done).length} | متبقية: ${filteredTodos.filter((i) => !i.done).length}`
+        : `Done: ${filteredTodos.filter((i) => i.done).length} | Pending: ${filteredTodos.filter((i) => !i.done).length}`,
+    ],
+    [
+      isAr ? 'الملاحظات الشخصية' : 'Personal Notes',
+      filteredNotes.length,
+      '-',
+      isAr
+        ? `مثبتة: ${filteredNotes.filter((n) => n.pinned).length}`
+        : `Pinned: ${filteredNotes.filter((n) => n.pinned).length}`,
+    ],
+  ];
+
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+  applyDirFormatting(
+    wsSummary,
+    summaryRows.length,
+    [24, 16, 26, 40],
+    [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }]
+  );
+  XLSX.utils.book_append_sheet(wb, wsSummary, isAr ? 'ملخص مساحة العمل' : 'Summary');
+
+  // Sheet 2: Tasks
+  if (options.scope === 'all' || options.scope === 'tasks_only') {
+    const taskHeader = isAr
+      ? [
+          'م',
+          'عنوان المهمة',
+          'الحالة',
+          'الأولوية',
+          'التصنيف',
+          'الهيكل المرتبط',
+          'الخطوات الفرعية',
+          'تاريخ الاستحقاق',
+          'تاريخ الإنجاز',
+          'التفاصيل',
+        ]
+      : [
+          '#',
+          'Task Title',
+          'Status',
+          'Priority',
+          'Category',
+          'Linked Structure',
+          'Subtasks',
+          'Due Date',
+          'Completed At',
+          'Description',
+        ];
+
+    const taskBody =
+      filteredTasks.length === 0
+        ? [[isAr ? 'لا توجد مهام مطابقة للفلتر المحدد' : 'No tasks match the selected filter']]
+        : filteredTasks.map((t, idx) => {
+            const subs = t.subtasks || [];
+            const subDone = subs.filter((s) => s.done).length;
+            const subText =
+              subs.length === 0
+                ? '-'
+                : `${subDone}/${subs.length} (${subs.map((s) => `${s.done ? '✓' : '○'} ${s.text}`).join(' | ')})`;
+            return [
+              idx + 1,
+              t.title,
+              statusLabel(t.status),
+              priorityLabel(t.priority),
+              categoryLabel(t.category),
+              t.linkedStructureTitle || '-',
+              subText,
+              t.dueDate || '-',
+              t.completedAt ? t.completedAt.slice(0, 10) : '-',
+              t.description || '-',
+            ];
+          });
+
+    const taskSheetRows = [
+      [isAr ? `كشف المهام — ${taskFilterDesc}` : `Tasks Sheet — ${taskFilterDesc}`, '', '', '', '', '', '', '', '', ''],
+      taskHeader,
+      ...taskBody,
+    ];
+    const wsTasks = XLSX.utils.aoa_to_sheet(taskSheetRows);
+    applyDirFormatting(
+      wsTasks,
+      taskSheetRows.length,
+      [6, 30, 18, 12, 14, 24, 34, 14, 14, 38],
+      [{ s: { r: 0, c: 0 }, e: { r: 0, c: 9 } }]
+    );
+    XLSX.utils.book_append_sheet(wb, wsTasks, isAr ? 'المهام' : 'Tasks');
+  }
+
+  // Sheet 3: To-Do Lists
+  if (options.scope === 'all' || options.scope === 'todo_only') {
+    const todoHeader = isAr
+      ? ['م', 'اسم القائمة', 'بند To-Do', 'الحالة', 'الأولوية', 'التاريخ']
+      : ['#', 'List Title', 'To-Do Item', 'Status', 'Priority', 'Due Date'];
+
+    const todoBody =
+      filteredTodos.length === 0
+        ? [[isAr ? 'لا توجد بنود To-Do مطابقة للفلتر' : 'No matching To-Do items']]
+        : filteredTodos.map((item, idx) => [
+            idx + 1,
+            item.listTitle,
+            item.text,
+            item.done ? (isAr ? 'منجز' : 'Done') : (isAr ? 'مطلوب' : 'Pending'),
+            priorityLabel(item.priority),
+            item.dueDate,
+          ]);
+
+    const todoRows = [
+      [isAr ? 'كشف قوائم To-Do السريعة' : 'Quick To-Do Lists', '', '', '', '', ''],
+      todoHeader,
+      ...todoBody,
+    ];
+    const wsTodo = XLSX.utils.aoa_to_sheet(todoRows);
+    applyDirFormatting(
+      wsTodo,
+      todoRows.length,
+      [6, 26, 40, 14, 12, 14],
+      [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }]
+    );
+    XLSX.utils.book_append_sheet(wb, wsTodo, 'To-Do');
+  }
+
+  // Sheet 4: Personal Notes
+  if (options.scope === 'all' || options.scope === 'notes_only') {
+    const notesHeader = isAr
+      ? ['م', 'عنوان الملاحظة', 'التصنيف', 'مثبتة؟', 'تاريخ التحديث', 'المحتوى']
+      : ['#', 'Note Title', 'Category', 'Pinned', 'Updated', 'Content'];
+
+    const notesBody =
+      filteredNotes.length === 0
+        ? [[isAr ? 'لا توجد ملاحظات مطابقة للفلتر' : 'No matching notes']]
+        : filteredNotes.map((n, idx) => [
+            idx + 1,
+            n.title,
+            n.category || (isAr ? 'عام' : 'General'),
+            n.pinned ? (isAr ? 'نعم' : 'Yes') : (isAr ? 'لا' : 'No'),
+            (n.updatedAt || n.createdAt).slice(0, 10),
+            n.content || '-',
+          ]);
+
+    const notesRows = [
+      [isAr ? 'مفكرة وملاحظات المعلم' : 'Teacher Personal Notes', '', '', '', '', ''],
+      notesHeader,
+      ...notesBody,
+    ];
+    const wsNotes = XLSX.utils.aoa_to_sheet(notesRows);
+    applyDirFormatting(
+      wsNotes,
+      notesRows.length,
+      [6, 28, 16, 10, 14, 52],
+      [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }]
+    );
+    XLSX.utils.book_append_sheet(wb, wsNotes, isAr ? 'الملاحظات' : 'Notes');
+  }
+
+  const fileTag =
+    options.scope === 'tasks_only'
+      ? options.taskStatusFilter
+      : options.scope;
+  const filename = isAr
+    ? `مساحة_عمل_المعلم_${fileTag}_${new Date().toISOString().slice(0, 10)}.xlsx`
+    : `Teacher_Workspace_${fileTag}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+  XLSX.writeFile(wb, filename);
+}
+
+
 
 

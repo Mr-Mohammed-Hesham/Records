@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
+import { useLanguage } from '../utils/i18n';
 
 export interface ToastMessage {
   id: string;
@@ -22,6 +23,8 @@ const ToastItem: React.FC<{
   toast: ToastMessage;
   onClose: (id: string) => void;
 }> = ({ toast, onClose }) => {
+  const { tr } = useLanguage();
+
   useEffect(() => {
     const duration = toast.duration ?? 3500;
     if (duration <= 0) return;
@@ -55,7 +58,7 @@ const ToastItem: React.FC<{
         <Info className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
       )}
 
-      <div className="flex-1 min-w-0 pr-1">
+      <div className="flex-1 min-w-0 pe-1">
         <h4 className="text-xs sm:text-sm font-bold leading-snug">
           {toast.title || toast.message}
         </h4>
@@ -69,7 +72,7 @@ const ToastItem: React.FC<{
       <button
         type="button"
         onClick={() => onClose(toast.id)}
-        aria-label="إغلاق الإشعار"
+        aria-label={tr('إغلاق الإشعار', 'Close notification')}
         className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 rounded-lg transition-colors cursor-pointer shrink-0"
       >
         <X className="w-3.5 h-3.5" />
@@ -83,6 +86,7 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({
   onDismiss,
   onClose,
 }) => {
+  const { dir } = useLanguage();
   if (toasts.length === 0) return null;
 
   const handleClose = (id: string) => {
@@ -93,7 +97,8 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({
   return (
     <div
       id="toast-container"
-      className="fixed bottom-20 sm:bottom-5 left-3 sm:left-5 z-[80] flex flex-col gap-2.5 max-w-sm w-[calc(100vw-1.5rem)] sm:w-full pointer-events-none"
+      dir={dir}
+      className="fixed bottom-20 sm:bottom-5 end-3 sm:end-5 z-[80] flex flex-col gap-2.5 max-w-sm w-[calc(100vw-1.5rem)] sm:w-full pointer-events-none"
     >
       {toasts.map((t) => (
         <ToastItem key={t.id} toast={t} onClose={handleClose} />

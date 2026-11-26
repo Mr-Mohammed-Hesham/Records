@@ -27,6 +27,7 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowUpDown,
+  BellRing,
 } from 'lucide-react';
 import {
   Student,
@@ -70,6 +71,19 @@ import { HonorBoardModal } from './HonorBoardModal';
 import { StudentStructureScoringModal } from './StudentStructureScoringModal';
 import { BatchStructureScoringModal } from './BatchStructureScoringModal';
 import { ConfirmModal } from './ConfirmModal';
+import {
+  StructureCompletionDistributionChart,
+  CompletionBucketId,
+  resolveCompletionBucket,
+} from './StructureCompletionDistributionChart';
+import { StructureReminderModal } from './StructureReminderModal';
+import {
+  useLanguage,
+  translateGrade,
+  translateTerm,
+  translateTrack,
+  translateSubject,
+} from '../utils/i18n';
 
 interface StructuresViewProps {
   structures: ExamStructure[];
@@ -112,6 +126,8 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
   onRestoreStudentsToStructure,
   onOpenStudentProfile,
 }) => {
+  const { lang, dir, tr } = useLanguage();
+
   const initialPersisted = useMemo(
     () =>
       loadViewState('STRUCTURES_VIEW_STATE', {
@@ -191,6 +207,16 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
   const [editingStructure, setEditingStructure] = useState<ExamStructure | null>(null);
   const [isExcelExportModalOpen, setIsExcelExportModalOpen] = useState(false);
   const [isHonorBoardOpen, setIsHonorBoardOpen] = useState(false);
+  const [filterCompletionBucket, setFilterCompletionBucket] = useState<
+    'all' | CompletionBucketId
+  >('all');
+  const [reminderModalState, setReminderModalState] = useState<{
+    isOpen: boolean;
+    studentIds?: string[];
+    audienceLabel?: string;
+  }>({
+    isOpen: false,
+  });
 
   // Student Question Scoring & Improvement Modal
   const [scoringModalState, setScoringModalState] = useState<{
@@ -562,6 +588,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
     setFilterSubject('الكل');
     setFilterCompletionStatus('all');
     setFilterProgressLevel('all');
+    setFilterCompletionBucket('all');
     setStructureSortBy('newest');
   };
 
@@ -600,19 +627,20 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
     [filteredStructures, selectedStructureId]
   );
 
-  // Reset multi-selection when switching structure and record latest activity
+  // Reset multi-selection & bucket filter when switching structure and record latest activity
   useEffect(() => {
     setSelectedStudentIds(new Set());
+    setFilterCompletionBucket('all');
     if (selectedStructure) {
       recordLastActivity({
         view: 'structures',
         tab: 'structures',
         structureId: selectedStructure.id,
         structureTitle: selectedStructure.title,
-        actionLabel: `قسم الهياكل: ${selectedStructure.title}`,
+        actionLabel: tr(`قسم الهياكل: ${selectedStructure.title}`, `Structures: ${selectedStructure.title}`),
       });
     }
-  }, [selectedStructure?.id]);
+  }, [selectedStructure?.id, lang]);
 
   // Progress records for selected structure
   const selectedStructureProgress = useMemo(() => {
@@ -711,6 +739,19 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
     });
 
     const filteredBySearch = matchingStudents.filter((st) => {
+      if (filterCompletionBucket !== 'all') {
+        const attempts = progressByStudentMap.get(st.id) || [];
+        const latest = attempts[attempts.length - 1];
+        const totalQ = Math.max(
+          1,
+          selectedStructure.totalQuestions || selectedStructure.questions?.length || 1
+        );
+        const pct = latest
+          ? latest.completionPercentage ??
+            Math.round(((latest.solvedCount || 0) / totalQ) * 1000) / 10
+          : 0;
+        if (resolveCompletionBucket(pct) !== filterCompletionBucket) return false;
+      }
       if (!studentPickerSearch.trim()) return true;
       const q = studentPickerSearch.trim().toLowerCase();
       return (
@@ -732,7 +773,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
           return latestB.overallAccuracyPercentage - latestA.overallAccuracyPercentage;
         }
       }
-      return a.name.localeCompare(b.name, 'ar');
+      return a.name.localeCompare(b.name, lang === 'en' ? 'en' : 'ar');
     });
 
     const expandedRows: Array<{
@@ -776,6 +817,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
     students,
     filterStatus,
     studentListScope,
+    filterCompletionBucket,
     studentPickerSearch,
   ]);
 
@@ -942,16 +984,19 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
   };
 
   return (
-    <div id="structures-view" className="space-y-5 text-right">
+    <div id="structures-view" dir={dir} className="space-y-5 text-start">
       {/* Page Top Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
             <Layers className="w-6 h-6 text-amber-500" />
-            <span>قسم الهياكل ومتابعة حل الأسئلة ونسب الصحة</span>
+            <span>{tr('قسم الهياكل ومتابعة حل الأسئلة ونسب الصحة', 'Structures & Question Accuracy Tracking')}</span>
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            تسجيل الهياكل بالصف والفصل والمسار والسنة والمادة، ورصد عدد الأسئلة المحلولة ونسبة صحة كل سؤال لكل طالب
+            {tr(
+              'تسجيل الهياكل بالصف والفصل والمسار والسنة والمادة، ورصد عدد الأسئلة المحلولة ونسبة صحة كل سؤال لكل طالب',
+              'Register exam structures by grade, term, track, year, and subject, and track solved questions and per-question accuracy for every student'
+            )}
           </p>
         </div>
 
@@ -962,10 +1007,13 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             onClick={() => setIsHonorBoardOpen(true)}
             disabled={structures.length === 0}
             className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-black text-slate-950 bg-gradient-to-r from-amber-300 via-amber-400 to-orange-400 hover:from-amber-200 hover:to-orange-300 rounded-xl transition cursor-pointer shadow-md shadow-amber-500/20 disabled:opacity-50 whitespace-nowrap shrink-0"
-            title="تصميم وتصدير لوحات شرف قسم الهياكل باللوجو وشعار المعلم وكافة التقسيمات"
+            title={tr(
+              'تصميم وتصدير لوحات شرف قسم الهياكل باللوجو وشعار المعلم وكافة التقسيمات',
+              'Design and export Structures Honor Boards with logo and breakdowns'
+            )}
           >
             <Award className="w-4 h-4 text-slate-950" />
-            <span>لوحة شرف الهياكل 📸</span>
+            <span>{tr('لوحة شرف الهياكل 📸', 'Structures Honor Board 📸')}</span>
           </button>
 
           <button
@@ -973,10 +1021,13 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             onClick={() => setIsExcelExportModalOpen(true)}
             disabled={structures.length === 0}
             className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
-            title="فتح مركز تصدير Excel المخصص للهياكل (وضع الهاتف / الكمبيوتر / الرسوم البيانية / اللوجو / الفلاتر)"
+            title={tr(
+              'فتح مركز تصدير Excel المخصص للهياكل (وضع الهاتف / الكمبيوتر / الرسوم البيانية / اللوجو / الفلاتر)',
+              'Open custom Excel export center for structures (mobile/desktop/charts/logo/filters)'
+            )}
           >
             <Sliders className="w-4 h-4 text-amber-500" />
-            <span>تصدير Excel مخصص للهياكل</span>
+            <span>{tr('تصدير Excel مخصص للهياكل', 'Custom Structures Excel')}</span>
           </button>
 
           <button
@@ -988,8 +1039,39 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             <span>
               {selectedStudentIds.size > 0
-                ? `تصدير شيت الهياكل (${selectedStudentIds.size} محدد)`
-                : 'تصدير شيت الهياكل'}
+                ? tr(`تصدير شيت الهياكل (${selectedStudentIds.size} محدد)`, `Export Structures Sheet (${selectedStudentIds.size} selected)`)
+                : tr('تصدير شيت الهياكل', 'Export Structures Sheet')}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              selectedStructure &&
+              setReminderModalState({
+                isOpen: true,
+                studentIds:
+                  selectedStudentIds.size > 0
+                    ? Array.from<string>(selectedStudentIds)
+                    : undefined,
+                audienceLabel:
+                  selectedStudentIds.size > 0
+                    ? tr(`الطلاب المحددون (${selectedStudentIds.size})`, `Selected Students (${selectedStudentIds.size})`)
+                    : undefined,
+              })
+            }
+            disabled={!selectedStructure}
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-rose-700 dark:text-rose-200 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-800 rounded-xl transition cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
+            title={tr(
+              'فتح مركز تذكير ومتابعة الطلاب عبر الواتساب أو البريد أو نسخ الرسائل',
+              'Open student reminder and follow-up center via WhatsApp, email, or copy'
+            )}
+          >
+            <BellRing className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+            <span>
+              {selectedStudentIds.size > 0
+                ? tr(`تذكير الطلاب (${selectedStudentIds.size})`, `Remind Students (${selectedStudentIds.size})`)
+                : tr('تذكير الطلاب', 'Remind Students')}
             </span>
           </button>
 
@@ -1003,7 +1085,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-black text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 rounded-xl transition cursor-pointer shadow-md shadow-amber-500/20 whitespace-nowrap shrink-0"
           >
             <Plus className="w-4 h-4" />
-            <span>إضافة هيكل جديد</span>
+            <span>{tr('إضافة هيكل جديد', 'Add New Structure')}</span>
           </button>
         </div>
       </div>
@@ -1015,7 +1097,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             <button
               type="button"
               onClick={() => setFilterCompletionStatus('all')}
-              className={`p-3.5 sm:p-4 rounded-2xl border text-right transition cursor-pointer ${
+              className={`p-3.5 sm:p-4 rounded-2xl border text-start transition cursor-pointer ${
                 filterCompletionStatus === 'all'
                   ? 'bg-amber-50/70 dark:bg-amber-950/25 border-amber-400 dark:border-amber-700'
                   : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
@@ -1023,7 +1105,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                  إجمالي الهياكل
+                  {tr('إجمالي الهياكل', 'Total Structures')}
                 </span>
                 <Layers className="w-4 h-4 text-amber-500 shrink-0" />
               </div>
@@ -1034,12 +1116,15 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                 {globalStructuresSummary.matchingMetadataCount !==
                   globalStructuresSummary.totalAllStructures && (
                   <span className="text-[11px] text-slate-400 font-mono tabular-nums">
-                    من {globalStructuresSummary.totalAllStructures}
+                    {tr('من', 'of')} {globalStructuresSummary.totalAllStructures}
                   </span>
                 )}
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
-                المعروض حسب الفلاتر: {globalStructuresSummary.filteredCount} هيكل
+                {tr(
+                  `المعروض حسب الفلاتر: ${globalStructuresSummary.filteredCount} هيكل`,
+                  `Shown by filters: ${globalStructuresSummary.filteredCount} structures`
+                )}
               </p>
             </button>
 
@@ -1048,7 +1133,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
               onClick={() =>
                 setFilterCompletionStatus((prev) => (prev === 'ongoing' ? 'all' : 'ongoing'))
               }
-              className={`p-3.5 sm:p-4 rounded-2xl border text-right transition cursor-pointer ${
+              className={`p-3.5 sm:p-4 rounded-2xl border text-start transition cursor-pointer ${
                 filterCompletionStatus === 'ongoing'
                   ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-500 dark:border-emerald-700'
                   : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800'
@@ -1056,7 +1141,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                  الهياكل الجارية
+                  {tr('الهياكل الجارية', 'Ongoing Structures')}
                 </span>
                 <Clock className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
               </div>
@@ -1077,7 +1162,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
-                مستمر وجاري الدراسة · اضغط للفرز
+                {tr('مستمر وجاري الدراسة · اضغط للفرز', 'Ongoing study · Click to filter')}
               </p>
             </button>
 
@@ -1088,7 +1173,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                   prev === 'studied_not_examined' ? 'all' : 'studied_not_examined'
                 )
               }
-              className={`p-3.5 sm:p-4 rounded-2xl border text-right transition cursor-pointer ${
+              className={`p-3.5 sm:p-4 rounded-2xl border text-start transition cursor-pointer ${
                 filterCompletionStatus === 'studied_not_examined'
                   ? 'bg-amber-50/90 dark:bg-amber-950/35 border-amber-500 dark:border-amber-700'
                   : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-amber-300 dark:hover:border-amber-800'
@@ -1096,7 +1181,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                  منتهي دراسة (لم يُمتحن)
+                  {tr('منتهي دراسة (لم يُمتحن)', 'Studied (Pending Exam)')}
                 </span>
                 <BookOpenCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               </div>
@@ -1117,7 +1202,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
-                بانتظار الامتحان · اضغط للفرز
+                {tr('بانتظار الامتحان · اضغط للفرز', 'Awaiting exam · Click to filter')}
               </p>
             </button>
 
@@ -1126,7 +1211,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
               onClick={() =>
                 setFilterCompletionStatus((prev) => (prev === 'completed' ? 'all' : 'completed'))
               }
-              className={`p-3.5 sm:p-4 rounded-2xl border text-right transition cursor-pointer ${
+              className={`p-3.5 sm:p-4 rounded-2xl border text-start transition cursor-pointer ${
                 filterCompletionStatus === 'completed'
                   ? 'bg-indigo-50/80 dark:bg-indigo-950/30 border-indigo-500 dark:border-indigo-700'
                   : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-800'
@@ -1134,7 +1219,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                  منتهي وتم الامتحان
+                  {tr('منتهي وتم الامتحان', 'Completed & Examined')}
                 </span>
                 <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
               </div>
@@ -1155,23 +1240,26 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
-                انتهى وتم امتحان المادة · اضغط للفرز
+                {tr('انتهى وتم امتحان المادة · اضغط للفرز', 'Completed & examined · Click to filter')}
               </p>
             </button>
 
             <button
               type="button"
               onClick={() => setShowCompletionBreakdownPanel((prev) => !prev)}
-              className={`col-span-2 sm:col-span-2 lg:col-span-1 p-3.5 sm:p-4 rounded-2xl border text-right transition cursor-pointer ${
+              className={`col-span-2 sm:col-span-2 lg:col-span-1 p-3.5 sm:p-4 rounded-2xl border text-start transition cursor-pointer ${
                 showCompletionBreakdownPanel
                   ? 'bg-slate-100/90 dark:bg-slate-800 border-amber-500'
                   : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-700'
               }`}
-              title="عرض أو إخفاء جدول نسبة الإنجاز الكلية لجميع الطلاب في كل هيكل"
+              title={tr(
+                'عرض أو إخفاء جدول نسبة الإنجاز الكلية لجميع الطلاب في كل هيكل',
+                'Show or hide overall student completion rate breakdown per structure'
+              )}
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                  نسبة الإنجاز الكلية للطلاب
+                  {tr('نسبة الإنجاز الكلية للطلاب', 'Overall Student Completion')}
                 </span>
                 <TrendingUp className="w-4 h-4 text-amber-500 shrink-0" />
               </div>
@@ -1180,7 +1268,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                   {globalStructuresSummary.overallCompletionPct}%
                 </span>
                 <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 inline-flex items-center gap-0.5 whitespace-nowrap">
-                  <span>كل هيكل</span>
+                  <span>{tr('كل هيكل', 'Per Structure')}</span>
                   {showCompletionBreakdownPanel ? (
                     <ChevronUp className="w-3.5 h-3.5" />
                   ) : (
@@ -1204,7 +1292,10 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                 <div className="flex items-center gap-2">
                   <BarChart3 className="w-4 h-4 text-amber-500 shrink-0" />
                   <h2 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
-                    ملخص نسبة الإنجاز الكلية لجميع الطلاب في كل هيكل ({filteredStructures.length} هيكل)
+                    {tr(
+                      `ملخص نسبة الإنجاز الكلية لجميع الطلاب في كل هيكل (${filteredStructures.length} هيكل)`,
+                      `Overall Student Completion Summary per Structure (${filteredStructures.length} structures)`
+                    )}
                   </h2>
                 </div>
                 <button
@@ -1212,24 +1303,24 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                   onClick={() => setShowCompletionBreakdownPanel(false)}
                   className="text-[11px] font-bold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white cursor-pointer"
                 >
-                  إغلاق الملخص
+                  {tr('إغلاق الملخص', 'Close Summary')}
                 </button>
               </div>
 
               {filteredStructures.length === 0 ? (
                 <div className="p-6 text-center text-xs text-slate-400">
-                  لا توجد هياكل مطابقة لمعايير الفلترة الحالية
+                  {tr('لا توجد هياكل مطابقة لمعايير الفلترة الحالية', 'No structures match the current filters')}
                 </div>
               ) : (
                 <div className="overflow-x-auto max-h-72 overflow-y-auto">
-                  <table className="w-full text-right text-xs">
+                  <table className="w-full text-start text-xs">
                     <thead className="bg-slate-50 dark:bg-slate-800/70 text-[11px] font-bold text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 sticky top-0">
                       <tr>
-                        <th className="py-2.5 px-3">الهيكل</th>
-                        <th className="py-2.5 px-3">الحالة</th>
-                        <th className="py-2.5 px-3">الطلاب المرصودون</th>
-                        <th className="py-2.5 px-3 min-w-[170px]">نسبة الإنجاز الكلية لجميع الطلاب</th>
-                        <th className="py-2.5 px-3">متوسط الصحة</th>
+                        <th className="py-2.5 px-3">{tr('الهيكل', 'Structure')}</th>
+                        <th className="py-2.5 px-3">{tr('الحالة', 'Status')}</th>
+                        <th className="py-2.5 px-3">{tr('الطلاب المرصودون', 'Recorded Students')}</th>
+                        <th className="py-2.5 px-3 min-w-[170px]">{tr('نسبة الإنجاز الكلية لجميع الطلاب', 'Overall Completion Rate')}</th>
+                        <th className="py-2.5 px-3">{tr('متوسط الصحة', 'Avg Accuracy')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1253,7 +1344,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                 {st.title}
                               </div>
                               <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                {st.grade} · {st.track} · {st.subject} · {st.term}
+                                {translateGrade(st.grade, lang)} · {translateTrack(st.track, lang)} · {translateSubject(st.subject, lang)} · {translateTerm(st.term, lang)}
                               </div>
                             </td>
                             <td className="py-2.5 px-3 whitespace-nowrap">
@@ -1273,11 +1364,11 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                 ) : (
                                   <Clock className="w-3.5 h-3.5 shrink-0" />
                                 )}
-                                <span>{STRUCTURE_STATUS_META[effStatus].shortLabel}</span>
+                                <span>{lang === 'en' ? STRUCTURE_STATUS_META[effStatus].shortLabelEn : STRUCTURE_STATUS_META[effStatus].shortLabel}</span>
                               </span>
                             </td>
                             <td className="py-2.5 px-3 font-mono tabular-nums whitespace-nowrap text-slate-700 dark:text-slate-300">
-                              {stats?.recordedCount || 0} / {stats?.denominatorStudents || 0} طالب
+                              {stats?.recordedCount || 0} / {stats?.denominatorStudents || 0} {tr('طالب', 'students')}
                             </td>
                             <td className="py-2.5 px-3">
                               <div className="flex items-center gap-2">
@@ -1293,7 +1384,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                     style={{ width: `${Math.min(100, pct)}%` }}
                                   />
                                 </div>
-                                <span className="font-mono tabular-nums font-black text-slate-900 dark:text-white w-12 text-left">
+                                <span className="font-mono tabular-nums font-black text-slate-900 dark:text-white w-12 text-end">
                                   {pct}%
                                 </span>
                               </div>
@@ -1317,13 +1408,13 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
       <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2.5">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-2 sm:gap-2.5">
           <div className="relative col-span-2 sm:col-span-3 lg:col-span-2">
-            <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+            <Search className="w-4 h-4 text-slate-400 absolute start-3 top-2.5 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ابحث باسم الهيكل أو الكود أو المادة..."
-              className="w-full pr-9 pl-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:border-amber-500"
+              placeholder={tr('ابحث باسم الهيكل أو الكود أو المادة...', 'Search by structure title, code, or subject...')}
+              className="w-full ps-9 pe-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:border-amber-500"
             />
           </div>
 
@@ -1331,11 +1422,11 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             value={filterGrade}
             onChange={(e) => setFilterGrade(e.target.value)}
             className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
-            title="الصف الدراسي"
+            title={tr('الصف الدراسي', 'Grade')}
           >
-            <option value="الكل">كل الصفوف</option>
+            <option value="الكل">{tr('كل الصفوف', 'All Grades')}</option>
             {gradesList.map((g) => (
-              <option key={g} value={g}>{g}</option>
+              <option key={g} value={g}>{translateGrade(g, lang)}</option>
             ))}
           </select>
 
@@ -1343,11 +1434,11 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             value={filterTerm}
             onChange={(e) => setFilterTerm(e.target.value)}
             className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
-            title="الفصل الدراسي"
+            title={tr('الفصل الدراسي', 'Term')}
           >
-            <option value="الكل">كل الفصول</option>
+            <option value="الكل">{tr('كل الفصول', 'All Terms')}</option>
             {ACADEMIC_TERMS.map((t) => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t} value={t}>{translateTerm(t, lang)}</option>
             ))}
           </select>
 
@@ -1355,11 +1446,11 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             value={filterTrack}
             onChange={(e) => setFilterTrack(e.target.value)}
             className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
-            title="المسار"
+            title={tr('المسار', 'Track')}
           >
-            <option value="الكل">كل المسارات</option>
-            {tracksList.map((tr) => (
-              <option key={tr} value={tr}>{tr}</option>
+            <option value="الكل">{tr('كل المسارات', 'All Tracks')}</option>
+            {tracksList.map((trackOpt) => (
+              <option key={trackOpt} value={trackOpt}>{translateTrack(trackOpt, lang)}</option>
             ))}
           </select>
 
@@ -1367,9 +1458,9 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             value={filterYear}
             onChange={(e) => setFilterYear(e.target.value)}
             className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
-            title="السنة الدراسية"
+            title={tr('السنة الدراسية', 'Academic Year')}
           >
-            <option value="الكل">كل السنوات</option>
+            <option value="الكل">{tr('كل السنوات', 'All Years')}</option>
             {yearsList.map((yr) => (
               <option key={yr} value={yr}>{yr}</option>
             ))}
@@ -1379,11 +1470,11 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             value={filterSubject}
             onChange={(e) => setFilterSubject(e.target.value)}
             className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
-            title="المادة"
+            title={tr('المادة', 'Subject')}
           >
-            <option value="الكل">كل المواد</option>
+            <option value="الكل">{tr('كل المواد', 'All Subjects')}</option>
             {subjectsList.map((sb) => (
-              <option key={sb} value={sb}>{sb}</option>
+              <option key={sb} value={sb}>{translateSubject(sb, lang)}</option>
             ))}
           </select>
 
@@ -1391,14 +1482,14 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
             className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
-            title="حالة ملف الطالب"
+            title={tr('حالة ملف الطالب', 'Student Enrollment Status')}
           >
-            <option value="exclude_completed">استبعاد منتهي الملف</option>
-            <option value="active">ملف فعال فقط</option>
-            <option value="completed">منتهي الكورس فقط</option>
-            <option value="paused">متوقف مؤقتاً</option>
-            <option value="withdrawn">منقطع</option>
-            <option value="الكل">جميع حالات الملف</option>
+            <option value="exclude_completed">{tr('استبعاد منتهي الملف', 'Exclude Completed Files')}</option>
+            <option value="active">{tr('ملف فعال فقط', 'Active Only')}</option>
+            <option value="completed">{tr('منتهي الكورس فقط', 'Completed Course Only')}</option>
+            <option value="paused">{tr('متوقف مؤقتاً', 'Paused')}</option>
+            <option value="withdrawn">{tr('منقطع', 'Withdrawn')}</option>
+            <option value="الكل">{tr('جميع حالات الملف', 'All Enrollment Statuses')}</option>
           </select>
         </div>
 
@@ -1407,7 +1498,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-bold">
               <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0" />
-              <span>حالة الهيكل:</span>
+              <span>{tr('حالة الهيكل:', 'Structure Status:')}</span>
             </div>
 
             <div className="inline-flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px]">
@@ -1420,7 +1511,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                     : 'text-slate-600 dark:text-slate-300 hover:bg-white/60 dark:hover:bg-slate-700/60'
                 }`}
               >
-                جميع الهياكل ({structureCompletionCounts.all})
+                {tr(`جميع الهياكل (${structureCompletionCounts.all})`, `All Structures (${structureCompletionCounts.all})`)}
               </button>
               <button
                 type="button"
@@ -1432,7 +1523,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                 }`}
               >
                 <Clock className="w-3.5 h-3.5 shrink-0" />
-                <span>مستمر وجاري الدراسة ({structureCompletionCounts.ongoing})</span>
+                <span>{tr(`مستمر وجاري الدراسة (${structureCompletionCounts.ongoing})`, `Ongoing (${structureCompletionCounts.ongoing})`)}</span>
               </button>
               <button
                 type="button"
@@ -1444,7 +1535,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                 }`}
               >
                 <BookOpenCheck className="w-3.5 h-3.5 shrink-0" />
-                <span>منتهي دراسته ولم يُمتحن ({structureCompletionCounts.studiedNotExamined})</span>
+                <span>{tr(`منتهي دراسته ولم يُمتحن (${structureCompletionCounts.studiedNotExamined})`, `Studied / Pending Exam (${structureCompletionCounts.studiedNotExamined})`)}</span>
               </button>
               <button
                 type="button"
@@ -1456,7 +1547,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                 }`}
               >
                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span>انتهى وتم امتحان المادة ({structureCompletionCounts.completed})</span>
+                <span>{tr(`انتهى وتم امتحان المادة (${structureCompletionCounts.completed})`, `Completed & Examined (${structureCompletionCounts.completed})`)}</span>
               </button>
             </div>
           </div>
@@ -1470,12 +1561,12 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                 )
               }
               className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-[11px] font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
-              title="فلترة حسب مستوى إنجاز الطلاب"
+              title={tr('فلترة حسب مستوى إنجاز الطلاب', 'Filter by student completion level')}
             >
-              <option value="all">كل مستويات الإنجاز</option>
-              <option value="completed_100">مكتمل الإنجاز (100%)</option>
-              <option value="in_progress">قيد الإنجاز (مرصود جزئياً)</option>
-              <option value="not_started">لم يبدأ الرصد بعد (0%)</option>
+              <option value="all">{tr('كل مستويات الإنجاز', 'All Completion Levels')}</option>
+              <option value="completed_100">{tr('مكتمل الإنجاز (100%)', 'Completed (100%)')}</option>
+              <option value="in_progress">{tr('قيد الإنجاز (مرصود جزئياً)', 'In Progress (Partial)')}</option>
+              <option value="not_started">{tr('لم يبدأ الرصد بعد (0%)', 'Not Started (0%)')}</option>
             </select>
 
             <div className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1">
@@ -1493,13 +1584,13 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                   )
                 }
                 className="bg-transparent text-[11px] font-bold text-slate-800 dark:text-slate-200 cursor-pointer focus:outline-hidden"
-                title="ترتيب قائمة الهياكل"
+                title={tr('ترتيب قائمة الهياكل', 'Sort structures list')}
               >
-                <option value="newest">الترتيب: الأحدث</option>
-                <option value="completion_desc">الأعلى نسبة إنجاز</option>
-                <option value="completion_asc">الأقل نسبة إنجاز</option>
-                <option value="accuracy_desc">الأعلى نسبة صحة</option>
-                <option value="students_desc">الأكثر طلاباً مرصودين</option>
+                <option value="newest">{tr('الترتيب: الأحدث', 'Sort: Newest')}</option>
+                <option value="completion_desc">{tr('الأعلى نسبة إنجاز', 'Highest Completion')}</option>
+                <option value="completion_asc">{tr('الأقل نسبة إنجاز', 'Lowest Completion')}</option>
+                <option value="accuracy_desc">{tr('الأعلى نسبة صحة', 'Highest Accuracy')}</option>
+                <option value="students_desc">{tr('الأكثر طلاباً مرصودين', 'Most Recorded Students')}</option>
               </select>
             </div>
 
@@ -1510,7 +1601,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-[11px] font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-100 cursor-pointer whitespace-nowrap"
               >
                 <RotateCcw className="w-3 h-3" />
-                <span>إعادة ضبط الفلاتر</span>
+                <span>{tr('إعادة ضبط الفلاتر', 'Reset Filters')}</span>
               </button>
             )}
           </div>
@@ -1525,10 +1616,13 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
           </div>
           <div>
             <h2 className="text-lg font-black text-slate-900 dark:text-white">
-              لم يتم تسجيل أي هياكل بعد
+              {tr('لم يتم تسجيل أي هياكل بعد', 'No Structures Registered Yet')}
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1">
-              ابدأ بإضافة أول هيكل مع تحديد الصف والفصل والمسار والسنة الدراسية والمادة وعدد الأسئلة، ثم رصد حل كل طالب ونسبة صحة كل سؤال بسهولة.
+              {tr(
+                'ابدأ بإضافة أول هيكل مع تحديد الصف والفصل والمسار والسنة الدراسية والمادة وعدد الأسئلة، ثم رصد حل كل طالب ونسبة صحة كل سؤال بسهولة.',
+                'Start by adding your first structure with grade, term, track, academic year, subject, and question count, then easily track student progress and per-question accuracy.'
+              )}
             </p>
           </div>
           <button
@@ -1540,7 +1634,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-black text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-xl transition cursor-pointer shadow-sm"
           >
             <Plus className="w-4 h-4" />
-            <span>تسجيل أول هيكل</span>
+            <span>{tr('تسجيل أول هيكل', 'Register First Structure')}</span>
           </button>
         </div>
       ) : (
@@ -1549,7 +1643,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
           <div className="lg:col-span-4 space-y-2.5">
             <div className="flex items-center justify-between px-1 text-xs">
               <span className="font-black text-slate-700 dark:text-slate-200">
-                قائمة الهياكل المسجلة ({filteredStructures.length})
+                {tr(`قائمة الهياكل المسجلة (${filteredStructures.length})`, `Registered Structures (${filteredStructures.length})`)}
               </span>
               {hasAnyActiveStructureFilter && (
                 <button
@@ -1557,17 +1651,17 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                   onClick={handleResetStructureFilters}
                   className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
                 >
-                  إعادة ضبط الفلاتر
+                  {tr('إعادة ضبط الفلاتر', 'Reset Filters')}
                 </button>
               )}
             </div>
 
             {filteredStructures.length === 0 ? (
               <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400">
-                لا توجد هياكل تطابق معايير البحث الحالية
+                {tr('لا توجد هياكل تطابق معايير البحث الحالية', 'No structures match the current search criteria')}
               </div>
             ) : (
-              <div className="space-y-2 max-h-[680px] overflow-y-auto pl-0.5">
+              <div className="space-y-2 max-h-[680px] overflow-y-auto pe-0.5">
                 {filteredStructures.map((st) => {
                   const isSelected = selectedStructure?.id === st.id;
                   const cardCohortStats = structureCohortStatsMap.get(st.id);
@@ -1610,14 +1704,22 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                               ) : (
                                 <Clock className="w-3 h-3 shrink-0" />
                               )}
-                              <span>{getStructureStatusLabel(st, true)}</span>
+                              <span>{getStructureStatusLabel(st, true, lang)}</span>
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                            {st.grade} • {st.term} • مسار {st.track}
+                            {translateGrade(st.grade, lang)} • {translateTerm(st.term, lang)} • {tr('مسار', 'Track')} {translateTrack(st.track, lang)}
                           </p>
                           <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 font-medium">
-                            {st.subject} • <span className="font-mono">{st.academicYear}</span>
+                            {translateSubject(st.subject, lang)} · <span className="font-mono tabular-nums">{st.academicYear}</span>
+                            {st.examDate && effCompStatus !== 'completed' && (
+                              <>
+                                {' '}·{' '}
+                                <span className="font-mono tabular-nums text-rose-600 dark:text-rose-400 font-bold">
+                                  {tr('امتحان:', 'Exam:')} {st.examDate}
+                                </span>
+                              </>
+                            )}
                           </p>
                         </div>
 
@@ -1633,7 +1735,11 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                 ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60'
                                 : 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
                             }`}
-                            title={`${compMeta.label} — اضغط للتبديل إلى «${STRUCTURE_STATUS_META[nextCompStatus].label}»`}
+                            title={
+                              lang === 'en'
+                                ? `${compMeta.labelEn} — Click to switch to "${STRUCTURE_STATUS_META[nextCompStatus].labelEn}"`
+                                : `${compMeta.label} — اضغط للتبديل إلى «${STRUCTURE_STATUS_META[nextCompStatus].label}»`
+                            }
                           >
                             {effCompStatus === 'completed' ? (
                               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -1650,7 +1756,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                               setIsStructureModalOpen(true);
                             }}
                             className="p-1.5 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
-                            title="تعديل الهيكل"
+                            title={tr('تعديل الهيكل', 'Edit Structure')}
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
@@ -1658,7 +1764,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                             type="button"
                             onClick={() => onDeleteStructure(st)}
                             className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg cursor-pointer"
-                            title="حذف الهيكل"
+                            title={tr('حذف الهيكل', 'Delete Structure')}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1675,7 +1781,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                             <div>
                               <div className="flex items-center justify-between text-[11px] mb-1">
                                 <span className="text-slate-500 dark:text-slate-400 font-bold">
-                                  نسبة الإنجاز الكلية للطلاب
+                                  {tr('نسبة الإنجاز الكلية للطلاب', 'Overall Student Completion')}
                                 </span>
                                 <span className="font-mono tabular-nums font-black text-slate-900 dark:text-white">
                                   {overallPct}%
@@ -1697,13 +1803,13 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
 
                             <div className="flex items-center justify-between text-[11px] font-mono tabular-nums">
                               <span className="text-slate-600 dark:text-slate-300">
-                                الأسئلة: <strong className="text-slate-900 dark:text-white">{st.totalQuestions}</strong>
+                                {tr('الأسئلة:', 'Questions:')} <strong className="text-slate-900 dark:text-white">{st.totalQuestions}</strong>
                               </span>
                               <span className="text-slate-600 dark:text-slate-300">
-                                مرصود: <strong className="text-amber-600 dark:text-amber-400">{recStu}/{totalStu}</strong>
+                                {tr('مرصود:', 'Recorded:')} <strong className="text-amber-600 dark:text-amber-400">{recStu}/{totalStu}</strong>
                               </span>
                               <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                                {recStu > 0 ? `${avgAcc}% صحة` : 'جديد'}
+                                {recStu > 0 ? tr(`${avgAcc}% صحة`, `${avgAcc}% Acc.`) : tr('جديد', 'New')}
                               </span>
                             </div>
                           </div>
@@ -1747,25 +1853,25 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                               ) : (
                                 <Clock className="w-3.5 h-3.5 shrink-0" />
                               )}
-                              <span>{getStructureStatusLabel(selectedStructure)}</span>
+                              <span>{getStructureStatusLabel(selectedStructure, false, lang)}</span>
                             </span>
                           );
                         })()}
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <span>الصف: <strong className="text-slate-800 dark:text-slate-200">{selectedStructure.grade}</strong></span>
+                        <span>{tr('الصف:', 'Grade:')} <strong className="text-slate-800 dark:text-slate-200">{translateGrade(selectedStructure.grade, lang)}</strong></span>
                         <span>•</span>
-                        <span>الفصل: <strong className="text-slate-800 dark:text-slate-200">{selectedStructure.term}</strong></span>
+                        <span>{tr('الفصل:', 'Term:')} <strong className="text-slate-800 dark:text-slate-200">{translateTerm(selectedStructure.term, lang)}</strong></span>
                         <span>•</span>
-                        <span>المسار: <strong className="text-amber-600 dark:text-amber-400">{selectedStructure.track}</strong></span>
+                        <span>{tr('المسار:', 'Track:')} <strong className="text-amber-600 dark:text-amber-400">{translateTrack(selectedStructure.track, lang)}</strong></span>
                         <span>•</span>
-                        <span>السنة: <strong className="font-mono text-slate-800 dark:text-slate-200">{selectedStructure.academicYear}</strong></span>
+                        <span>{tr('السنة:', 'Year:')} <strong className="font-mono text-slate-800 dark:text-slate-200">{selectedStructure.academicYear}</strong></span>
                         <span>•</span>
-                        <span>المادة: <strong className="text-slate-800 dark:text-slate-200">{selectedStructure.subject}</strong></span>
+                        <span>{tr('المادة:', 'Subject:')} <strong className="text-slate-800 dark:text-slate-200">{translateSubject(selectedStructure.subject, lang)}</strong></span>
                         {selectedStructure.group && selectedStructure.group !== 'الكل' && (
                           <>
                             <span>•</span>
-                            <span>الشعبة: <strong className="text-slate-800 dark:text-slate-200">{selectedStructure.group}</strong></span>
+                            <span>{tr('الشعبة:', 'Group:')} <strong className="text-slate-800 dark:text-slate-200">{selectedStructure.group}</strong></span>
                           </>
                         )}
                       </div>
@@ -1784,7 +1890,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                               onClick={() =>
                                 handleChangeStructureCompletionStatus(selectedStructure, statusKey)
                               }
-                              title={meta.description}
+                              title={lang === 'en' ? meta.descriptionEn : meta.description}
                               className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer disabled:opacity-60 whitespace-nowrap ${
                                 isCurrent
                                   ? meta.activeBtnClass
@@ -1798,7 +1904,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                               ) : (
                                 <Clock className="w-3.5 h-3.5 shrink-0" />
                               )}
-                              <span>{meta.shortLabel}</span>
+                              <span>{lang === 'en' ? meta.shortLabelEn : meta.shortLabel}</span>
                             </button>
                           );
                         })}
@@ -1806,11 +1912,33 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
 
                       <button
                         type="button"
+                        onClick={() =>
+                          setReminderModalState({
+                            isOpen: true,
+                            studentIds:
+                              selectedStudentIds.size > 0
+                                ? Array.from<string>(selectedStudentIds)
+                                : undefined,
+                            audienceLabel:
+                              selectedStudentIds.size > 0
+                                ? tr(`الطلاب المحددون (${selectedStudentIds.size})`, `Selected Students (${selectedStudentIds.size})`)
+                                : undefined,
+                          })
+                        }
+                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-rose-700 dark:text-rose-200 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-800 rounded-xl transition cursor-pointer shrink-0 whitespace-nowrap"
+                        title={tr('إرسال تذكير أو متابعة للطلاب أو أولياء الأمور', 'Send reminder or follow-up to students or parents')}
+                      >
+                        <BellRing className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                        <span>{tr('تذكير الطلاب', 'Remind Students')}</span>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => setShowAddAnyStudentPicker((prev) => !prev)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-black text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-xl transition cursor-pointer shrink-0"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-black text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-xl transition cursor-pointer shrink-0 whitespace-nowrap"
                       >
                         <UserCheck className="w-4 h-4" />
-                        <span>تسجيل حل طالب بالهيكل</span>
+                        <span>{tr('تسجيل حل طالب بالهيكل', 'Record Student Progress')}</span>
                       </button>
                     </div>
                   </div>
@@ -1824,25 +1952,25 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
                         <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
                           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
-                            إجمالي أسئلة الهيكل
+                            {tr('إجمالي أسئلة الهيكل', 'Total Questions')}
                           </span>
                           <span className="text-xl font-black text-slate-900 dark:text-white font-mono tabular-nums mt-0.5 block">
-                            {selectedStructure.totalQuestions} سؤال
+                            {selectedStructure.totalQuestions} {tr('سؤال', 'Q')}
                           </span>
                         </div>
 
                         <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
                           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
-                            الطلاب المرصودين
+                            {tr('الطلاب المرصودين', 'Recorded Students')}
                           </span>
                           <span className="text-xl font-black text-indigo-600 dark:text-indigo-400 font-mono tabular-nums mt-0.5 block">
-                            {structureSummary.recordedCount} / {eligibleTotal} طالب
+                            {structureSummary.recordedCount} / {eligibleTotal} {tr('طالب', 'students')}
                           </span>
                         </div>
 
                         <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
                           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
-                            نسبة الإنجاز الكلية للطلاب
+                            {tr('نسبة الإنجاز الكلية للطلاب', 'Overall Completion Rate')}
                           </span>
                           <span className="text-xl font-black text-amber-600 dark:text-amber-400 font-mono tabular-nums mt-0.5 block">
                             {overallCohortPct}%
@@ -1857,7 +1985,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
 
                         <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
                           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
-                            متوسط الأسئلة المحلولة
+                            {tr('متوسط الأسئلة المحلولة', 'Avg Solved Questions')}
                           </span>
                           <span className="text-xl font-black text-slate-900 dark:text-white font-mono tabular-nums mt-0.5 block">
                             {structureSummary.avgSolved} / {selectedStructure.totalQuestions}
@@ -1866,7 +1994,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
 
                         <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
                           <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
-                            متوسط نسبة الصحة العامة
+                            {tr('متوسط نسبة الصحة العامة', 'Average Overall Accuracy')}
                           </span>
                           <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono tabular-nums mt-0.5 block">
                             {structureSummary.avgAccuracy}%
@@ -1881,7 +2009,10 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                     <div className="p-3.5 bg-amber-50/60 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-800/60 space-y-2.5">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-black text-slate-900 dark:text-white">
-                          اختر طالباً من القائمة لرصد حل الأسئلة ونسبة صحة كل سؤال:
+                          {tr(
+                            'اختر طالباً من القائمة لرصد حل الأسئلة ونسبة صحة كل سؤال:',
+                            'Select a student from the list to record solved questions and per-question accuracy:'
+                          )}
                         </span>
                         <button
                           type="button"
@@ -1895,7 +2026,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                         type="text"
                         value={studentPickerSearch}
                         onChange={(e) => setStudentPickerSearch(e.target.value)}
-                        placeholder="اكتب اسم الطالب أو رقمه التعريفي..."
+                        placeholder={tr('اكتب اسم الطالب أو رقمه التعريفي...', 'Type student name or ID...')}
                         className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
                       />
                       <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
@@ -1919,7 +2050,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                             return (
                               <div
                                 key={st.id}
-                                className="w-full px-3 py-2 text-right hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center justify-between gap-2 text-xs"
+                                className="w-full px-3 py-2 text-start hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center justify-between gap-2 text-xs"
                               >
                                 <button
                                   type="button"
@@ -1935,16 +2066,16 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                       nextAttemptNumber: nextAtt,
                                     });
                                   }}
-                                  className="flex-1 text-right flex items-center justify-between gap-2 cursor-pointer"
+                                  className="flex-1 text-start flex items-center justify-between gap-2 cursor-pointer"
                                 >
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-bold text-slate-900 dark:text-white">{st.name}</span>
                                     <span className="text-[11px] text-slate-400">
-                                      ({st.grade}{st.track ? ` • ${st.track}` : ''})
+                                      ({translateGrade(st.grade, lang)}{st.track ? ` • ${translateTrack(st.track, lang)}` : ''})
                                     </span>
                                     {isExcludedFromStruct && (
                                       <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                                        محذوف من هذا الهيكل
+                                        {tr('محذوف من هذا الهيكل', 'Removed from this structure')}
                                       </span>
                                     )}
                                   </div>
@@ -1952,8 +2083,8 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                     {existing
                                       ? `${existing.solvedCount}/${existing.totalQuestions} (${existing.overallAccuracyPercentage}%)`
                                       : isExcludedFromStruct
-                                      ? 'رصد وإعادة للهيكل ←'
-                                      : 'رصد جديد ←'}
+                                      ? tr('رصد وإعادة للهيكل ←', 'Record & Restore →')
+                                      : tr('رصد جديد ←', 'New Entry →')}
                                   </span>
                                 </button>
                                 {isExcludedFromStruct && onRestoreStudentsToStructure && (
@@ -1961,10 +2092,10 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                     type="button"
                                     onClick={() => onRestoreStudentsToStructure(selectedStructure, [st.id])}
                                     className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-lg cursor-pointer shrink-0"
-                                    title="استعادة سطر الطالب إلى جدول هذا الهيكل"
+                                    title={tr('استعادة سطر الطالب إلى جدول هذا الهيكل', 'Restore student row to this structure table')}
                                   >
                                     <RotateCcw className="w-3 h-3" />
-                                    إرجاع للجدول
+                                    {tr('إرجاع للجدول', 'Restore Row')}
                                   </button>
                                 )}
                                 {existing && (
@@ -1985,7 +2116,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                     className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-lg cursor-pointer shrink-0"
                                   >
                                     <Plus className="w-3 h-3" />
-                                    تحسين
+                                    {tr('تحسين', 'Improve')}
                                   </button>
                                 )}
                               </div>
@@ -2000,10 +2131,15 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                         <BarChart3 className="w-4 h-4 text-amber-500" />
-                        <span>متوسط نسبة صحة كل سؤال على مستوى الطلاب ({selectedStructure.totalQuestions} سؤال)</span>
+                        <span>
+                          {tr(
+                            `متوسط نسبة صحة كل سؤال على مستوى الطلاب (${selectedStructure.totalQuestions} سؤال)`,
+                            `Average Per-Question Accuracy Across Students (${selectedStructure.totalQuestions} questions)`
+                          )}
+                        </span>
                       </span>
                       <span className="text-[11px] text-slate-400">
-                        مرتبط بالطلاب المرصودين بالهيكل
+                        {tr('مرتبط بالطلاب المرصودين بالهيكل', 'Linked to recorded students in this structure')}
                       </span>
                     </div>
 
@@ -2022,16 +2158,20 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                           <div
                             key={qa.questionNumber}
                             className={`p-2 rounded-xl border text-center ${accColor}`}
-                            title={qa.title ? `س${qa.questionNumber}: ${qa.title}` : `سؤال ${qa.questionNumber}`}
+                            title={
+                              qa.title
+                                ? `${tr('س', 'Q')}${qa.questionNumber}: ${qa.title}`
+                                : `${tr('سؤال', 'Question')} ${qa.questionNumber}`
+                            }
                           >
                             <div className="text-[10px] font-bold truncate">
-                              س{qa.questionNumber}{qa.title ? ` • ${qa.title}` : ''}
+                              {tr('س', 'Q')}{qa.questionNumber}{qa.title ? ` • ${qa.title}` : ''}
                             </div>
                             <div className="text-sm font-black font-mono tabular-nums mt-0.5">
                               {qa.solvedByCount > 0 ? `${qa.avgAccuracy}%` : '-'}
                             </div>
                             <div className="text-[9px] opacity-75 font-mono">
-                              {qa.solvedByCount} طالب
+                              {qa.solvedByCount} {tr('طالب', 'students')}
                             </div>
                           </div>
                         );
@@ -2040,15 +2180,36 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                   </div>
                 </div>
 
+                {/* Student Completion Distribution Chart (0-25%, 26-50%, 51-75%, 76-100%) */}
+                <StructureCompletionDistributionChart
+                  selectedStructure={selectedStructure}
+                  allFilteredStructures={filteredStructures}
+                  students={students}
+                  structureProgress={structureProgress}
+                  filterStatus={filterStatus}
+                  activeBucketFilter={filterCompletionBucket}
+                  onSelectBucketFilter={setFilterCompletionBucket}
+                  onRemindStudents={(ids, label) =>
+                    setReminderModalState({
+                      isOpen: true,
+                      studentIds: ids,
+                      audienceLabel: label,
+                    })
+                  }
+                />
+
                 {/* Student Progress Table for Selected Structure */}
                 <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
-                        سجل الطلاب في هذا الهيكل ونسبة صحة كل سؤال
+                        {tr('سجل الطلاب في هذا الهيكل ونسبة صحة كل سؤال', 'Student Records & Per-Question Accuracy')}
                       </h3>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        اضغط على «رصد / تعديل الأسئلة» لتسجيل عدد الأسئلة التي حلّها الطالب ونسبة صحة كل سؤال بالتفصيل
+                        {tr(
+                          'اضغط على «رصد / تعديل الأسئلة» لتسجيل عدد الأسئلة التي حلّها الطالب ونسبة صحة كل سؤال بالتفصيل',
+                          'Click "Record / Edit Questions" to log solved questions and per-question accuracy in detail'
+                        )}
                       </p>
                     </div>
 
@@ -2058,10 +2219,18 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                           type="button"
                           onClick={() => setIsExcludedModalOpen(true)}
                           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/40 border border-rose-200 dark:border-rose-800/70 text-rose-700 dark:text-rose-300 font-bold text-[11px] cursor-pointer transition"
-                          title="عرض أو استعادة سطور الطلاب المحذوفين من هذا الهيكل فقط"
+                          title={tr(
+                            'عرض أو استعادة سطور الطلاب المحذوفين من هذا الهيكل فقط',
+                            'View or restore student rows removed from this structure only'
+                          )}
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
-                          <span>سطور محذوفة من الهيكل ({excludedStudentsInStructure.length})</span>
+                          <span>
+                            {tr(
+                              `سطور محذوفة من الهيكل (${excludedStudentsInStructure.length})`,
+                              `Removed Rows (${excludedStudentsInStructure.length})`
+                            )}
+                          </span>
                         </button>
                       )}
                       <div className="inline-flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
@@ -2074,7 +2243,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                               : 'text-slate-500 dark:text-slate-400'
                           }`}
                         >
-                          المطابقين للهيكل
+                          {tr('المطابقين للهيكل', 'Matching')}
                         </button>
                         <button
                           type="button"
@@ -2085,7 +2254,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                               : 'text-slate-500 dark:text-slate-400'
                           }`}
                         >
-                          المرصودين فقط ({latestStructureProgress.length})
+                          {tr(`المرصودين فقط (${latestStructureProgress.length})`, `Recorded Only (${latestStructureProgress.length})`)}
                         </button>
                         <button
                           type="button"
@@ -2096,7 +2265,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                               : 'text-slate-500 dark:text-slate-400'
                           }`}
                         >
-                          كل الطلاب
+                          {tr('كل الطلاب', 'All Students')}
                         </button>
                       </div>
                     </div>
@@ -2104,13 +2273,13 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
 
                   {/* Quick filter input inside table */}
                   <div className="relative">
-                    <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+                    <Search className="w-4 h-4 text-slate-400 absolute start-3 top-2.5 pointer-events-none" />
                     <input
                       type="text"
                       value={studentPickerSearch}
                       onChange={(e) => setStudentPickerSearch(e.target.value)}
-                      placeholder="ابحث داخل قائمة طلاب هذا الهيكل بالاسم أو الكود..."
-                      className="w-full pr-9 pl-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
+                      placeholder={tr('ابحث داخل قائمة طلاب هذا الهيكل بالاسم أو الكود...', 'Search students in this structure by name or ID...')}
+                      className="w-full ps-9 pe-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white"
                     />
                   </div>
 
@@ -2118,9 +2287,9 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                   {uniqueVisibleStudents.length > 0 && (
                     <div className="p-3 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2.5 text-xs">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1 ml-1">
+                        <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1 me-1">
                           <Users className="w-3.5 h-3.5 text-amber-500" />
-                          <span>تحديد الطلاب للرصد الجماعي:</span>
+                          <span>{tr('تحديد الطلاب للرصد الجماعي:', 'Select Students for Batch Entry:')}</span>
                         </span>
 
                         <button
@@ -2128,7 +2297,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                           onClick={handleSelectAllVisibleStudents}
                           className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] hover:border-amber-500 cursor-pointer"
                         >
-                          تحديد الكل ({uniqueVisibleStudents.length})
+                          {tr(`تحديد الكل (${uniqueVisibleStudents.length})`, `Select All (${uniqueVisibleStudents.length})`)}
                         </button>
 
                         <button
@@ -2136,11 +2305,11 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                           onClick={handleSelectUnrecordedVisibleStudents}
                           className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] hover:border-amber-500 cursor-pointer"
                         >
-                          تحديد غير المرصودين
+                          {tr('تحديد غير المرصودين', 'Select Unrecorded')}
                         </button>
 
                         <div className="inline-flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-0.5">
-                          <span className="text-[11px] text-slate-500 dark:text-slate-400">تحديد عدد:</span>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400">{tr('تحديد عدد:', 'Select count:')}</span>
                           <input
                             type="number"
                             min={1}
@@ -2156,7 +2325,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                             onClick={() => handleSelectSpecificStudentCount(selectCountInput)}
                             className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] cursor-pointer"
                           >
-                            تحديد
+                            {tr('تحديد', 'Select')}
                           </button>
                         </div>
 
@@ -2166,14 +2335,14 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                             onClick={handleClearStudentSelection}
                             className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-bold text-[11px] cursor-pointer hover:bg-rose-100"
                           >
-                            إلغاء التحديد ({selectedStudentIds.size})
+                            {tr(`إلغاء التحديد (${selectedStudentIds.size})`, `Clear Selection (${selectedStudentIds.size})`)}
                           </button>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 font-mono">
-                          المحدد:{' '}
+                          {tr('المحدد:', 'Selected:')}{' '}
                           <strong className="text-amber-600 dark:text-amber-400">
                             {selectedStudentIds.size}
                           </strong>
@@ -2187,7 +2356,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 font-bold text-[11px] cursor-pointer whitespace-nowrap"
                             >
                               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                              <span>تصدير المحددين Excel ({selectedStudentIds.size})</span>
+                              <span>{tr(`تصدير المحددين Excel (${selectedStudentIds.size})`, `Export Selected Excel (${selectedStudentIds.size})`)}</span>
                             </button>
 
                             <button
@@ -2197,8 +2366,27 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                             >
                               <Save className="w-3.5 h-3.5" />
                               <span>
-                                تسجيل ورصد الدرجة للمحددين مرة واحدة ({selectedStudentIds.size})
+                                {tr(
+                                  `تسجيل ورصد الدرجة للمحددين مرة واحدة (${selectedStudentIds.size})`,
+                                  `Batch Score Selected (${selectedStudentIds.size})`
+                                )}
                               </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setReminderModalState({
+                                  isOpen: true,
+                                  studentIds: Array.from<string>(selectedStudentIds),
+                                  audienceLabel: tr(`الطلاب المحددون (${selectedStudentIds.size})`, `Selected Students (${selectedStudentIds.size})`),
+                                })
+                              }
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-200 font-bold text-[11px] cursor-pointer whitespace-nowrap"
+                              title={tr('تذكير الطلاب المحددين في هذا الهيكل', 'Remind selected students in this structure')}
+                            >
+                              <BellRing className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                              <span>{tr(`تذكير المحددين (${selectedStudentIds.size})`, `Remind Selected (${selectedStudentIds.size})`)}</span>
                             </button>
 
                             {onDeleteStudentsFromStructure && (
@@ -2212,10 +2400,13 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                   })
                                 }
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-bold text-[11px] cursor-pointer whitespace-nowrap"
-                                title="حذف سطور الطلاب المحددين من هذا الهيكل فقط دون حذف ملفاتهم من المنصة"
+                                title={tr(
+                                  'حذف سطور الطلاب المحددين من هذا الهيكل فقط دون حذف ملفاتهم من المنصة',
+                                  'Remove selected student rows from this structure only without deleting their platform profiles'
+                                )}
                               >
                                 <UserMinus className="w-3.5 h-3.5" />
-                                <span>حذف من الهيكل فقط ({selectedStudentIds.size})</span>
+                                <span>{tr(`حذف من الهيكل فقط (${selectedStudentIds.size})`, `Remove from Structure (${selectedStudentIds.size})`)}</span>
                               </button>
                             )}
                           </>
@@ -2224,18 +2415,57 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                     </div>
                   )}
 
+                  {filterCompletionBucket !== 'all' && (
+                    <div className="px-3.5 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="font-bold text-amber-900 dark:text-amber-200">
+                        {tr(
+                          `يتم عرض طلاب فئة الإنجاز (${filterCompletionBucket}%) فقط — (${uniqueVisibleStudents.length} طالب)`,
+                          `Showing students in completion bucket (${filterCompletionBucket}%) only — (${uniqueVisibleStudents.length} students)`
+                        )}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {uniqueVisibleStudents.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setReminderModalState({
+                                isOpen: true,
+                                studentIds: uniqueVisibleStudents.map((s) => s.id),
+                                audienceLabel: tr(`فئة إنجاز ${filterCompletionBucket}%`, `Completion bucket ${filterCompletionBucket}%`),
+                              })
+                            }
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] cursor-pointer"
+                          >
+                            <BellRing className="w-3 h-3" />
+                            <span>{tr('تذكير هذه الفئة', 'Remind This Group')}</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setFilterCompletionBucket('all')}
+                          className="text-[11px] font-black text-amber-700 dark:text-amber-300 hover:underline cursor-pointer"
+                        >
+                          {tr('إلغاء فلتر الفئة', 'Clear Bucket Filter')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {workspaceStudentRows.length === 0 ? (
                     <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 space-y-2">
                       <p className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                        لا يوجد طلاب مطابقين في هذا النطاق حالياً
+                        {tr('لا يوجد طلاب مطابقين في هذا النطاق حالياً', 'No matching students in this scope')}
                       </p>
                       <p className="text-[11px] text-slate-400">
-                        يمكنك اختيار «كل الطلاب» أعلى الجدول أو الضغط على «تسجيل حل طالب بالهيكل» لربط أي طالب مباشرة.
+                        {tr(
+                          'يمكنك اختيار «كل الطلاب» أعلى الجدول أو الضغط على «تسجيل حل طالب بالهيكل» لربط أي طالب مباشرة.',
+                          'Select "All Students" above the table or click "Record Student Progress" to link any student directly.'
+                        )}
                       </p>
                     </div>
                   ) : (
                     <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
-                      <table className="w-full text-right text-xs">
+                      <table className="w-full text-start text-xs">
                         <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-800">
                           <tr>
                             <th className="py-2.5 px-2.5 w-10 text-center">
@@ -2247,7 +2477,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                     : handleSelectAllVisibleStudents()
                                 }
                                 className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer inline-flex items-center justify-center"
-                                title={allVisibleSelected ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+                                title={allVisibleSelected ? tr('إلغاء تحديد الكل', 'Deselect All') : tr('تحديد الكل', 'Select All')}
                               >
                                 {allVisibleSelected ? (
                                   <CheckSquare className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -2256,12 +2486,12 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                 )}
                               </button>
                             </th>
-                            <th className="py-2.5 px-3">الطالب</th>
-                            <th className="py-2.5 px-3">الصف / الفصل / المسار / المادة</th>
-                            <th className="py-2.5 px-3 text-center">الأسئلة المحلولة</th>
-                            <th className="py-2.5 px-3 text-center">متوسط الصحة %</th>
-                            <th className="py-2.5 px-3">نسب صحة كل سؤال</th>
-                            <th className="py-2.5 px-3 text-center">إجراءات</th>
+                            <th className="py-2.5 px-3">{tr('الطالب', 'Student')}</th>
+                            <th className="py-2.5 px-3">{tr('الصف / الفصل / المسار / المادة', 'Grade / Term / Track / Subject')}</th>
+                            <th className="py-2.5 px-3 text-center">{tr('الأسئلة المحلولة', 'Solved Qs')}</th>
+                            <th className="py-2.5 px-3 text-center">{tr('متوسط الصحة %', 'Avg Accuracy %')}</th>
+                            <th className="py-2.5 px-3">{tr('نسب صحة كل سؤال', 'Per-Question Accuracy')}</th>
+                            <th className="py-2.5 px-3 text-center">{tr('إجراءات', 'Actions')}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
@@ -2294,7 +2524,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                   isStudentSelected
                                     ? 'bg-amber-100/45 dark:bg-amber-900/25'
                                     : isAttemptImprovement
-                                    ? 'bg-amber-50/40 dark:bg-amber-950/20 border-r-4 border-r-amber-500'
+                                    ? 'bg-amber-50/40 dark:bg-amber-950/20 border-s-4 border-s-amber-500'
                                     : ''
                                 }`}
                               >
@@ -2306,7 +2536,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                       toggleSelectStudent(student.id);
                                     }}
                                     className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer inline-flex items-center justify-center"
-                                    title={isStudentSelected ? 'إلغاء تحديد الطالب' : 'تحديد الطالب'}
+                                    title={isStudentSelected ? tr('إلغاء تحديد الطالب', 'Deselect Student') : tr('تحديد الطالب', 'Select Student')}
                                   >
                                     {isStudentSelected ? (
                                       <CheckSquare className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -2319,30 +2549,30 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => onOpenStudentProfile(student)}
-                                    className="font-extrabold text-slate-900 dark:text-white hover:text-amber-600 dark:hover:text-amber-400 text-right cursor-pointer block"
+                                    className="font-extrabold text-slate-900 dark:text-white hover:text-amber-600 dark:hover:text-amber-400 text-start cursor-pointer block"
                                   >
                                     {student.name}
                                   </button>
                                   <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5 flex-wrap">
                                     <span>{student.studentId}</span>
                                     <span>•</span>
-                                    <span>{stMeta?.shortLabel}</span>
+                                    <span>{lang === 'en' ? stMeta?.shortLabelEn : stMeta?.shortLabel}</span>
                                   </div>
                                   {progress && (
                                     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                                       {isAttemptImprovement ? (
                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
                                           <Sparkles className="w-2.5 h-2.5 text-amber-600" />
-                                          تحسين (محاولة {progress.attemptNumber || 2})
+                                          {tr(`تحسين (محاولة ${progress.attemptNumber || 2})`, `Improved (Attempt ${progress.attemptNumber || 2})`)}
                                         </span>
                                       ) : (
                                         <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                                          المحاولة الأساسية
+                                          {tr('المحاولة الأساسية', 'Baseline Attempt')}
                                         </span>
                                       )}
                                       {prevAcc !== undefined && (
                                         <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                                          (السابقة: {prevAcc}%)
+                                          ({tr('السابقة:', 'Prev:')} {prevAcc}%)
                                         </span>
                                       )}
                                       {accDiff !== null && (
@@ -2361,7 +2591,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                       {qImpCount > 0 && (
                                         <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                                           <Sparkles className="w-2.5 h-2.5" />
-                                          {qImpCount} سؤال محسّن
+                                          {tr(`${qImpCount} سؤال محسّن`, `${qImpCount} improved Qs`)}
                                         </span>
                                       )}
                                     </div>
@@ -2369,9 +2599,9 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                 </td>
 
                                 <td className="py-2.5 px-3 text-[11px] text-slate-600 dark:text-slate-300">
-                                  <div>{progress?.grade || student.grade} • {progress?.track || student.track || selectedStructure.track}</div>
+                                  <div>{translateGrade(progress?.grade || student.grade, lang)} • {translateTrack(progress?.track || student.track || selectedStructure.track, lang)}</div>
                                   <div className="text-slate-400">
-                                    {progress?.term || student.term || selectedStructure.term} • {progress?.subject || selectedStructure.subject} ({progress?.academicYear || student.academicYear || selectedStructure.academicYear})
+                                    {translateTerm(progress?.term || student.term || selectedStructure.term, lang)} • {translateSubject(progress?.subject || selectedStructure.subject, lang)} ({progress?.academicYear || student.academicYear || selectedStructure.academicYear})
                                   </div>
                                 </td>
 
@@ -2382,11 +2612,11 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                         {solvedCount} / {totalQ}
                                       </span>
                                       <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                                        إنجاز {completionPct}%
+                                        {tr('إنجاز', 'Completion')} {completionPct}%
                                       </div>
                                     </div>
                                   ) : (
-                                    <span className="text-slate-400 text-[11px]">لم يُرصد</span>
+                                    <span className="text-slate-400 text-[11px]">{tr('لم يُرصد', 'Not Recorded')}</span>
                                   )}
                                 </td>
 
@@ -2431,11 +2661,17 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                             }`}
                                             title={
                                               isQImp && qs.previousAccuracy !== undefined
-                                                ? `سؤال ${qs.questionNumber}: ${qs.accuracyPercentage}% (تحسين من ${qs.previousAccuracy}% • محاولة ${qs.attemptNumber || 2})`
-                                                : `سؤال ${qs.questionNumber}: ${qs.solved ? `${qs.accuracyPercentage}%` : 'لم يُحل'}`
+                                                ? tr(
+                                                    `سؤال ${qs.questionNumber}: ${qs.accuracyPercentage}% (تحسين من ${qs.previousAccuracy}% • محاولة ${qs.attemptNumber || 2})`,
+                                                    `Q${qs.questionNumber}: ${qs.accuracyPercentage}% (Improved from ${qs.previousAccuracy}% • Attempt ${qs.attemptNumber || 2})`
+                                                  )
+                                                : tr(
+                                                    `سؤال ${qs.questionNumber}: ${qs.solved ? `${qs.accuracyPercentage}%` : 'لم يُحل'}`,
+                                                    `Q${qs.questionNumber}: ${qs.solved ? `${qs.accuracyPercentage}%` : 'Unsolved'}`
+                                                  )
                                             }
                                           >
-                                            س{qs.questionNumber}:{qs.solved ? `${qs.accuracyPercentage}%${isQImp ? '↑' : ''}` : '—'}
+                                            {tr('س', 'Q')}{qs.questionNumber}:{qs.solved ? `${qs.accuracyPercentage}%${isQImp ? '↑' : ''}` : '—'}
                                           </span>
                                         );
                                       })}
@@ -2446,7 +2682,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                       )}
                                     </div>
                                   ) : (
-                                    <span className="text-[11px] text-slate-400">بانتظار رصد الأسئلة</span>
+                                    <span className="text-[11px] text-slate-400">{tr('بانتظار رصد الأسئلة', 'Awaiting question scores')}</span>
                                   )}
                                 </td>
 
@@ -2467,7 +2703,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                       }
                                       className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-[11px] transition cursor-pointer whitespace-nowrap"
                                     >
-                                      {progress ? 'تعديل / تحسين الأسئلة' : 'رصد الحل'}
+                                      {progress ? tr('تعديل / تحسين الأسئلة', 'Edit / Improve') : tr('رصد الحل', 'Record')}
                                     </button>
                                     {progress && (
                                       <button
@@ -2484,18 +2720,32 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                           })
                                         }
                                         className="inline-flex items-center gap-1 px-2 py-1.5 text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-300/80 dark:border-amber-700/80 rounded-lg transition-all cursor-pointer shadow-2xs whitespace-nowrap"
-                                        title="إضافة محاولة تحسين جديدة لنفس الطالب في هذا الهيكل"
+                                        title={tr('إضافة محاولة تحسين جديدة لنفس الطالب في هذا الهيكل', 'Add a new improvement attempt for this student in this structure')}
                                       >
                                         <Plus className="w-3 h-3" />
-                                        تحسين
+                                        {tr('تحسين', 'Improve')}
                                       </button>
                                     )}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setReminderModalState({
+                                          isOpen: true,
+                                          studentIds: [student.id],
+                                          audienceLabel: student.name,
+                                        })
+                                      }
+                                      className="p-1.5 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-lg cursor-pointer transition"
+                                      title={tr('تذكير الطالب أو ولي أمره بمتابعة هذا الهيكل', 'Remind student or parent about this structure')}
+                                    >
+                                      <BellRing className="w-3.5 h-3.5" />
+                                    </button>
                                     {progress && isAttemptImprovement ? (
                                       <button
                                         type="button"
                                         onClick={() => onDeleteProgress(progress)}
                                         className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg cursor-pointer transition"
-                                        title="حذف محاولة التحسين من هذا الهيكل فقط (لا يحذف ملف الطالب من المنصة)"
+                                        title={tr('حذف محاولة التحسين من هذا الهيكل فقط (لا يحذف ملف الطالب من المنصة)', 'Delete this improvement attempt from this structure only (keeps student profile)')}
                                       >
                                         <Trash2 className="w-3.5 h-3.5" />
                                       </button>
@@ -2514,7 +2764,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                                           }
                                         }}
                                         className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg cursor-pointer transition"
-                                        title="حذف سطر الطالب من هذا الهيكل فقط (لا يحذف ملف الطالب من المنصة)"
+                                        title={tr('حذف سطر الطالب من هذا الهيكل فقط (لا يحذف ملف الطالب من المنصة)', 'Remove student row from this structure only (keeps student profile)')}
                                       >
                                         <Trash2 className="w-3.5 h-3.5" />
                                       </button>
@@ -2679,11 +2929,11 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             !isDeletingRows &&
             setRowDeleteModal({ isOpen: false, studentsToDelete: [], progressToClearOnly: null })
           }
-          dir="rtl"
+          dir={dir}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-right space-y-4 max-h-[92dvh] overflow-y-auto"
+            className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-start space-y-4 max-h-[92dvh] overflow-y-auto"
           >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5 text-rose-600 dark:text-rose-400">
@@ -2692,8 +2942,11 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                 </div>
                 <h3 className="font-black text-slate-900 dark:text-white text-base">
                   {rowDeleteModal.studentsToDelete.length === 1
-                    ? 'حذف سطر الطالب من قسم الهياكل فقط'
-                    : `حذف سطور (${rowDeleteModal.studentsToDelete.length}) طلاب من الهيكل فقط`}
+                    ? tr('حذف سطر الطالب من قسم الهياكل فقط', 'Remove Student Row from Structures Only')
+                    : tr(
+                        `حذف سطور (${rowDeleteModal.studentsToDelete.length}) طلاب من الهيكل فقط`,
+                        `Remove (${rowDeleteModal.studentsToDelete.length}) Student Rows from Structure Only`
+                      )}
                 </h3>
               </div>
               <button
@@ -2711,32 +2964,35 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
             <div className="space-y-3 text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
               {rowDeleteModal.studentsToDelete.length === 1 ? (
                 <p>
-                  هل أنت متأكد من حذف سطر الطالب{' '}
+                  {tr('هل أنت متأكد من حذف سطر الطالب', 'Are you sure you want to remove the row for student')}{' '}
                   <strong className="text-slate-900 dark:text-white">
                     "{rowDeleteModal.studentsToDelete[0].name}"
                   </strong>{' '}
-                  من هيكل{' '}
+                  {tr('من هيكل', 'from structure')}{' '}
                   <strong className="text-amber-600 dark:text-amber-400">
                     "{selectedStructure.title}"
                   </strong>
-                  ؟
+                  {tr('؟', '?')}
                 </p>
               ) : (
                 <p>
-                  هل أنت متأكد من حذف سطور عدد{' '}
+                  {tr('هل أنت متأكد من حذف سطور عدد', 'Are you sure you want to remove rows for')}{' '}
                   <strong className="text-slate-900 dark:text-white">
-                    {rowDeleteModal.studentsToDelete.length} طلاب
+                    {rowDeleteModal.studentsToDelete.length} {tr('طلاب', 'students')}
                   </strong>{' '}
-                  من هيكل{' '}
+                  {tr('من هيكل', 'from structure')}{' '}
                   <strong className="text-amber-600 dark:text-amber-400">
                     "{selectedStructure.title}"
                   </strong>
-                  ؟
+                  {tr('؟', '?')}
                 </p>
               )}
 
               <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/70 text-emerald-900 dark:text-emerald-200 text-xs font-bold leading-relaxed">
-                تنبيه مطمئن: الحذف يتم لسطر الطالب (وسجله داخل هذا الهيكل فقط) ولن يتم حذف ملف الطالب الأساسي أو درجاته وبياناته الأخرى الموجودة على المنصة، ويمكنك استعادة السطر لاحقاً في أي وقت.
+                {tr(
+                  'تنبيه مطمئن: الحذف يتم لسطر الطالب (وسجله داخل هذا الهيكل فقط) ولن يتم حذف ملف الطالب الأساسي أو درجاته وبياناته الأخرى الموجودة على المنصة، ويمكنك استعادة السطر لاحقاً في أي وقت.',
+                  'Reassurance: This only removes the student row (and record within this structure). Their main student profile, grades, and other platform data remain intact, and you can restore the row anytime.'
+                )}
               </div>
             </div>
 
@@ -2750,7 +3006,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                   }
                   className="px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl cursor-pointer"
                 >
-                  تراجع / إلغاء
+                  {tr('تراجع / إلغاء', 'Cancel')}
                 </button>
 
                 {rowDeleteModal.studentsToDelete.length === 1 && rowDeleteModal.progressToClearOnly && (
@@ -2764,7 +3020,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                     }}
                     className="px-3.5 py-2 text-xs font-bold text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-300 dark:border-amber-700 rounded-xl cursor-pointer"
                   >
-                    مسح الدرجات فقط (إبقاء السطر)
+                    {tr('مسح الدرجات فقط (إبقاء السطر)', 'Clear Scores Only (Keep Row)')}
                   </button>
                 )}
 
@@ -2792,7 +3048,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                   }}
                   className="px-4 py-2 text-xs font-black text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md shadow-rose-600/20 cursor-pointer disabled:opacity-60"
                 >
-                  {isDeletingRows ? 'جاري الحذف...' : 'حذف السطر من الهيكل فقط'}
+                  {isDeletingRows ? tr('جاري الحذف...', 'Removing...') : tr('حذف السطر من الهيكل فقط', 'Remove Row from Structure Only')}
                 </button>
               </div>
             </div>
@@ -2805,20 +3061,20 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
         <div
           className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden"
           onClick={() => setIsExcludedModalOpen(false)}
-          dir="rtl"
+          dir={dir}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-right space-y-4 max-h-[92dvh] overflow-y-auto"
+            className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-start space-y-4 max-h-[92dvh] overflow-y-auto"
           >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <h3 className="font-black text-slate-900 dark:text-white text-base flex items-center gap-2">
                   <RotateCcw className="w-4 h-4 text-amber-500" />
-                  <span>السطور المحذوفة من هيكل "{selectedStructure.title}"</span>
+                  <span>{tr(`السطور المحذوفة من هيكل "${selectedStructure.title}"`, `Removed Rows from Structure "${selectedStructure.title}"`)}</span>
                 </h3>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  ملفات هؤلاء الطلاب ما زالت محفوظة بالكامل على المنصة، ويمكنك استعادة سطر أي طالب لهذا الهيكل بنقرة واحدة
+                  {tr('ملفات هؤلاء الطلاب ما زالت محفوظة بالكامل على المنصة، ويمكنك استعادة سطر أي طالب لهذا الهيكل بنقرة واحدة', 'These student profiles remain intact on the platform, and you can restore any row to this structure with one click')}
                 </p>
               </div>
               <button
@@ -2832,7 +3088,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
 
             {excludedStudentsInStructure.length === 0 ? (
               <div className="py-6 text-center text-xs text-slate-400">
-                لا توجد سطور محذوفة حالياً من هذا الهيكل.
+                {tr('لا توجد سطور محذوفة حالياً من هذا الهيكل.', 'There are currently no removed rows in this structure.')}
               </div>
             ) : (
               <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-2xl">
@@ -2844,7 +3100,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                     <div className="min-w-0">
                       <div className="font-bold text-slate-900 dark:text-white truncate">{st.name}</div>
                       <div className="text-[10px] text-slate-400 font-mono">
-                        {st.studentId} • {st.grade}{st.track ? ` • ${st.track}` : ''}
+                        {st.studentId} • {translateGrade(st.grade, lang)}{st.track ? ` • ${translateTrack(st.track, lang)}` : ''}
                       </div>
                     </div>
                     {onRestoreStudentsToStructure && (
@@ -2856,7 +3112,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-bold text-[11px] cursor-pointer shrink-0"
                       >
                         <RotateCcw className="w-3 h-3" />
-                        <span>استعادة للهيكل</span>
+                        <span>{tr('استعادة للهيكل', 'Restore to Structure')}</span>
                       </button>
                     )}
                   </div>
@@ -2875,7 +3131,7 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                   className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-black text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-xl cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>استعادة كل السطور ({excludedStudentsInStructure.length})</span>
+                  <span>{tr(`استعادة كل السطور (${excludedStudentsInStructure.length})`, `Restore All Rows (${excludedStudentsInStructure.length})`)}</span>
                 </button>
               ) : (
                 <span />
@@ -2885,11 +3141,24 @@ export const StructuresView: React.FC<StructuresViewProps> = ({
                 onClick={() => setIsExcludedModalOpen(false)}
                 className="px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl cursor-pointer"
               >
-                إغلاق
+                {tr('إغلاق', 'Close')}
               </button>
             </div>
           </div>
         </div>
+      )}
+      {/* Modal 8: Structure Student Reminder & Follow-up Center */}
+      {reminderModalState.isOpen && selectedStructure && (
+        <StructureReminderModal
+          isOpen={reminderModalState.isOpen}
+          onClose={() => setReminderModalState({ isOpen: false })}
+          structure={selectedStructure}
+          students={students}
+          progressByStudentMap={progressByStudentMap}
+          teacherName={settings?.teacherName}
+          initialStudentIds={reminderModalState.studentIds}
+          initialAudienceLabel={reminderModalState.audienceLabel}
+        />
       )}
     </div>
   );
@@ -2922,6 +3191,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const { lang, dir, tr } = useLanguage();
   const [title, setTitle] = useState('');
   const [code, setCode] = useState('');
   const [grade, setGrade] = useState(gradesList[0] || UAE_GRADES[0]);
@@ -2933,6 +3203,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
   const [customSubject, setCustomSubject] = useState('');
   const [group, setGroup] = useState('الكل');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [examDate, setExamDate] = useState('');
   const [completionStatus, setCompletionStatus] = useState<StructureCompletionStatus>('ongoing');
   const [completedAt, setCompletedAt] = useState('');
   const [totalQuestions, setTotalQuestions] = useState<number>(10);
@@ -2956,6 +3227,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
     customSubject: string;
     group: string;
     date: string;
+    examDate?: string;
     completionStatus?: StructureCompletionStatus;
     completedAt?: string;
     totalQuestions: number;
@@ -2980,8 +3252,8 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
     isOpen: false,
     title: '',
     message: '',
-    confirmText: 'تأكيد',
-    cancelText: 'تراجع',
+    confirmText: tr('تأكيد', 'Confirm'),
+    cancelText: tr('تراجع', 'Cancel'),
     isDestructive: true,
     onConfirm: () => {},
   });
@@ -3002,6 +3274,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
       setCustomSubject(isKnownSubj ? '' : structureToEdit.subject || '');
       setGroup(structureToEdit.group || 'الكل');
       setDate(structureToEdit.date || new Date().toISOString().split('T')[0]);
+      setExamDate(structureToEdit.examDate || '');
       setCompletionStatus(getEffectiveStructureStatus(structureToEdit));
       setCompletedAt(structureToEdit.completedAt || '');
       const count = Math.max(1, structureToEdit.totalQuestions || structureToEdit.questions?.length || 10);
@@ -3028,6 +3301,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
       setCustomSubject('');
       setGroup('الكل');
       setDate(new Date().toISOString().split('T')[0]);
+      setExamDate('');
       setCompletionStatus('ongoing');
       setCompletedAt('');
       setTotalQuestions(10);
@@ -3066,6 +3340,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
       customSubject,
       group,
       date,
+      examDate,
       completionStatus,
       completedAt,
       totalQuestions,
@@ -3087,6 +3362,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
     customSubject,
     group,
     date,
+    examDate,
     completionStatus,
     completedAt,
     totalQuestions,
@@ -3101,10 +3377,13 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
     }
     setConfirmState({
       isOpen: true,
-      title: 'تحذير: بيانات غير محفوظة للهيكل',
-      message: `لديك تعديلات غير محفوظة في نموذج "${title.trim() || 'الهيكل'}". في حال الخروج الآن سيتم تجاهل التعديلات غير المحفوظة. هل تريد الخروج دون حفظ؟`,
-      confirmText: 'تجاهل التعديلات والخروج',
-      cancelText: 'البقاء وحفظ البيانات',
+      title: tr('تحذير: بيانات غير محفوظة للهيكل', 'Warning: Unsaved Structure Changes'),
+      message: tr(
+        `لديك تعديلات غير محفوظة في نموذج "${title.trim() || 'الهيكل'}". في حال الخروج الآن سيتم تجاهل التعديلات غير المحفوظة. هل تريد الخروج دون حفظ؟`,
+        `You have unsaved changes in "${title.trim() || 'Structure'}". Closing now will discard unsaved edits. Exit without saving?`
+      ),
+      confirmText: tr('تجاهل التعديلات والخروج', 'Discard Changes & Exit'),
+      cancelText: tr('البقاء وحفظ البيانات', 'Stay & Save Data'),
       isDestructive: true,
       onConfirm: () => {
         clearStructureFormDraft(formDraftKey);
@@ -3148,6 +3427,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
     setCustomSubject(p.customSubject || '');
     setGroup(p.group || 'الكل');
     setDate(p.date || date);
+    setExamDate(p.examDate || '');
     setCompletionStatus(
       p.completionStatus === 'completed' ||
         p.completionStatus === 'studied_not_examined' ||
@@ -3191,10 +3471,13 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
     if (willDropNamedQuestions) {
       setConfirmState({
         isOpen: true,
-        title: 'تحذير: تقليص عدد أسئلة الهيكل',
-        message: `تقليص العدد إلى (${nextCount}) سؤال سيحذف عناوين الأسئلة من س${nextCount + 1} إلى س${questions.length}. هل تريد المتابعة؟`,
-        confirmText: 'تقليص العدد',
-        cancelText: 'تراجع',
+        title: tr('تحذير: تقليص عدد أسئلة الهيكل', 'Warning: Reducing Structure Questions'),
+        message: tr(
+          `تقليص العدد إلى (${nextCount}) سؤال سيحذف عناوين الأسئلة من س${nextCount + 1} إلى س${questions.length}. هل تريد المتابعة؟`,
+          `Reducing count to (${nextCount}) questions will delete titles for Q${nextCount + 1} to Q${questions.length}. Continue?`
+        ),
+        confirmText: tr('تقليص العدد', 'Reduce Count'),
+        cancelText: tr('تراجع', 'Cancel'),
         isDestructive: true,
         onConfirm: () => {
           applyResize();
@@ -3212,17 +3495,17 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      setError('يرجى إدخال اسم / عنوان الهيكل');
+      setError(tr('يرجى إدخال اسم / عنوان الهيكل', 'Please enter the structure title / name'));
       return;
     }
     const finalTrack = track === '__custom__' ? customTrack.trim() : track.trim();
     const finalSubject = subject === '__custom__' ? customSubject.trim() : subject.trim();
     if (!finalTrack) {
-      setError('يرجى تحديد المسار الدراسي');
+      setError(tr('يرجى تحديد المسار الدراسي', 'Please select an academic track'));
       return;
     }
     if (!finalSubject) {
-      setError('يرجى تحديد المادة الدراسية');
+      setError(tr('يرجى تحديد المادة الدراسية', 'Please select a subject'));
       return;
     }
 
@@ -3240,6 +3523,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
         subject: finalSubject,
         group: group || 'الكل',
         date,
+        examDate: examDate.trim() || '',
         completionStatus,
         completedAt:
           completionStatus !== 'ongoing'
@@ -3260,7 +3544,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
       setIsDirty(false);
     } catch (err) {
       console.error('Save structure error:', err);
-      setError('حدث خطأ أثناء حفظ بيانات الهيكل');
+      setError(tr('حدث خطأ أثناء حفظ بيانات الهيكل', 'An error occurred while saving the structure'));
     } finally {
       setSaving(false);
     }
@@ -3269,6 +3553,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
   return (
     <>
     <div
+      dir={dir}
       className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 overflow-hidden"
       onClick={(e) => {
         if (e.target === e.currentTarget) requestSafeClose();
@@ -3276,18 +3561,18 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[90vh] text-right"
+        className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[90vh] text-start"
       >
         <div className="shrink-0 px-4 sm:px-5 py-3.5 sm:py-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5 flex-wrap">
             <Layers className="w-5 h-5 text-amber-500" />
             <h3 className="font-black text-base text-slate-900 dark:text-white">
-              {structureToEdit ? 'تعديل بيانات الهيكل' : 'إضافة هيكل جديد'}
+              {structureToEdit ? tr('تعديل بيانات الهيكل', 'Edit Structure Details') : tr('إضافة هيكل جديد', 'Add New Structure')}
             </h3>
             {isDirty && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
                 <History className="w-3 h-3" />
-                مسودة تقدم محفوظة
+                {tr('مسودة تقدم محفوظة', 'Progress draft saved')}
               </span>
             )}
           </div>
@@ -3306,7 +3591,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
               <div className="flex items-center gap-2">
                 <History className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                 <span className="font-bold text-amber-900 dark:text-amber-100">
-                  توجد مسودة تقدم محفوظة تلقائياً لهذا الهيكل من جلسة سابقة
+                  {tr('توجد مسودة تقدم محفوظة تلقائياً لهذا الهيكل من جلسة سابقة', 'An auto-saved draft for this structure exists from a previous session')}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
@@ -3316,14 +3601,14 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                   className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black cursor-pointer"
                 >
                   <RotateCcw className="w-3 h-3" />
-                  <span>استعادة البيانات</span>
+                  <span>{tr('استعادة البيانات', 'Restore Data')}</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleDiscardDraft}
                   className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold cursor-pointer"
                 >
-                  تجاهل
+                  {tr('تجاهل', 'Discard')}
                 </button>
               </div>
             </div>
@@ -3338,7 +3623,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-2">
               <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                اسم / عنوان الهيكل *
+                {tr('اسم / عنوان الهيكل *', 'Structure Title / Name *')}
               </label>
               <input
                 type="text"
@@ -3347,7 +3632,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                   markDirty();
                   setTitle(e.target.value);
                 }}
-                placeholder="مثال: هيكل الفيزياء النهائي - الفصل الثاني"
+                placeholder={tr('مثال: هيكل الفيزياء النهائي - الفصل الثاني', 'e.g. Final Physics Structure - Term 2')}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold"
                 required
               />
@@ -3355,7 +3640,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
 
             <div>
               <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                كود الهيكل (اختياري)
+                {tr('كود الهيكل (اختياري)', 'Structure Code (Optional)')}
               </label>
               <input
                 type="text"
@@ -3372,7 +3657,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">الصف الدراسي *</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">{tr('الصف الدراسي *', 'Grade *')}</label>
               <select
                 value={grade}
                 onChange={(e) => {
@@ -3382,13 +3667,13 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold cursor-pointer"
               >
                 {gradesList.map((g) => (
-                  <option key={g} value={g}>{g}</option>
+                  <option key={g} value={g}>{translateGrade(g, lang)}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">الفصل الدراسي *</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">{tr('الفصل الدراسي *', 'Academic Term *')}</label>
               <select
                 value={term}
                 onChange={(e) => {
@@ -3398,13 +3683,13 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold cursor-pointer"
               >
                 {ACADEMIC_TERMS.map((t) => (
-                  <option key={t} value={t}>{t}</option>
+                  <option key={t} value={t}>{translateTerm(t, lang)}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">السنة الدراسية *</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">{tr('السنة الدراسية *', 'Academic Year *')}</label>
               <select
                 value={academicYear}
                 onChange={(e) => {
@@ -3422,7 +3707,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">المسار *</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">{tr('المسار *', 'Track *')}</label>
               <select
                 value={track}
                 onChange={(e) => {
@@ -3431,10 +3716,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                 }}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold cursor-pointer"
               >
-                {tracksList.map((tr) => (
-                  <option key={tr} value={tr}>{tr}</option>
+                {tracksList.map((trackOpt) => (
+                  <option key={trackOpt} value={trackOpt}>{translateTrack(trackOpt, lang)}</option>
                 ))}
-                <option value="__custom__">+ مسار مخصص...</option>
+                <option value="__custom__">{tr('+ مسار مخصص...', '+ Custom track...')}</option>
               </select>
               {track === '__custom__' && (
                 <input
@@ -3444,14 +3729,14 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                     markDirty();
                     setCustomTrack(e.target.value);
                   }}
-                  placeholder="اكتب اسم المسار..."
+                  placeholder={tr('اكتب اسم المسار...', 'Enter track name...')}
                   className="mt-1.5 w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-amber-400 rounded-xl"
                 />
               )}
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">المادة *</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">{tr('المادة *', 'Subject *')}</label>
               <select
                 value={subject}
                 onChange={(e) => {
@@ -3461,9 +3746,9 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold cursor-pointer"
               >
                 {subjectsList.map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                  <option key={s} value={s}>{translateSubject(s, lang)}</option>
                 ))}
-                <option value="__custom__">+ مادة مخصصة...</option>
+                <option value="__custom__">{tr('+ مادة مخصصة...', '+ Custom subject...')}</option>
               </select>
               {subject === '__custom__' && (
                 <input
@@ -3473,14 +3758,14 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                     markDirty();
                     setCustomSubject(e.target.value);
                   }}
-                  placeholder="اكتب اسم المادة..."
+                  placeholder={tr('اكتب اسم المادة...', 'Enter subject name...')}
                   className="mt-1.5 w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-amber-400 rounded-xl"
                 />
               )}
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">الشعبة / المجموعة</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">{tr('الشعبة / المجموعة', 'Section / Group')}</label>
               <select
                 value={group}
                 onChange={(e) => {
@@ -3489,7 +3774,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                 }}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-semibold cursor-pointer"
               >
-                <option value="الكل">كل الشعب</option>
+                <option value="الكل">{tr('كل الشعب', 'All Groups')}</option>
                 {(settings?.groups || []).map((grp) => (
                   <option key={grp} value={grp}>{grp}</option>
                 ))}
@@ -3497,10 +3782,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                عدد أسئلة الهيكل الكلي (1 - 100) *
+                {tr('عدد أسئلة الهيكل الكلي (1 - 100) *', 'Total Structure Questions (1 - 100) *')}
               </label>
               <input
                 type="number"
@@ -3514,7 +3799,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">تاريخ الهيكل</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">{tr('تاريخ الهيكل', 'Structure Date')}</label>
               <input
                 type="date"
                 value={date}
@@ -3525,12 +3810,27 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-mono"
               />
             </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                {tr('موعد الامتحان (للتنبيهات الذكية)', 'Exam Date (Smart Alerts)')}
+              </label>
+              <input
+                type="date"
+                value={examDate}
+                onChange={(e) => {
+                  markDirty();
+                  setExamDate(e.target.value);
+                }}
+                className="w-full px-3 py-2 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl text-slate-900 dark:text-white font-mono"
+              />
+            </div>
           </div>
 
           {/* Structure Completion / Exam Status Section */}
           <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2.5">
             <label className="block font-extrabold text-slate-800 dark:text-slate-100">
-              حالة تدريس الهيكل وامتحان المادة
+              {tr('حالة تدريس الهيكل وامتحان المادة', 'Structure Teaching & Exam Status')}
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <button
@@ -3539,7 +3839,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                   markDirty();
                   setCompletionStatus('ongoing');
                 }}
-                className={`p-3 rounded-xl border text-right transition cursor-pointer flex items-start gap-2.5 ${
+                className={`p-3 rounded-xl border text-start transition cursor-pointer flex items-start gap-2.5 ${
                   completionStatus === 'ongoing'
                     ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 ring-1 ring-emerald-500/30'
                     : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:border-slate-300'
@@ -3552,10 +3852,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                 />
                 <div>
                   <span className="font-black text-slate-900 dark:text-white block">
-                    مستمر وجاري الدراسة
+                    {tr('مستمر وجاري الدراسة', 'Ongoing & In Study')}
                   </span>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                    الهيكل ما زال قيد التدريس ولم تنتهِ دراسته
+                    {tr('الهيكل ما زال قيد التدريس ولم تنتهِ دراسته', 'Structure is still being taught and studied')}
                   </span>
                 </div>
               </button>
@@ -3569,7 +3869,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                     setCompletedAt(new Date().toISOString().split('T')[0]);
                   }
                 }}
-                className={`p-3 rounded-xl border text-right transition cursor-pointer flex items-start gap-2.5 ${
+                className={`p-3 rounded-xl border text-start transition cursor-pointer flex items-start gap-2.5 ${
                   completionStatus === 'studied_not_examined'
                     ? 'bg-amber-50 dark:bg-amber-950/50 border-amber-500 ring-1 ring-amber-500/30'
                     : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:border-slate-300'
@@ -3584,10 +3884,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                 />
                 <div>
                   <span className="font-black text-slate-900 dark:text-white block">
-                    منتهي دراسته ولم يُمتحن بعد
+                    {tr('منتهي دراسته ولم يُمتحن بعد', 'Studied - Pending Exam')}
                   </span>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                    انتهى شرح الهيكل وبانتظار عقد امتحان المادة
+                    {tr('انتهى شرح الهيكل وبانتظار عقد امتحان المادة', 'Teaching finished, awaiting subject exam')}
                   </span>
                 </div>
               </button>
@@ -3601,7 +3901,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                     setCompletedAt(new Date().toISOString().split('T')[0]);
                   }
                 }}
-                className={`p-3 rounded-xl border text-right transition cursor-pointer flex items-start gap-2.5 ${
+                className={`p-3 rounded-xl border text-start transition cursor-pointer flex items-start gap-2.5 ${
                   completionStatus === 'completed'
                     ? 'bg-indigo-50 dark:bg-indigo-950/50 border-indigo-500 ring-1 ring-indigo-500/30'
                     : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:border-slate-300'
@@ -3614,10 +3914,10 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                 />
                 <div>
                   <span className="font-black text-slate-900 dark:text-white block">
-                    انتهى وتم امتحان المادة
+                    {tr('انتهى وتم امتحان المادة', 'Completed & Examined')}
                   </span>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                    تم الانتهاء من الهيكل وأُجري اختبار المادة
+                    {tr('تم الانتهاء من الهيكل وأُجري اختبار المادة', 'Structure finished and exam has been held')}
                   </span>
                 </div>
               </button>
@@ -3627,8 +3927,8 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
               <div className="pt-1 flex flex-wrap items-center gap-2">
                 <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
                   {completionStatus === 'studied_not_examined'
-                    ? 'تاريخ انتهاء دراسة الهيكل (اختياري):'
-                    : 'تاريخ انتهاء الهيكل / امتحان المادة (اختياري):'}
+                    ? tr('تاريخ انتهاء دراسة الهيكل (اختياري):', 'Study Completion Date (Optional):')
+                    : tr('تاريخ انتهاء الهيكل / امتحان المادة (اختياري):', 'Completion / Exam Date (Optional):')}
                 </label>
                 <input
                   type="date"
@@ -3651,23 +3951,25 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
           <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="font-bold text-slate-800 dark:text-slate-200">
-                تسمية أسئلة الهيكل والمهارات (اختياري لسهولة المتابعة)
+                {tr('تسمية أسئلة الهيكل والمهارات (اختياري لسهولة المتابعة)', 'Name Structure Questions & Skills (Optional)')}
               </span>
               <button
                 type="button"
                 onClick={() => setShowQuestionTitlesEditor((prev) => !prev)}
                 className="text-amber-600 dark:text-amber-400 font-bold hover:underline cursor-pointer"
               >
-                {showQuestionTitlesEditor ? 'إخفاء القائمة' : `تحديد عناوين الـ ${totalQuestions} سؤال`}
+                {showQuestionTitlesEditor
+                  ? tr('إخفاء القائمة', 'Hide List')
+                  : tr(`تحديد عناوين الـ ${totalQuestions} سؤال`, `Set Titles for ${totalQuestions} Questions`)}
               </button>
             </div>
 
             {showQuestionTitlesEditor && (
-              <div className="max-h-52 overflow-y-auto space-y-2 pt-1 pl-1">
+              <div className="max-h-52 overflow-y-auto space-y-2 pt-1 pe-1">
                 {questions.map((qItem, idx) => (
                   <div key={qItem.questionNumber} className="flex items-center gap-2">
                     <span className="w-10 text-center font-mono font-bold text-amber-600 dark:text-amber-400 shrink-0">
-                      س{qItem.questionNumber}
+                      {tr('س', 'Q')}{qItem.questionNumber}
                     </span>
                     <input
                       type="text"
@@ -3679,7 +3981,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                           prev.map((item, i) => (i === idx ? { ...item, title: val } : item))
                         );
                       }}
-                      placeholder={`عنوان أو موضوع السؤال ${qItem.questionNumber} (اختياري)`}
+                      placeholder={tr(`عنوان أو موضوع السؤال ${qItem.questionNumber} (اختياري)`, `Title or topic for Q${qItem.questionNumber} (optional)`)}
                       className="flex-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                     />
                   </div>
@@ -3689,7 +3991,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
           </div>
 
           <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">ملاحظات عامة</label>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">{tr('ملاحظات عامة', 'General Notes')}</label>
             <textarea
               rows={2}
               value={notes}
@@ -3697,7 +3999,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
                 markDirty();
                 setNotes(e.target.value);
               }}
-              placeholder="أي ملاحظات أو تعليمات خاصة بهذا الهيكل..."
+              placeholder={tr('أي ملاحظات أو تعليمات خاصة بهذا الهيكل...', 'Any notes or instructions for this structure...')}
               className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
             />
           </div>
@@ -3708,7 +4010,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
               onClick={requestSafeClose}
               className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
             >
-              إلغاء
+              {tr('إلغاء', 'Cancel')}
             </button>
             <button
               type="submit"
@@ -3716,7 +4018,7 @@ const StructureFormModal: React.FC<StructureFormModalProps> = ({
               className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black cursor-pointer disabled:opacity-60"
             >
               <Save className="w-4 h-4" />
-              <span>{saving ? 'جاري الحفظ...' : structureToEdit ? 'حفظ التعديلات' : 'حفظ الهيكل'}</span>
+              <span>{saving ? tr('جاري الحفظ...', 'Saving...') : structureToEdit ? tr('حفظ التعديلات', 'Save Changes') : tr('حفظ الهيكل', 'Save Structure')}</span>
             </button>
           </div>
         </form>

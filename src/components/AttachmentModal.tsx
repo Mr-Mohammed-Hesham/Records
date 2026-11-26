@@ -24,6 +24,7 @@ import {
   getAttachmentCategory,
   downloadAttachment,
 } from '../utils/attachment';
+import { useLanguage } from '../utils/i18n';
 
 interface AttachmentModalProps {
   isOpen: boolean;
@@ -37,13 +38,15 @@ interface AttachmentModalProps {
 
 export const AttachmentModal: React.FC<AttachmentModalProps> = ({
   isOpen,
-  title = 'إثبات ومرفق مصداقية الامتحان',
+  title,
   subtitle,
   attachment: initialAttachment,
   readOnly = false,
   onSave,
   onClose,
 }) => {
+  const { dir, tr } = useLanguage();
+  const resolvedTitle = title || tr('إثبات ومرفق مصداقية الامتحان', 'Exam Credibility Attachment & Proof');
   const [currentAttachment, setCurrentAttachment] = useState<ResultAttachment | null>(
     initialAttachment || null
   );
@@ -81,7 +84,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
       setPendingFile(processed);
     } catch (err: any) {
       console.error('File processing error:', err);
-      setError(err?.message || 'تعذر معالجة الملف، يرجى تجربة ملف آخر.');
+      setError(err?.message || tr('تعذر معالجة الملف، يرجى تجربة ملف آخر.', 'Failed to process file. Please try another file.'));
     } finally {
       setIsProcessing(false);
     }
@@ -122,7 +125,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error('Save attachment error:', err);
-      setError('حدث خطأ أثناء حفظ المرفق، يرجى المحاولة مرة أخرى.');
+      setError(tr('حدث خطأ أثناء حفظ المرفق، يرجى المحاولة مرة أخرى.', 'Failed to save attachment. Please try again.'));
     } finally {
       setIsSaving(false);
     }
@@ -151,7 +154,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
       onClose();
     } catch (err) {
       console.error('Remove error:', err);
-      setError('تعذر حذف المرفق.');
+      setError(tr('تعذر حذف المرفق.', 'Failed to remove attachment.'));
     } finally {
       setIsSaving(false);
     }
@@ -169,8 +172,8 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
       <div
         id="attachment-modal-container"
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl bg-white dark:bg-slate-900 sm:rounded-3xl rounded-t-3xl shadow-2xl border border-slate-200/80 dark:border-slate-800 flex flex-col max-h-[92dvh] sm:max-h-[90vh] overflow-hidden text-right transition-all"
-        dir="rtl"
+        className="w-full max-w-2xl bg-white dark:bg-slate-900 sm:rounded-3xl rounded-t-3xl shadow-2xl border border-slate-200/80 dark:border-slate-800 flex flex-col max-h-[92dvh] sm:max-h-[90vh] overflow-hidden text-start transition-all"
+        dir={dir}
       >
         {/* Modal Header */}
         <div className="shrink-0 p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50/70 dark:bg-slate-900/70">
@@ -180,10 +183,10 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
             </div>
             <div>
               <h3 className="font-black text-slate-900 dark:text-white text-base sm:text-lg flex items-center gap-2">
-                {title}
+                {resolvedTitle}
                 {displayAttachment && (
                   <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                    موثق بمرفق
+                    {tr('موثق بمرفق', 'Verified Attachment')}
                   </span>
                 )}
               </h3>
@@ -198,7 +201,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
           <button
             onClick={onClose}
             className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
-            title="إغلاق"
+            title={tr('إغلاق', 'Close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -237,12 +240,12 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                       <span>{formatFileSize(displayAttachment.size)}</span>
                       <span>•</span>
                       <span>
-                        {category === 'image' && 'صورة إثبات'}
-                        {category === 'pdf' && 'مستند PDF'}
-                        {category === 'email' && 'بريد إلكتروني (إيميل)'}
-                        {category === 'document' && 'مستند وورد'}
-                        {category === 'text' && 'نص كتابي'}
-                        {category === 'other' && 'ملف مرفق'}
+                        {category === 'image' && tr('صورة إثبات', 'Proof Image')}
+                        {category === 'pdf' && tr('مستند PDF', 'PDF Document')}
+                        {category === 'email' && tr('بريد إلكتروني (إيميل)', 'Email (.eml/.msg)')}
+                        {category === 'document' && tr('مستند وورد', 'Word Document')}
+                        {category === 'text' && tr('نص كتابي', 'Text File')}
+                        {category === 'other' && tr('ملف مرفق', 'Attached File')}
                       </span>
                       {displayAttachment.uploadedAt && (
                         <>
@@ -260,10 +263,10 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                     type="button"
                     onClick={() => downloadAttachment(displayAttachment)}
                     className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-bold transition-colors cursor-pointer border border-indigo-200 dark:border-indigo-800"
-                    title="تنزيل الملف على جهازك"
+                    title={tr('تنزيل الملف على جهازك', 'Download file to your device')}
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>تنزيل</span>
+                    <span>{tr('تنزيل', 'Download')}</span>
                   </button>
 
                   <button
@@ -277,7 +280,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                       }
                     }}
                     className="p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
-                    title="فتح في نافذة مستقلة"
+                    title={tr('فتح في نافذة مستقلة', 'Open in a new tab')}
                   >
                     <ExternalLink className="w-4 h-4" />
                   </button>
@@ -288,7 +291,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         className="p-1.5 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
-                        title="استبدال الملف بملف آخر"
+                        title={tr('استبدال الملف بملف آخر', 'Replace with another file')}
                       >
                         <RefreshCw className="w-4 h-4" />
                       </button>
@@ -300,7 +303,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                             onClick={handleRemove}
                             className="text-[11px] font-black text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
                           >
-                            تأكيد الحذف
+                            {tr('تأكيد الحذف', 'Confirm Delete')}
                           </button>
                           <span className="text-slate-300 dark:text-slate-700">|</span>
                           <button
@@ -308,7 +311,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                             onClick={() => setConfirmingRemove(false)}
                             className="text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:underline cursor-pointer"
                           >
-                            إلغاء
+                            {tr('إلغاء', 'Cancel')}
                           </button>
                         </div>
                       ) : (
@@ -316,7 +319,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                           type="button"
                           onClick={() => setConfirmingRemove(true)}
                           className="p-1.5 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer"
-                          title="حذف الملف المرفق"
+                          title={tr('حذف الملف المرفق', 'Delete attachment')}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -333,19 +336,19 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                     <div className="relative inline-block max-w-full">
                       <img
                         src={displayAttachment.dataUrl}
-                        alt="إثبات مصداقية الامتحان"
+                        alt={tr('إثبات مصداقية الامتحان', 'Exam credibility proof')}
                         className="max-h-[320px] max-w-full rounded-xl object-contain shadow-sm transition-transform duration-200"
                         style={{ transform: `scale(${zoomLevel})` }}
                       />
                     </div>
 
                     {/* Image Zoom & View Controls */}
-                    <div className="absolute bottom-3 left-3 bg-slate-900/80 backdrop-blur-xs text-white px-2.5 py-1 rounded-xl flex items-center gap-2 text-xs opacity-90 hover:opacity-100 transition-opacity">
+                    <div className="absolute bottom-3 end-3 bg-slate-900/80 backdrop-blur-xs text-white px-2.5 py-1 rounded-xl flex items-center gap-2 text-xs opacity-90 hover:opacity-100 transition-opacity">
                       <button
                         type="button"
                         onClick={() => setZoomLevel((prev) => Math.max(0.6, prev - 0.2))}
                         className="hover:text-amber-400 p-0.5 cursor-pointer"
-                        title="تصغير"
+                        title={tr('تصغير', 'Zoom Out')}
                       >
                         <ZoomOut className="w-3.5 h-3.5" />
                       </button>
@@ -354,7 +357,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                         type="button"
                         onClick={() => setZoomLevel((prev) => Math.min(2.5, prev + 0.2))}
                         className="hover:text-amber-400 p-0.5 cursor-pointer"
-                        title="تكبير"
+                        title={tr('تكبير', 'Zoom In')}
                       >
                         <ZoomIn className="w-3.5 h-3.5" />
                       </button>
@@ -369,10 +372,10 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                     </div>
                     <div>
                       <p className="font-bold text-slate-800 dark:text-slate-200">
-                        مستند PDF مرفق للإثبات والمصداقية
+                        {tr('مستند PDF مرفق للإثبات والمصداقية', 'Attached PDF Proof Document')}
                       </p>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        اضغط لفتح الملف ومعاينته أو تنزيله بالكامل
+                        {tr('اضغط لفتح الملف ومعاينته أو تنزيله بالكامل', 'Click to preview or download the full PDF')}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -382,7 +385,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                         className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
                       >
                         <Download className="w-4 h-4" />
-                        تنزيل ملف الـ PDF
+                        {tr('تنزيل ملف الـ PDF', 'Download PDF')}
                       </button>
                       <button
                         type="button"
@@ -390,7 +393,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                         className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold cursor-pointer"
                       >
                         <Eye className="w-4 h-4" />
-                        معاينة
+                        {tr('معاينة', 'Preview')}
                       </button>
                     </div>
                   </div>
@@ -403,10 +406,10 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                     </div>
                     <div>
                       <p className="font-bold text-slate-800 dark:text-slate-200">
-                        ملف بريد إلكتروني (إيميل) موثق
+                        {tr('ملف بريد إلكتروني (إيميل) موثق', 'Verified Email File')}
                       </p>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        تم إرفاق الإيميل كملف رسمي لتأكيد مصداقية النتيجة والاختبار
+                        {tr('تم إرفاق الإيميل كملف رسمي لتأكيد مصداقية النتيجة والاختبار', 'Email attached as official proof for exam credibility')}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -416,7 +419,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                         className="inline-flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
                       >
                         <Download className="w-4 h-4" />
-                        تنزيل ملف الإيميل (.eml)
+                        {tr('تنزيل ملف الإيميل (.eml)', 'Download Email (.eml)')}
                       </button>
                     </div>
                   </div>
@@ -429,7 +432,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                     </div>
                     <div>
                       <p className="font-bold text-slate-800 dark:text-slate-200">
-                        ملف إثبات ومصداقية مرفق
+                        {tr('ملف إثبات ومصداقية مرفق', 'Attached Credibility Proof File')}
                       </p>
                       <p className="text-xs text-slate-400 mt-0.5">
                         {displayAttachment.name}
@@ -441,7 +444,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                       className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
                     >
                       <Download className="w-4 h-4" />
-                      تنزيل الملف
+                      {tr('تنزيل الملف', 'Download File')}
                     </button>
                   </div>
                 )}
@@ -450,15 +453,15 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
               {/* Notes / Remarks about the proof */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  ملاحظات أو تعليق على الإثبات المرفق (اختياري)
+                  {tr('ملاحظات أو تعليق على الإثبات المرفق (اختياري)', 'Attachment notes or remarks (optional)')}
                 </label>
                 <input
                   type="text"
                   disabled={readOnly}
                   value={attachmentNotes}
                   onChange={(e) => setAttachmentNotes(e.target.value)}
-                  placeholder="مثال: إيميل رسمي من الإدارة، أو صورة ورقة الإجابة الأصلية..."
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white text-right"
+                  placeholder={tr('مثال: إيميل رسمي من الإدارة، أو صورة ورقة الإجابة الأصلية...', 'e.g. Official admin email, or photo of answer sheet...')}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white text-start"
                 />
               </div>
             </div>
@@ -486,39 +489,40 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
 
                 <h4 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">
                   {isProcessing
-                    ? 'جاري معالجة الملف وضغط الصورة...'
-                    : 'اسحب الملف هنا أو اضغط لاختيار ملف من جهازك'}
+                    ? tr('جاري معالجة الملف وضغط الصورة...', 'Processing file and compressing image...')
+                    : tr('اسحب الملف هنا أو اضغط لاختيار ملف من جهازك', 'Drag file here or click to choose from your device')}
                 </h4>
 
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
-                  يدعم جميع الصيغ: <strong className="text-slate-700 dark:text-slate-300">صور (PNG, JPG, WEBP)</strong>،{' '}
-                  <strong className="text-slate-700 dark:text-slate-300">مستندات (PDF)</strong>،{' '}
-                  <strong className="text-slate-700 dark:text-slate-300">رسائل البريد الإلكتروني (.eml, .msg)</strong>، أو ملفات نصية.
+                  {tr('يدعم جميع الصيغ:', 'Supports all formats:')}{' '}
+                  <strong className="text-slate-700 dark:text-slate-300">{tr('صور (PNG, JPG, WEBP)', 'Images (PNG, JPG, WEBP)')}</strong>،{' '}
+                  <strong className="text-slate-700 dark:text-slate-300">{tr('مستندات (PDF)', 'Documents (PDF)')}</strong>،{' '}
+                  <strong className="text-slate-700 dark:text-slate-300">{tr('رسائل البريد الإلكتروني (.eml, .msg)', 'Emails (.eml, .msg)')}</strong>{tr('، أو ملفات نصية.', ', or text files.')}
                 </p>
 
                 <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-400">
                   <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
-                    <ImageIcon className="w-3 h-3 text-emerald-500" /> ضغط تلقائي للصور
+                    <ImageIcon className="w-3 h-3 text-emerald-500" /> {tr('ضغط تلقائي للصور', 'Auto image compression')}
                   </span>
                   <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
-                    <Mail className="w-3 h-3 text-sky-500" /> إثبات المصداقية
+                    <Mail className="w-3 h-3 text-sky-500" /> {tr('إثبات المصداقية', 'Credibility Proof')}
                   </span>
                   <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
-                    <ShieldCheck className="w-3 h-3 text-amber-500" /> حفظ سحابي
+                    <ShieldCheck className="w-3 h-3 text-amber-500" /> {tr('حفظ سحابي', 'Cloud Saved')}
                   </span>
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  ملاحظات مرافقة للإثبات (اختياري)
+                  {tr('ملاحظات مرافقة للإثبات (اختياري)', 'Notes accompanying proof (optional)')}
                 </label>
                 <input
                   type="text"
                   value={attachmentNotes}
                   onChange={(e) => setAttachmentNotes(e.target.value)}
-                  placeholder="مثال: لقطة شاشة لإيميل التأكيد، أو ورقة إجابة الطالب المعتمدة..."
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white text-right"
+                  placeholder={tr('مثال: لقطة شاشة لإيميل التأكيد، أو ورقة إجابة الطالب المعتمدة...', 'e.g. Confirmation email screenshot, or graded paper...')}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white text-start"
                 />
               </div>
             </div>
@@ -539,11 +543,11 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
           <div className="text-slate-500 dark:text-slate-400 text-xs">
             {pendingFile ? (
               <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1">
-                <AlertCircle className="w-3.5 h-3.5" /> تم تجهيز ملف جديد - اضغط حفظ لتثبيته
+                <AlertCircle className="w-3.5 h-3.5" /> {tr('تم تجهيز ملف جديد - اضغط حفظ لتثبيته', 'New file ready — click Save to confirm')}
               </span>
             ) : displayAttachment ? (
               <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> الملف محفوظ وجاهز للاستعراض
+                <CheckCircle2 className="w-3.5 h-3.5" /> {tr('الملف محفوظ وجاهز للاستعراض', 'File saved and ready to view')}
               </span>
             ) : null}
           </div>
@@ -554,7 +558,7 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
               onClick={onClose}
               className="px-4 py-2 text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
             >
-              إغلاق
+              {tr('إغلاق', 'Close')}
             </button>
 
             {!readOnly && (pendingFile || attachmentNotes !== (initialAttachment?.notes || '')) && (
@@ -567,12 +571,12 @@ export const AttachmentModal: React.FC<AttachmentModalProps> = ({
                 {isSaving ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    جاري الحفظ...
+                    {tr('جاري الحفظ...', 'Saving...')}
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    حفظ المرفق
+                    {tr('حفظ المرفق', 'Save Attachment')}
                   </>
                 )}
               </button>

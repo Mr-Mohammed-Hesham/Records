@@ -9,6 +9,7 @@ import {
   ACADEMIC_TRACKS,
 } from '../services/firebase';
 import { ConfirmModal } from './ConfirmModal';
+import { useLanguage, translateGrade, translateTerm, translateTrack, translateSubject } from '../utils/i18n';
 
 interface ExamFormModalProps {
   isOpen: boolean;
@@ -29,6 +30,7 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const { lang, dir, tr } = useLanguage();
   const activeExam = exam || examToEdit;
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
@@ -245,27 +247,30 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
 
   const handleSubmit = async (openGradingImmediately = true) => {
     if (!title.trim()) {
-      setError('يرجى كتابة اسم الامتحان أو الاختبار');
+      setError(tr('يرجى كتابة اسم الامتحان أو الاختبار', 'Please enter the exam title'));
       return;
     }
 
     if (duplicateExam) {
-      setError(`اسم الامتحان "${title.trim()}" غير متاح؛ يوجد امتحان مسجل مسبقاً بهذا الاسم. يرجى اختيار اسم آخر.`);
+      setError(tr(
+        `اسم الامتحان "${title.trim()}" غير متاح؛ يوجد امتحان مسجل مسبقاً بهذا الاسم. يرجى اختيار اسم آخر.`,
+        `Exam title "${title.trim()}" is already used. Please choose another title.`
+      ));
       return;
     }
 
     const finalSubject = isCustomSubject ? customSubjectText.trim() : subject.trim();
     if (!finalSubject) {
-      setError('يرجى تحديد أو كتابة مادة الامتحان');
+      setError(tr('يرجى تحديد أو كتابة مادة الامتحان', 'Please select or enter the exam subject'));
       return;
     }
 
     if (totalScore <= 0) {
-      setError('الدرجة الكلية يجب أن تكون أكبر من الصفر');
+      setError(tr('الدرجة الكلية يجب أن تكون أكبر من الصفر', 'Total score must be greater than 0'));
       return;
     }
     if (passScore > totalScore) {
-      setError('درجة النجاح لا يمكن أن تتجاوز الدرجة الكلية');
+      setError(tr('درجة النجاح لا يمكن أن تتجاوز الدرجة الكلية', 'Pass score cannot exceed total score'));
       return;
     }
 
@@ -293,7 +298,7 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
       );
       onClose();
     } catch (err: any) {
-      setError(err.message || 'حدث خطأ أثناء حفظ سجل الامتحان');
+      setError(err.message || tr('حدث خطأ أثناء حفظ سجل الامتحان', 'Error saving exam record'));
     } finally {
       setLoading(false);
     }
@@ -302,13 +307,14 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
   return (
     <>
       <div 
+        dir={dir}
         className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden"
         onClick={handleRequestClose}
       >
         <div 
           id="exam-form-modal"
           onClick={(e) => e.stopPropagation()}
-          className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-xl w-full flex flex-col max-h-[92dvh] sm:max-h-[90vh] shadow-2xl border border-slate-200 dark:border-slate-800 text-right overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-xl w-full flex flex-col max-h-[92dvh] sm:max-h-[90vh] shadow-2xl border border-slate-200 dark:border-slate-800 text-start overflow-hidden animate-in fade-in zoom-in-95 duration-200"
         >
           <div className="shrink-0 p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900">
             <div className="flex items-center gap-3">
@@ -318,16 +324,16 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-extrabold text-slate-900 dark:text-white text-base sm:text-lg">
-                    {exam ? 'تعديل بيانات الامتحان' : 'تسجيل درجات امتحان جديد'}
+                    {exam ? tr('تعديل بيانات الامتحان', 'Edit Exam') : tr('تسجيل درجات امتحان جديد', 'Create New Exam')}
                   </h3>
                   {isDirty && (
                     <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse">
-                      تعديلات غير محفوظة
+                      {tr('تعديلات غير محفوظة', 'Unsaved changes')}
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  حدد بيانات الامتحان والدرجة الكلية لبدء رصد درجات الطلاب يدوياً
+                  {tr('حدد بيانات الامتحان والدرجة الكلية لبدء رصد درجات الطلاب يدوياً', 'Set exam details & max score to start grading students')}
                 </p>
               </div>
             </div>
@@ -350,12 +356,12 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                اسم أو عنوان الامتحان <span className="text-rose-500">*</span>
+                {tr('اسم أو عنوان الامتحان', 'Exam Title')} <span className="text-rose-500">*</span>
               </label>
               {duplicateExam && (
                 <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1">
                   <AlertTriangle className="w-3.5 h-3.5" />
-                  اسم غير متاح (مكرر)
+                  {tr('اسم غير متاح (مكرر)', 'Duplicate title')}
                 </span>
               )}
             </div>
@@ -368,8 +374,8 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
                 setTitle(e.target.value);
                 if (error) setError('');
               }}
-              placeholder="مثال: اختبار شهر أكتوبر أو كويز قوانين نيوتن"
-              className={`w-full px-3.5 py-2.5 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 transition-all text-right font-medium ${
+              placeholder={tr('مثال: اختبار شهر أكتوبر أو كويز قوانين نيوتن', 'e.g. October Test or Newton Laws Quiz')}
+              className={`w-full px-3.5 py-2.5 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 transition-all text-start font-medium ${
                 duplicateExam
                   ? 'bg-rose-50/50 dark:bg-rose-950/20 border-2 border-rose-500 focus:ring-rose-500/20 focus:border-rose-500 text-slate-900 dark:text-white'
                   : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white'
@@ -382,13 +388,13 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
                 <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
                 <div className="text-xs leading-relaxed">
                   <p className="font-extrabold text-rose-700 dark:text-rose-300">
-                    هذا الاسم غير متاح لوجود امتحان سابق بنفس الاسم:
+                    {tr('هذا الاسم غير متاح لوجود امتحان سابق بنفس الاسم:', 'This title is already taken by an existing exam:')}
                   </p>
                   <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
-                    يوجد امتحان مسجل مسبقاً بعنوان <strong className="underline">"{duplicateExam.title}"</strong> ({duplicateExam.grade} - {duplicateExam.subject} - تاريخ: {duplicateExam.date}).
+                    {tr('يوجد امتحان مسجل مسبقاً بعنوان', 'Existing exam:')} <strong className="underline">"{duplicateExam.title}"</strong> ({translateGrade(duplicateExam.grade, lang)} - {translateSubject(duplicateExam.subject, lang)} - {duplicateExam.date}).
                   </p>
                   <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-0.5">
-                    يرجى تغيير الاسم أو إضافة تمييز له (مثال: "اختبار شهر أكتوبر - نموذج أ").
+                    {tr('يرجى تغيير الاسم أو إضافة تمييز له (مثال: "اختبار شهر أكتوبر - نموذج أ").', 'Please change the title or add a label (e.g. "October Test - Form A").')}
                   </p>
                 </div>
               </div>
@@ -400,14 +406,14 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
             <div className="sm:col-span-2">
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  المادة الدراسية <span className="text-rose-500">*</span>
+                  {tr('المادة الدراسية', 'Subject')} <span className="text-rose-500">*</span>
                 </label>
                 <button
                   type="button"
                   onClick={() => setIsCustomSubject(!isCustomSubject)}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline"
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
                 >
-                  {isCustomSubject ? '← اختيار من المواد' : '+ كتابة مادة يدوياً'}
+                  {isCustomSubject ? tr('← اختيار من المواد', '← Select from subjects') : tr('+ كتابة مادة يدوياً', '+ Custom Subject')}
                 </button>
               </div>
 
@@ -418,8 +424,8 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
                   required
                   value={customSubjectText}
                   onChange={(e) => setCustomSubjectText(e.target.value)}
-                  placeholder="اكتب اسم المادة يدوياً..."
-                  className="w-full px-3.5 py-2.5 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right font-medium"
+                  placeholder={tr('اكتب اسم المادة يدوياً...', 'Enter subject name...')}
+                  className="w-full px-3.5 py-2.5 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start font-medium"
                   autoFocus
                 />
               ) : (
@@ -427,10 +433,10 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
                   id="exam-subject-select"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start cursor-pointer"
                 >
                   {settings.subjects.map((s) => (
-                    <option key={s} value={s}>{s}</option>
+                    <option key={s} value={s}>{translateSubject(s, lang)}</option>
                   ))}
                 </select>
               )}
@@ -439,16 +445,16 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
             {/* Grade (UAE Grades 1 to 12) */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                الصف الدراسي (منهج الإمارات) <span className="text-rose-500">*</span>
+                {tr('الصف الدراسي (منهج الإمارات)', 'Grade (UAE Curriculum)')} <span className="text-rose-500">*</span>
               </label>
               <select
                 id="exam-grade-select"
                 value={grade}
                 onChange={(e) => setGrade(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer"
+                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start cursor-pointer"
               >
                 {gradeList.map((g) => (
-                  <option key={g} value={g}>{g}</option>
+                  <option key={g} value={g}>{translateGrade(g, lang)}</option>
                 ))}
               </select>
             </div>
@@ -459,13 +465,13 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-amber-500" />
-                  <span>السنة الدراسية</span>
+                  <span>{tr('السنة الدراسية', 'Academic Year')}</span>
                 </label>
                 <select
                   id="exam-academic-year-select"
                   value={academicYear}
                   onChange={(e) => setAcademicYear(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start cursor-pointer"
                 >
                   {ACADEMIC_YEARS.map((yr) => (
                     <option key={yr} value={yr}>
@@ -475,41 +481,41 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
                 </select>
               </div>
 
-              {/* Term (أول - ثاني - ثالث) */}
+              {/* Term */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5 text-amber-500" />
-                  <span>الفصل الدراسي</span>
+                  <span>{tr('الفصل الدراسي', 'Term')}</span>
                 </label>
                 <select
                   id="exam-term-select"
                   value={term}
                   onChange={(e) => setTerm(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start cursor-pointer"
                 >
                   {ACADEMIC_TERMS.map((t) => (
                     <option key={t} value={t}>
-                      {t}
+                      {translateTerm(t, lang)}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Track (عام - متقدم) */}
+              {/* Track */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                   <Compass className="w-3.5 h-3.5 text-amber-500" />
-                  <span>المسار</span>
+                  <span>{tr('المسار', 'Track')}</span>
                 </label>
                 <select
                   id="exam-track-select"
                   value={track}
                   onChange={(e) => setTrack(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start cursor-pointer"
                 >
-                  {ACADEMIC_TRACKS.map((tr) => (
-                    <option key={tr} value={tr}>
-                      {tr === 'عام' ? 'عام (General)' : tr === 'متقدم' ? 'متقدم (Advanced)' : tr}
+                  {ACADEMIC_TRACKS.map((trk) => (
+                    <option key={trk} value={trk}>
+                      {translateTrack(trk, lang)}
                     </option>
                   ))}
                 </select>
@@ -519,13 +525,13 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
             {/* Exam Type */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                نوع الامتحان <span className="text-rose-500">*</span>
+                {tr('نوع الامتحان', 'Exam Type')} <span className="text-rose-500">*</span>
               </label>
               <select
                 id="exam-type-select"
                 value={type}
                 onChange={(e) => setType(e.target.value as ExamType)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer font-medium"
+                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start cursor-pointer font-medium"
               >
                 {settings.examTypes.map((t) => (
                   <option key={t} value={t}>{t}</option>
@@ -536,7 +542,7 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
             {/* Date */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                تاريخ الامتحان <span className="text-rose-500">*</span>
+                {tr('تاريخ الامتحان', 'Exam Date')} <span className="text-rose-500">*</span>
               </label>
               <input
                 id="exam-date-input"
@@ -544,7 +550,7 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
                 required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right"
+                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start"
               />
             </div>
 
@@ -552,7 +558,7 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  الدرجة الكلية <span className="text-rose-500">*</span>
+                  {tr('الدرجة الكلية', 'Max Score')} <span className="text-rose-500">*</span>
                 </label>
                 <input
                   id="exam-total-score-input"
@@ -568,7 +574,7 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  درجة النجاح <span className="text-rose-500">*</span>
+                  {tr('درجة النجاح', 'Pass Score')} <span className="text-rose-500">*</span>
                 </label>
                 <input
                   id="exam-pass-score-input"
@@ -588,15 +594,15 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
           {/* Notes */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-              ملاحظات أو توصيف الامتحان (اختياري)
+              {tr('ملاحظات أو توصيف الامتحان (اختياري)', 'Exam Notes or Description (optional)')}
             </label>
             <textarea
               id="exam-notes-input"
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="مثال: يغطي الوحدة الأولى والثانية..."
-              className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right"
+              placeholder={tr('مثال: يغطي الوحدة الأولى والثانية...', 'e.g. Covers Units 1 & 2...')}
+              className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start"
             />
           </div>
         </div>
@@ -608,7 +614,7 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
             onClick={handleRequestClose}
             className="px-4 py-2 text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
           >
-            إلغاء
+            {tr('إلغاء', 'Cancel')}
           </button>
 
           <button
@@ -616,11 +622,15 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
             type="button"
             disabled={loading || !!duplicateExam}
             onClick={() => handleSubmit(true)}
-            title={duplicateExam ? 'اسم الامتحان مستخدم مسبقاً، يرجى تغييره' : ''}
+            title={duplicateExam ? tr('اسم الامتحان مستخدم مسبقاً، يرجى تغييره', 'Duplicate exam title') : ''}
             className="inline-flex items-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-98 rounded-xl shadow-md shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <CheckSquare className="w-4 h-4" />
-            {loading ? 'جاري الحفظ...' : exam ? 'حفظ التعديلات' : 'حفظ وبدء رصد الدرجات يدوياً'}
+            {loading
+              ? tr('جاري الحفظ...', 'Saving...')
+              : exam
+                ? tr('حفظ التعديلات', 'Save Changes')
+                : tr('حفظ وبدء رصد الدرجات يدوياً', 'Save & Start Grading')}
           </button>
         </div>
       </div>
@@ -629,10 +639,13 @@ export const ExamFormModal: React.FC<ExamFormModalProps> = ({
     {/* Unsaved changes confirmation dialog */}
     <ConfirmModal
       isOpen={showConfirmClose}
-      title="تنبيه: تعديلات غير محفوظة"
-      message={`هناك بيانات أو تعديلات تم إدخالها في امتحان "${title.trim() || 'بدون عنوان'}" ولم يتم حفظها بعد. هل أنت متأكد من رغبتك في إغلاق النموذج وتجاهل التعديلات؟`}
-      confirmText="نعم، تجاهل التغييرات وأغلق"
-      cancelText="الرجوع ومتابعة الحفظ"
+      title={tr('تنبيه: تعديلات غير محفوظة', 'Unsaved Changes')}
+      message={tr(
+        `هناك بيانات أو تعديلات تم إدخالها في امتحان "${title.trim() || 'بدون عنوان'}" ولم يتم حفظها بعد. هل أنت متأكد من رغبتك في إغلاق النموذج وتجاهل التعديلات؟`,
+        `There are unsaved changes in exam "${title.trim() || 'Untitled'}". Discard and close?`
+      )}
+      confirmText={tr('نعم، تجاهل التغييرات وأغلق', 'Discard & Close')}
+      cancelText={tr('الرجوع ومتابعة الحفظ', 'Keep Editing')}
       isDestructive={true}
       onConfirm={handleForceClose}
       onCancel={() => setShowConfirmClose(false)}

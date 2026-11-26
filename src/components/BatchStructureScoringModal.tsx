@@ -29,6 +29,13 @@ import {
   clearStructureScoringDraft,
 } from '../utils/activityTracker';
 import { ConfirmModal } from './ConfirmModal';
+import {
+  useLanguage,
+  translateGrade,
+  translateTerm,
+  translateTrack,
+  translateSubject,
+} from '../utils/i18n';
 
 export interface BatchStructureScoringModalProps {
   isOpen: boolean;
@@ -83,6 +90,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
   onClose,
   onSaveBatch,
 }) => {
+  const { lang, dir, tr } = useLanguage();
   const totalQ = Math.max(1, structure.totalQuestions || structure.questions?.length || 1);
   const draftKey = `batch_${structure.id}`;
 
@@ -518,10 +526,13 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
     }
     setConfirmState({
       isOpen: true,
-      title: 'تحذير: تعديلات غير محفوظة',
-      message: `لديك رصد غير محفوظ للهيكل "${structure.title}" لعدد (${activeStudents.length}) طالب. في حال الخروج الآن سيتم تجاهل التعديلات غير المحفوظة ولن تتغير أي درجات محفوظة سابقاً. هل تريد الخروج دون حفظ؟`,
-      confirmText: 'تجاهل التعديلات والخروج',
-      cancelText: 'البقاء ومتابعة الرصد',
+      title: tr('تحذير: تعديلات غير محفوظة', 'Warning: Unsaved Changes'),
+      message: tr(
+        `لديك رصد غير محفوظ للهيكل "${structure.title}" لعدد (${activeStudents.length}) طالب. في حال الخروج الآن سيتم تجاهل التعديلات غير المحفوظة ولن تتغير أي درجات محفوظة سابقاً. هل تريد الخروج دون حفظ؟`,
+        `You have unsaved batch edits for "${structure.title}" (${activeStudents.length} students). Closing now will discard unsaved edits without changing saved scores. Exit without saving?`
+      ),
+      confirmText: tr('تجاهل التعديلات والخروج', 'Discard & Exit'),
+      cancelText: tr('البقاء ومتابعة الرصد', 'Stay & Continue'),
       isDestructive: true,
       onConfirm: () => {
         clearStructureScoringDraft(draftKey);
@@ -638,10 +649,13 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
     if (includedQuestions.size === 0) return;
     setConfirmState({
       isOpen: true,
-      title: 'إلغاء تحديد الأسئلة في هذه الدفعة',
-      message: `هل تريد إلغاء تحديد الأسئلة المختارة في هذه النافذة (${includedQuestions.size} سؤال)؟ لن تتأثر أي درجات سابقة للطلاب.`,
-      confirmText: 'تفريغ التحديد',
-      cancelText: 'تراجع',
+      title: tr('إلغاء تحديد الأسئلة في هذه الدفعة', 'Clear Selected Questions'),
+      message: tr(
+        `هل تريد إلغاء تحديد الأسئلة المختارة في هذه النافذة (${includedQuestions.size} سؤال)؟ لن تتأثر أي درجات سابقة للطلاب.`,
+        `Deselect all ${includedQuestions.size} chosen questions in this batch? Existing student scores will not be affected.`
+      ),
+      confirmText: tr('تفريغ التحديد', 'Clear Selection'),
+      cancelText: tr('تراجع', 'Cancel'),
       isDestructive: false,
       onConfirm: () => {
         setIncludedQuestions(new Set());
@@ -755,8 +769,9 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
       >
         <div
           id="batch-structure-scoring-modal"
+          dir={dir}
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[92vh] text-right"
+          className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[92vh] text-start"
         >
           {/* Header */}
           <div className="shrink-0 px-4 sm:px-5 py-3.5 sm:py-4 bg-slate-50 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
@@ -764,24 +779,27 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
               <div className="flex flex-wrap items-center gap-2">
                 <Users className="w-5 h-5 text-amber-500" />
                 <h3 className="font-black text-base text-slate-900 dark:text-white">
-                  تسجيل ورصد درجة الهيكل لعدد ({activeStudents.length}) طالب مرة واحدة
+                  {tr(
+                    `تسجيل ورصد درجة الهيكل لعدد (${activeStudents.length}) طالب مرة واحدة`,
+                    `Batch Record Structure Scores (${activeStudents.length} Students)`
+                  )}
                 </h3>
                 {isDirty && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
                     <History className="w-3 h-3" />
-                    مسودة تقدم محفوظة
+                    {tr('مسودة تقدم محفوظة', 'Progress draft saved')}
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                الهيكل: <strong className="text-amber-600 dark:text-amber-400">{structure.title}</strong> • إجمالي الأسئلة: <strong className="font-mono">{totalQ}</strong>
+                {tr('الهيكل:', 'Structure:')} <strong className="text-amber-600 dark:text-amber-400">{structure.title}</strong> • {tr('إجمالي الأسئلة:', 'Total Questions:')} <strong className="font-mono">{totalQ}</strong>
               </p>
             </div>
             <button
               type="button"
               onClick={requestSafeClose}
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
-              title="إغلاق"
+              title={tr('إغلاق', 'Close')}
             >
               <X className="w-5 h-5" />
             </button>
@@ -793,10 +811,13 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
               <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
               <div className="space-y-0.5 leading-relaxed">
                 <div className="font-black text-xs sm:text-sm">
-                  حماية الدرجات السابقة مفعّلة تلقائياً (لن تُفقد أي درجة مرصودة سابقاً)
+                  {tr('حماية الدرجات السابقة مفعّلة تلقائياً (لن تُفقد أي درجة مرصودة سابقاً)', 'Prior Score Protection Active Automatically (No previous scores will be lost)')}
                 </div>
                 <p className="text-[11px] opacity-90">
-                  الأسئلة التي لا تحددها هنا تبقى محتفظة بدرجاتها السابقة لكل طالب كما هي تماماً، ويتم دمج الأسئلة الجديدة وإعادة حساب المجموع والنسبة لكل طالب بشكل مستقل.
+                  {tr(
+                    'الأسئلة التي لا تحددها هنا تبقى محتفظة بدرجاتها السابقة لكل طالب كما هي تماماً، ويتم دمج الأسئلة الجديدة وإعادة حساب المجموع والنسبة لكل طالب بشكل مستقل.',
+                    'Questions not included here keep each student’s previous recorded scores intact. New entries are merged and totals recalculated per student.'
+                  )}
                 </p>
               </div>
             </div>
@@ -807,7 +828,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                 <div className="flex items-center gap-2">
                   <History className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                   <span className="font-bold text-amber-900 dark:text-amber-100">
-                    توجد مسودة رصد جماعي محفوظة تلقائياً لهذا الهيكل من جلسة سابقة
+                    {tr('توجد مسودة رصد جماعي محفوظة تلقائياً لهذا الهيكل من جلسة سابقة', 'Auto-saved batch draft found from a previous session')}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -817,14 +838,14 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                     className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black cursor-pointer"
                   >
                     <RotateCcw className="w-3 h-3" />
-                    <span>استعادة التقدم</span>
+                    <span>{tr('استعادة التقدم', 'Restore Draft')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={handleDiscardDraft}
                     className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold cursor-pointer"
                   >
-                    تجاهل المسودة
+                    {tr('تجاهل المسودة', 'Discard')}
                   </button>
                 </div>
               </div>
@@ -834,11 +855,11 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
             <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-bold text-slate-700 dark:text-slate-200">
-                  الطلاب المحددين للتسجيل الجماعي ({activeStudents.length} طالب):
+                  {tr(`الطلاب المحددين للتسجيل الجماعي (${activeStudents.length} طالب):`, `Selected Students for Batch Recording (${activeStudents.length}):`)}
                 </span>
                 {studentsWithPriorCount > 0 && (
                   <span className="text-[11px] font-bold text-amber-700 dark:text-amber-300">
-                    ({studentsWithPriorCount}) طالب لديهم درجات سابقة محفوظة في هذا الهيكل
+                    {tr(`(${studentsWithPriorCount}) طالب لديهم درجات سابقة محفوظة في هذا الهيكل`, `${studentsWithPriorCount} student(s) have existing scores in this structure`)}
                   </span>
                 )}
               </div>
@@ -869,7 +890,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                             setActiveStudents((prev) => prev.filter((item) => item.id !== st.id))
                           }
                           className="text-slate-400 hover:text-rose-600 cursor-pointer"
-                          title="إزالة من التحديد"
+                          title={tr('إزالة من التحديد', 'Remove from selection')}
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -882,8 +903,8 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
               {studentsWithPriorCount > 0 && (
                 <div className="pt-2.5 border-t border-slate-200 dark:border-slate-700 space-y-2.5">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-bold text-slate-600 dark:text-slate-300 ml-1">
-                      نظام حفظ السجل للطلاب المرصودين مسبقاً:
+                    <span className="font-bold text-slate-600 dark:text-slate-300 me-1">
+                      {tr('نظام حفظ السجل للطلاب المرصودين مسبقاً:', 'Save Mode for Previously Recorded Students:')}
                     </span>
                     <button
                       type="button"
@@ -897,7 +918,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                       }`}
                     >
-                      دمج في نفس السجل (مع إبقاء الدرجات السابقة)
+                      {tr('دمج في نفس السجل (مع إبقاء الدرجات السابقة)', 'Merge into Existing Record (Keep Prior)')}
                     </button>
                     <button
                       type="button"
@@ -912,13 +933,13 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                       }`}
                     >
                       <Sparkles className="w-3 h-3" />
-                      <span>إضافة كمحاولة تحسين جديدة (+ إبقاء السجل السابق + وراثة الأسئلة)</span>
+                      <span>{tr('إضافة كمحاولة تحسين جديدة (+ إبقاء السجل السابق + وراثة الأسئلة)', 'Add New Retake Attempt (Keep Prior + Inherit)')}</span>
                     </button>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-bold text-slate-600 dark:text-slate-300 ml-1">
-                      إذا كان السؤال المحدد الآن مرصوداً مسبقاً للطالب:
+                    <span className="font-bold text-slate-600 dark:text-slate-300 me-1">
+                      {tr('إذا كان السؤال المحدد الآن مرصوداً مسبقاً للطالب:', 'If a Selected Question Already Has a Score:')}
                     </span>
                     <button
                       type="button"
@@ -932,7 +953,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                       }`}
                     >
-                      الاحتفاظ بدرجته السابقة كما هي (الأضمن)
+                      {tr('الاحتفاظ بدرجته السابقة كما هي (الأضمن)', 'Keep Existing Score (Safest)')}
                     </button>
                     <button
                       type="button"
@@ -946,7 +967,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                       }`}
                     >
-                      ترقية للدرجة الأعلى فقط
+                      {tr('ترقية للدرجة الأعلى فقط', 'Keep Higher Score Only')}
                     </button>
                     <button
                       type="button"
@@ -960,7 +981,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                       }`}
                     >
-                      تحديث الأسئلة المحددة فقط بالدرجة الجديدة
+                      {tr('تحديث الأسئلة المحددة فقط بالدرجة الجديدة', 'Overwrite Selected Questions Only')}
                     </button>
                   </div>
                 </div>
@@ -971,23 +992,23 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
             <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
               <div className="p-3 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
                 <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-                  الأسئلة المشمولة في الدفعة
+                  {tr('الأسئلة المشمولة في الدفعة', 'Questions Included')}
                 </span>
                 <span className="text-lg sm:text-xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
-                  {batchTemplateStats.includedCount} / {totalQ} سؤال
+                  {batchTemplateStats.includedCount} / {totalQ} {tr('سؤال', 'Q')}
                 </span>
               </div>
               <div className="p-3 bg-amber-50/70 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800/70 text-center">
                 <span className="text-[11px] text-amber-700 dark:text-amber-400 block">
-                  الأسئلة غير المحددة (تُترك كما هي)
+                  {tr('الأسئلة غير المحددة (تُترك كما هي)', 'Untouched Questions (Preserved)')}
                 </span>
                 <span className="text-lg sm:text-xl font-black font-mono tabular-nums text-amber-600 dark:text-amber-400">
-                  {totalQ - batchTemplateStats.includedCount} سؤال محفوظ
+                  {totalQ - batchTemplateStats.includedCount} {tr('سؤال محفوظ', 'Preserved')}
                 </span>
               </div>
               <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800/70 text-center">
                 <span className="text-[11px] text-emerald-700 dark:text-emerald-400 block">
-                  نسبة الأسئلة المحددة حالياً
+                  {tr('نسبة الأسئلة المحددة حالياً', 'Selected Avg Accuracy')}
                 </span>
                 <span className="text-lg sm:text-xl font-black font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
                   {batchTemplateStats.avgIncludedAcc}%
@@ -998,7 +1019,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
             {/* Metadata */}
             <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
               <span className="font-bold text-slate-700 dark:text-slate-300 block">
-                بيانات القيد الأكاديمي الموحدة للمجموعة:
+                {tr('بيانات القيد الأكاديمي الموحدة للمجموعة:', 'Unified Academic Metadata for Batch:')}
               </span>
               <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
                 <select
@@ -1010,7 +1031,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                   className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold"
                 >
                   {Array.from(new Set([...gradesList, grade])).map((g) => (
-                    <option key={g} value={g}>{g}</option>
+                    <option key={g} value={g}>{translateGrade(g, lang)}</option>
                   ))}
                 </select>
                 <select
@@ -1022,7 +1043,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                   className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold"
                 >
                   {ACADEMIC_TERMS.map((t) => (
-                    <option key={t} value={t}>{t}</option>
+                    <option key={t} value={t}>{translateTerm(t, lang)}</option>
                   ))}
                 </select>
                 <select
@@ -1033,8 +1054,8 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                   }}
                   className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold"
                 >
-                  {Array.from(new Set([...tracksList, track])).map((tr) => (
-                    <option key={tr} value={tr}>{tr}</option>
+                  {Array.from(new Set([...tracksList, track])).map((trVal) => (
+                    <option key={trVal} value={trVal}>{translateTrack(trVal, lang)}</option>
                   ))}
                 </select>
                 <select
@@ -1058,7 +1079,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                   className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold"
                 >
                   {Array.from(new Set([...subjectsList, subject])).map((sb) => (
-                    <option key={sb} value={sb}>{sb}</option>
+                    <option key={sb} value={sb}>{translateSubject(sb, lang)}</option>
                   ))}
                 </select>
                 <input
@@ -1078,10 +1099,10 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-black text-amber-900 dark:text-amber-200">
-                    ضبط نطاق أسئلة للمحددين:
+                    {tr('ضبط نطاق أسئلة للمحددين:', 'Set Question Range for Selected:')}
                   </span>
                   <div className="inline-flex items-center gap-1.5 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
-                    <span className="text-[11px] text-slate-600 dark:text-slate-300">من س</span>
+                    <span className="text-[11px] text-slate-600 dark:text-slate-300">{tr('من س', 'From Q')}</span>
                     <input
                       type="number"
                       min={1}
@@ -1094,7 +1115,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                       }}
                       className="w-12 px-1 py-0.5 text-center font-mono font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded"
                     />
-                    <span className="text-[11px] text-slate-600 dark:text-slate-300">إلى س</span>
+                    <span className="text-[11px] text-slate-600 dark:text-slate-300">{tr('إلى س', 'to Q')}</span>
                     <input
                       type="number"
                       min={quickStartQ}
@@ -1107,7 +1128,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                     />
                   </div>
                   <div className="inline-flex items-center gap-1.5 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
-                    <span className="text-[11px] text-slate-600 dark:text-slate-300">نسبة الصحة:</span>
+                    <span className="text-[11px] text-slate-600 dark:text-slate-300">{tr('نسبة الصحة:', 'Accuracy:')}</span>
                     <input
                       type="number"
                       min={0}
@@ -1123,7 +1144,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                     onClick={applyQuickRange}
                     className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] cursor-pointer"
                   >
-                    تطبيق النطاق
+                    {tr('تطبيق النطاق', 'Apply Range')}
                   </button>
                 </div>
 
@@ -1133,21 +1154,21 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                     onClick={() => setAllQuestionsState(100)}
                     className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold text-[11px] cursor-pointer hover:bg-emerald-500"
                   >
-                    تحديد الكل (100%)
+                    {tr('تحديد الكل (100%)', 'Select All (100%)')}
                   </button>
                   <button
                     type="button"
                     onClick={() => applyAccuracyToIncluded(75)}
                     className="px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 font-bold text-[11px] cursor-pointer"
                   >
-                    75% للمحدد
+                    {tr('75% للمحدد', '75% Selected')}
                   </button>
                   <button
                     type="button"
                     onClick={() => applyAccuracyToIncluded(50)}
                     className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold text-[11px] cursor-pointer"
                   >
-                    50% للمحدد
+                    {tr('50% للمحدد', '50% Selected')}
                   </button>
                   <button
                     type="button"
@@ -1155,7 +1176,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                     disabled={includedQuestions.size === 0}
                     className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] cursor-pointer disabled:opacity-50"
                   >
-                    إلغاء تحديد الأسئلة
+                    {tr('إلغاء تحديد الأسئلة', 'Clear Selection')}
                   </button>
                 </div>
               </div>
@@ -1163,14 +1184,14 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
 
             {/* Per-Question Table */}
             <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-start text-xs">
                 <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
                   <tr>
-                    <th className="py-2.5 px-3 min-w-[130px]">السؤال</th>
-                    <th className="py-2.5 px-3 min-w-[135px]">شمل السؤال بالدفعة</th>
-                    <th className="py-2.5 px-3">حالة الحل</th>
-                    <th className="py-2.5 px-3">نسبة صحة السؤال (0% - 100%)</th>
-                    <th className="py-2.5 px-3 hidden md:table-cell">تحديد سريع</th>
+                    <th className="py-2.5 px-3 min-w-[130px]">{tr('السؤال', 'Question')}</th>
+                    <th className="py-2.5 px-3 min-w-[135px]">{tr('شمل السؤال بالدفعة', 'Include in Batch')}</th>
+                    <th className="py-2.5 px-3">{tr('حالة الحل', 'Solved Status')}</th>
+                    <th className="py-2.5 px-3">{tr('نسبة صحة السؤال (0% - 100%)', 'Accuracy (0% - 100%)')}</th>
+                    <th className="py-2.5 px-3 hidden md:table-cell">{tr('تحديد سريع', 'Quick Pick')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
@@ -1194,17 +1215,17 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                           <div className="flex flex-col gap-0.5">
                             <div>
                               <span className="font-mono font-black text-slate-900 dark:text-white">
-                                س{qs.questionNumber}
+                                {tr('س', 'Q')}{qs.questionNumber}
                               </span>
                               {qMeta?.title && (
-                                <span className="text-[11px] text-slate-500 dark:text-slate-400 mr-1.5">
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400 ms-1.5">
                                   • {qMeta.title}
                                 </span>
                               )}
                             </div>
                             {priorSummary && priorSummary.recordedCount > 0 && (
                               <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300">
-                                مرصود سابقاً لـ {priorSummary.recordedCount}/{activeStudents.length} (
+                                {tr('مرصود سابقاً لـ', 'Prior for')} {priorSummary.recordedCount}/{activeStudents.length} (
                                 {priorSummary.minAcc === priorSummary.maxAcc
                                   ? `${priorSummary.maxAcc}%`
                                   : `${priorSummary.minAcc}%–${priorSummary.maxAcc}%`}
@@ -1226,12 +1247,12 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                             {isIncluded ? (
                               <>
                                 <CheckSquare className="w-3.5 h-3.5" />
-                                <span>مشمول بالتحديث</span>
+                                <span>{tr('مشمول بالتحديث', 'Included')}</span>
                               </>
                             ) : (
                               <>
                                 <Square className="w-3.5 h-3.5" />
-                                <span>يُترك كما هو</span>
+                                <span>{tr('يُترك كما هو', 'Leave As-Is')}</span>
                               </>
                             )}
                           </button>
@@ -1249,12 +1270,12 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                             {isIncluded && qs.solved ? (
                               <>
                                 <CheckSquare className="w-3.5 h-3.5" />
-                                <span>تم الحل</span>
+                                <span>{tr('تم الحل', 'Solved')}</span>
                               </>
                             ) : (
                               <>
                                 <Square className="w-3.5 h-3.5" />
-                                <span>لم يُحل</span>
+                                <span>{tr('لم يُحل', 'Unsolved')}</span>
                               </>
                             )}
                           </button>
@@ -1320,10 +1341,10 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
             <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-black text-slate-800 dark:text-slate-100">
-                  معاينة نتيجة الدمج لكل طالب قبل الحفظ:
+                  {tr('معاينة نتيجة الدمج لكل طالب قبل الحفظ:', 'Per-Student Merge Preview Before Saving:')}
                 </span>
                 <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                  يضمن بقاء الدرجات السابقة + إضافة الجديد
+                  {tr('يضمن بقاء الدرجات السابقة + إضافة الجديد', 'Preserves prior scores + merges new ones')}
                 </span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-40 overflow-y-auto">
@@ -1346,17 +1367,17 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                       <div className="flex items-center gap-1.5 text-[11px] font-mono tabular-nums flex-wrap">
                         <span className="text-slate-500 dark:text-slate-400">
                           {latest
-                            ? `سابقاً: ${latest.solvedCount}/${totalQ} (${latest.overallAccuracyPercentage}%)`
-                            : 'مستجد'}
+                            ? `${tr('سابقاً:', 'Prior:')} ${latest.solvedCount}/${totalQ} (${latest.overallAccuracyPercentage}%)`
+                            : tr('مستجد', 'New')}
                         </span>
-                        <ArrowLeft className="w-3 h-3 text-amber-500 shrink-0" />
+                        <ArrowLeft className="w-3 h-3 text-amber-500 shrink-0 ltr:rotate-180" />
                         <span className="font-black text-emerald-600 dark:text-emerald-400">
-                          بعد الحفظ: {record.solvedCount}/{totalQ} ({record.overallAccuracyPercentage}%)
+                          {tr('بعد الحفظ:', 'After:')} {record.solvedCount}/{totalQ} ({record.overallAccuracyPercentage}%)
                         </span>
                       </div>
                       <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                        محفوظ سابقاً: {preservedPriorQuestionsCount} • مضاف جديد: {newlyAppliedQuestionsCount}
-                        {upgradedQuestionsCount > 0 ? ` • محدّث: ${upgradedQuestionsCount}` : ''}
+                        {tr('محفوظ سابقاً:', 'Preserved:')} {preservedPriorQuestionsCount} • {tr('مضاف جديد:', 'Added:')} {newlyAppliedQuestionsCount}
+                        {upgradedQuestionsCount > 0 ? ` • ${tr('محدّث:', 'Updated:')} ${upgradedQuestionsCount}` : ''}
                       </div>
                     </div>
                   )
@@ -1366,7 +1387,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
 
             <div>
               <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                ملاحظة موحدة للطلاب المحددين (اختياري — لن تمسح الملاحظات السابقة)
+                {tr('ملاحظة موحدة للطلاب المحددين (اختياري — لن تمسح الملاحظات السابقة)', 'Unified Note for Selected Students (Optional — will not erase prior notes)')}
               </label>
               <input
                 type="text"
@@ -1375,7 +1396,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                   markDirty();
                   setNotes(e.target.value);
                 }}
-                placeholder="مثال: تم رصد أداء المجموعة في الهيكل النهائي..."
+                placeholder={tr('مثال: تم رصد أداء المجموعة في الهيكل النهائي...', 'e.g. Recorded group performance in final structure...')}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
               />
             </div>
@@ -1383,8 +1404,8 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
             <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
               <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
                 {includedQuestions.size === 0
-                  ? 'اختر سؤالاً واحداً على الأقل من الجدول أعلاه لتطبيقه على الطلاب المحددين'
-                  : `سيتم حفظ (${includedQuestions.size}) سؤال مع حماية كل الدرجات السابقة`}
+                  ? tr('اختر سؤالاً واحداً على الأقل من الجدول أعلاه لتطبيقه على الطلاب المحددين', 'Select at least one question above to apply to selected students')
+                  : tr(`سيتم حفظ (${includedQuestions.size}) سؤال مع حماية كل الدرجات السابقة`, `${includedQuestions.size} question(s) will be saved with full prior score protection`)}
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -1392,7 +1413,7 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                   onClick={requestSafeClose}
                   className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
                 >
-                  إلغاء
+                  {tr('إلغاء', 'Cancel')}
                 </button>
                 <button
                   type="submit"
@@ -1402,8 +1423,8 @@ export const BatchStructureScoringModal: React.FC<BatchStructureScoringModalProp
                   <Save className="w-4 h-4" />
                   <span>
                     {saving
-                      ? 'جاري الحفظ الآمن...'
-                      : `حفظ ودمج الدرجات لـ (${activeStudents.length}) طالب`}
+                      ? tr('جاري الحفظ الآمن...', 'Saving safely...')
+                      : tr(`حفظ ودمج الدرجات لـ (${activeStudents.length}) طالب`, `Save & Merge for (${activeStudents.length}) Students`)}
                   </span>
                 </button>
               </div>

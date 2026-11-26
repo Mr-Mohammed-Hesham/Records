@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Search, X, User, ArrowRight } from 'lucide-react';
+import { Search, X, ArrowRight } from 'lucide-react';
 import { Student } from '../types';
+import { useLanguage, translateGrade } from '../utils/i18n';
 
 interface QuickSearchModalProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ export const QuickSearchModal: React.FC<QuickSearchModalProps> = ({
   students,
   onSelectStudent,
 }) => {
+  const { lang, dir, isRtl, tr } = useLanguage();
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -39,26 +41,27 @@ export const QuickSearchModal: React.FC<QuickSearchModalProps> = ({
 
   return (
     <div 
+      dir={dir}
       className="fixed inset-0 z-50 flex items-start justify-center pt-6 sm:pt-16 p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs overflow-hidden animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div 
-        className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right flex flex-col max-h-[82dvh] animate-in zoom-in-95 duration-150"
+        className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-start flex flex-col max-h-[82dvh] animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="relative p-3 border-b border-slate-200 dark:border-slate-800 shrink-0">
+        <div className="relative p-3 border-b border-slate-200 dark:border-slate-800 shrink-0 flex items-center gap-2 bg-slate-50 dark:bg-slate-800">
+          <Search className="w-5 h-5 text-slate-400 shrink-0" />
           <input
             type="text"
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="ابحث بالاسم، ID، رقم الهاتف، أو الصف..."
-            className="w-full pr-10 pl-8 py-2.5 bg-slate-50 dark:bg-slate-800 border-0 rounded-xl text-sm font-medium focus:bg-white dark:focus:bg-slate-950 focus:outline-hidden text-slate-900 dark:text-white text-right placeholder:text-slate-400 dark:placeholder:text-slate-500"
+            placeholder={tr('ابحث بالاسم، ID، رقم الهاتف، أو الصف...', 'Search by name, ID, phone, or grade...')}
+            className="w-full py-1.5 bg-transparent border-0 text-sm font-medium focus:outline-hidden text-slate-900 dark:text-white text-start placeholder:text-slate-400 dark:placeholder:text-slate-500"
           />
-          <Search className="w-5 h-5 text-slate-400 absolute right-6 top-5 pointer-events-none" />
           <button
             onClick={onClose}
-            className="absolute left-5 top-5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer transition-colors"
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer transition-colors shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
@@ -67,7 +70,7 @@ export const QuickSearchModal: React.FC<QuickSearchModalProps> = ({
         <div className="flex-1 overflow-y-auto p-2 divide-y divide-slate-100 dark:divide-slate-800/60">
           {filtered.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-400 dark:text-slate-500">
-              لا يوجد طلاب مطابقين لـ "{query}"
+              {tr(`لا يوجد طلاب مطابقين لـ "${query}"`, `No students matching "${query}"`)}
             </div>
           ) : (
             filtered.map(s => (
@@ -88,14 +91,14 @@ export const QuickSearchModal: React.FC<QuickSearchModalProps> = ({
                       {s.name}
                     </h4>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      <span className="font-semibold text-slate-600 dark:text-slate-300">{s.grade}</span> • <span>{s.group}</span> • <span className="font-mono text-slate-500 dark:text-slate-400">#{s.studentId}</span>
+                      <span className="font-semibold text-slate-600 dark:text-slate-300">{translateGrade(s.grade, lang)}</span> • <span>{s.group}</span> • <span className="font-mono text-slate-500 dark:text-slate-400">#{s.studentId}</span>
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1 text-[11px] text-indigo-600 dark:text-indigo-400 font-bold opacity-0 group-hover:opacity-100 transition-opacity">
-                  <span>فتح الملف</span>
-                  <ArrowRight className="w-3 h-3 rotate-180" />
+                  <span>{tr('فتح الملف', 'Open Profile')}</span>
+                  <ArrowRight className={`w-3 h-3 ${isRtl ? 'rotate-180' : ''}`} />
                 </div>
               </div>
             ))
@@ -103,7 +106,7 @@ export const QuickSearchModal: React.FC<QuickSearchModalProps> = ({
         </div>
 
         <div className="p-2.5 bg-slate-50 dark:bg-slate-800/70 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 text-center">
-          اضغط على أي طالب للانتقال المباشر لملفه الشخصي وسجل امتحاناته
+          {tr('اضغط على أي طالب للانتقال المباشر لملفه الشخصي وسجل امتحاناته', 'Click any student to open their profile and exam records')}
         </div>
       </div>
     </div>

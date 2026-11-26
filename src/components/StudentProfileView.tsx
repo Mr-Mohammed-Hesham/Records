@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  ArrowRight, 
+  ArrowRight,
+  ArrowLeft,
   User, 
   Phone, 
   BookOpen, 
@@ -54,6 +55,13 @@ import { AttachmentModal } from './AttachmentModal';
 import { AttachmentThumbnail } from './AttachmentThumbnail';
 import { StudentStructureScoringModal } from './StudentStructureScoringModal';
 import { ConfirmModal } from './ConfirmModal';
+import {
+  useLanguage,
+  translateGrade,
+  translateTerm,
+  translateTrack,
+  translateSubject,
+} from '../utils/i18n';
 
 interface StudentProfileViewProps {
   student: Student;
@@ -94,6 +102,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   onDeleteStructureProgress,
   onOpenStructures,
 }) => {
+  const { lang, dir, isRtl, tr } = useLanguage();
   const [editingResultId, setEditingResultId] = useState<string | null>(null);
   const [editScoreVal, setEditScoreVal] = useState<string>('');
   const [editNotesVal, setEditNotesVal] = useState<string>('');
@@ -142,7 +151,8 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
     if (onUpdateStudentStatus) {
       onUpdateStudentStatus(student, newStatus, noteToSave);
     }
-    setStatusSavedToast(`تم تحديث حالة الملف إلى: ${ENROLLMENT_STATUS_META[newStatus].label}`);
+    const statusText = lang === 'en' ? ENROLLMENT_STATUS_META[newStatus].labelEn : ENROLLMENT_STATUS_META[newStatus].label;
+    setStatusSavedToast(tr(`تم تحديث حالة الملف إلى: ${statusText}`, `File status updated to: ${statusText}`));
     setTimeout(() => setStatusSavedToast(null), 3000);
   };
 
@@ -151,7 +161,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
     if (onUpdateStudentStatus) {
       onUpdateStudentStatus(student, currentEnrollmentStatus, enrollmentNote);
     }
-    setStatusSavedToast('تم حفظ ملاحظة حالة الملف بنجاح');
+    setStatusSavedToast(tr('تم حفظ ملاحظة حالة الملف بنجاح', 'File status note saved successfully'));
     setTimeout(() => setStatusSavedToast(null), 2500);
   };
 
@@ -234,6 +244,13 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   };
 
   const activeStatusMeta = ENROLLMENT_STATUS_META[currentEnrollmentStatus];
+  const formatAcademicStatus = (status: string) => {
+    if (lang === 'ar') return status;
+    if (status === 'ممتاز') return 'Excellent';
+    if (status === 'جيد') return 'Good';
+    if (status === 'يحتاج متابعة') return 'Needs Follow-up';
+    return status;
+  };
   const timelineChartData = timelineResults.map((r) => ({
     id: r.id,
     name: r.examTitle,
@@ -244,7 +261,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
   }));
 
   return (
-    <div id="student-profile-view" className="space-y-6 text-right animate-in fade-in duration-200">
+    <div id="student-profile-view" dir={dir} className="space-y-6 text-start animate-in fade-in duration-200">
       {/* Top Bar with Back Button and Quick Actions */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-3">
@@ -252,11 +269,11 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             onClick={onBack}
             className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer flex items-center gap-1 font-semibold text-sm"
           >
-            <ArrowRight className="w-4 h-4" />
-            العودة لقائمة الطلاب
+            {isRtl ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
+            {tr('العودة لقائمة الطلاب', 'Back to Students')}
           </button>
           <div className="h-4 w-px bg-slate-200 dark:bg-slate-800" />
-          <span className="text-xs text-slate-400">ملف الطالب الشخصي</span>
+          <span className="text-xs text-slate-400">{tr('ملف الطالب الشخصي', 'Student Profile')}</span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -265,7 +282,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition-all cursor-pointer shadow-xs"
           >
             <Eye className="w-4 h-4 text-amber-500" />
-            التقرير الأكاديمي الشامل
+            {tr('التقرير الأكاديمي الشامل', 'Full Academic Report')}
           </button>
 
           {/* Excel Export + Quick Mobile/Chart Toggles */}
@@ -276,24 +293,24 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-900 dark:text-emerald-200 bg-emerald-500/20 hover:bg-emerald-500/30 rounded-lg transition-all cursor-pointer"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>تصدير التقرير لـ Excel</span>
+              <span>{tr('تصدير التقرير لـ Excel', 'Export Report to Excel')}</span>
             </button>
 
             <button
               type="button"
               onClick={() => setExcelLayoutMode(excelLayoutMode === 'mobile' ? 'desktop' : 'mobile')}
               className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 rounded-lg border border-emerald-200 dark:border-emerald-800 cursor-pointer"
-              title="تبديل مقاس الشيت بين وضع الهاتف المحمول والكمبيوتر"
+              title={tr('تبديل مقاس الشيت بين وضع الهاتف المحمول والكمبيوتر', 'Switch sheet layout between mobile and desktop')}
             >
               {excelLayoutMode === 'mobile' ? (
                 <>
                   <Smartphone className="w-3 h-3 text-emerald-600" />
-                  <span>وضع الهاتف</span>
+                  <span>{tr('وضع الهاتف', 'Mobile')}</span>
                 </>
               ) : (
                 <>
                   <Monitor className="w-3 h-3 text-indigo-600" />
-                  <span>وضع الكمبيوتر</span>
+                  <span>{tr('وضع الكمبيوتر', 'Desktop')}</span>
                 </>
               )}
             </button>
@@ -306,10 +323,10 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                   ? 'bg-amber-500 text-slate-950 border-amber-500'
                   : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-700'
               }`}
-              title="تضمين الرسم البياني للدرجات في ملف الإكسيل"
+              title={tr('تضمين الرسم البياني للدرجات في ملف الإكسيل', 'Include grade chart in Excel file')}
             >
               <BarChart3 className="w-3 h-3" />
-              <span>{excelIncludeChart ? 'مع الرسم البياني ✔' : 'بدون رسم'}</span>
+              <span>{excelIncludeChart ? tr('مع الرسم البياني ✔', 'With Chart ✔') : tr('بدون رسم', 'No Chart')}</span>
             </button>
           </div>
 
@@ -318,7 +335,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition-colors cursor-pointer"
           >
             <Edit3 className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-            تعديل البيانات
+            {tr('تعديل البيانات', 'Edit Profile')}
           </button>
         </div>
       </div>
@@ -354,48 +371,48 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                     ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
                     : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
                 }`}>
-                  مستوى الطالب: {stats.status}
+                  {tr('مستوى الطالب:', 'Student Level:')} {formatAcademicStatus(stats.status)}
                 </span>
                 <span
                   className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-bold border ${activeStatusMeta.badgeBg} ${activeStatusMeta.badgeText} ${activeStatusMeta.badgeBorder}`}
                 >
                   <span className={`w-2 h-2 rounded-full ${activeStatusMeta.dotColor}`} />
-                  {activeStatusMeta.label}
+                  {lang === 'en' ? activeStatusMeta.labelEn : activeStatusMeta.label}
                 </span>
               </div>
 
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 flex flex-wrap items-center gap-3">
-                <span>الصف: <strong className="text-slate-700 dark:text-slate-200">{student.grade}</strong></span>
+                <span>{tr('الصف:', 'Grade:')} <strong className="text-slate-700 dark:text-slate-200">{translateGrade(student.grade, lang)}</strong></span>
                 {student.track && (
                   <>
                     <span>•</span>
-                    <span>المسار: <strong className="text-amber-600 dark:text-amber-400 font-bold">{student.track}</strong></span>
+                    <span>{tr('المسار:', 'Track:')} <strong className="text-amber-600 dark:text-amber-400 font-bold">{translateTrack(student.track, lang)}</strong></span>
                   </>
                 )}
                 {student.term && (
                   <>
                     <span>•</span>
-                    <span>الفصل: <strong className="text-slate-700 dark:text-slate-200">{student.term}</strong></span>
+                    <span>{tr('الفصل:', 'Term:')} <strong className="text-slate-700 dark:text-slate-200">{translateTerm(student.term, lang)}</strong></span>
                   </>
                 )}
                 {student.academicYear && (
                   <>
                     <span>•</span>
-                    <span>السنة الدراسية: <strong className="text-slate-700 dark:text-slate-200">{student.academicYear}</strong></span>
+                    <span>{tr('السنة الدراسية:', 'Year:')} <strong className="text-slate-700 dark:text-slate-200">{student.academicYear}</strong></span>
                   </>
                 )}
                 {student.group && (
                   <>
                     <span>•</span>
-                    <span>المجموعة: <strong className="text-slate-700 dark:text-slate-200">{student.group}</strong></span>
+                    <span>{tr('المجموعة:', 'Group:')} <strong className="text-slate-700 dark:text-slate-200">{student.group}</strong></span>
                   </>
                 )}
                 <span>•</span>
-                <span>المادة: <strong className="text-slate-700 dark:text-slate-200">{student.subject}</strong></span>
+                <span>{tr('المادة:', 'Subject:')} <strong className="text-slate-700 dark:text-slate-200">{translateSubject(student.subject, lang)}</strong></span>
                 {student.school && (
                   <>
                     <span>•</span>
-                    <span>المدرسة: <strong className="text-slate-700 dark:text-slate-200">{student.school}</strong></span>
+                    <span>{tr('المدرسة:', 'School:')} <strong className="text-slate-700 dark:text-slate-200">{student.school}</strong></span>
                   </>
                 )}
               </p>
@@ -405,41 +422,38 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
           {/* Contact Details */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 dark:bg-slate-800/80 p-3.5 rounded-xl border border-slate-100 dark:border-slate-700/80 w-full md:w-auto">
             <div>
-              <span className="text-slate-400 dark:text-slate-500 block mb-0.5">هاتف الطالب:</span>
+              <span className="text-slate-400 dark:text-slate-500 block mb-0.5">{tr('هاتف الطالب:', 'Student Phone:')}</span>
               <span className="font-mono font-bold text-slate-800 dark:text-slate-100" dir="ltr">
-                {student.phone || 'غير مسجل'}
+                {student.phone || tr('غير مسجل', 'Not registered')}
               </span>
             </div>
             <div>
-              <span className="text-slate-400 dark:text-slate-500 block mb-0.5">هاتف ولي الأمر:</span>
+              <span className="text-slate-400 dark:text-slate-500 block mb-0.5">{tr('هاتف ولي الأمر:', 'Parent Phone:')}</span>
               <span className="font-mono font-bold text-slate-800 dark:text-slate-100" dir="ltr">
-                {student.parentPhone || 'غير مسجل'}
+                {student.parentPhone || tr('غير مسجل', 'Not registered')}
               </span>
             </div>
             {student.email && (
               <div className="sm:col-span-2">
-                <span className="text-slate-400 dark:text-slate-500 block mb-0.5">البريد الإلكتروني:</span>
+                <span className="text-slate-400 dark:text-slate-500 block mb-0.5">{tr('البريد الإلكتروني:', 'Email:')}</span>
                 <span className="font-mono text-slate-700 dark:text-slate-200" dir="ltr">
                   {student.email}
                 </span>
               </div>
             )}
             <div className="sm:col-span-2 text-[11px] text-slate-400 dark:text-slate-500">
-              تاريخ الإضافة: {student.createdAt ? new Date(student.createdAt).toLocaleDateString('ar-EG') : '-'}
+              {tr('تاريخ الإضافة:', 'Added On:')} {student.createdAt ? new Date(student.createdAt).toLocaleDateString(lang === 'en' ? 'en-US' : 'ar-EG') : '-'}
             </div>
           </div>
         </div>
 
         {student.notes && (
           <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 bg-amber-50/40 dark:bg-amber-950/30 p-3 rounded-xl border border-amber-100 dark:border-amber-800/60">
-            <strong className="text-amber-900 dark:text-amber-300 block mb-1">ملاحظات المدرس الخاصة:</strong>
+            <strong className="text-amber-900 dark:text-amber-300 block mb-1">{tr('ملاحظات المدرس الخاصة:', 'Private Teacher Notes:')}</strong>
             <p>{student.notes}</p>
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════════════════════════════
-            أداة تحديد حالة ملف الطالب في الكورس (فعال / انتهى الكورس / متوقف / منقطع)
-            ═══════════════════════════════════════════════════════════════════ */}
         <div className="mt-5 pt-4 border-t border-slate-200/80 dark:border-slate-800">
           <div className="bg-slate-50/90 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-700/80 space-y-3.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -449,10 +463,10 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                 </div>
                 <div>
                   <h3 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
-                    أداة تحديد حالة ملف الطالب في الكورس
+                    {tr('أداة تحديد حالة ملف الطالب في الكورس', 'Student Course Enrollment Status')}
                   </h3>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    حدد ما إذا كان ملف الطالب فعالاً ومستمراً، أو انتهى الكورس له، أو متوقفاً/منقطعاً
+                    {tr('حدد ما إذا كان ملف الطالب فعالاً ومستمراً، أو انتهى الكورس له، أو متوقفاً/منقطعاً', 'Set whether the student file is active, course completed, paused, or withdrawn')}
                   </p>
                 </div>
               </div>
@@ -474,14 +488,14 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                     key={stOpt.id}
                     type="button"
                     onClick={() => handleSelectEnrollmentStatus(stOpt.id)}
-                    className={`p-3 rounded-xl border text-right transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                    className={`p-3 rounded-xl border text-start transition-all cursor-pointer flex flex-col justify-between gap-1 ${
                       isSelected
                         ? stOpt.activeBtnClass
                         : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-amber-400'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-1">
-                      <span className="font-extrabold text-xs">{stOpt.shortLabel}</span>
+                      <span className="font-extrabold text-xs">{lang === 'en' ? stOpt.shortLabelEn : stOpt.shortLabel}</span>
                       {isSelected ? (
                         <Check className="w-4 h-4 shrink-0" />
                       ) : (
@@ -493,20 +507,20 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                         isSelected ? 'opacity-90' : 'text-slate-400 dark:text-slate-500'
                       }`}
                     >
-                      {stOpt.description}
+                      {lang === 'en' ? stOpt.descriptionEn : stOpt.description}
                     </span>
                   </button>
                 );
               })}
             </div>
 
-            {/* Optional Note for Status (e.g., Course Completion Date or Withdrawal Reason) */}
+            {/* Optional Note for Status */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
               <input
                 type="text"
                 value={enrollmentNote}
                 onChange={(e) => setEnrollmentNote(e.target.value)}
-                placeholder="ملاحظة عن حالة الكورس (مثال: أتم كورس الفصل الأول بنجاح / تاريخ انتهاء الكورس / سبب التوقف...)"
+                placeholder={tr('ملاحظة عن حالة الكورس (مثال: أتم كورس الفصل الأول بنجاح / تاريخ انتهاء الكورس / سبب التوقف...)', 'Status note (e.g. Completed Term 1 / end date / reason...)')}
                 className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-hidden focus:border-amber-500"
               />
               <button
@@ -514,77 +528,71 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                 onClick={handleSaveEnrollmentNote}
                 className="px-4 py-2 bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold text-xs rounded-xl hover:opacity-90 transition cursor-pointer shrink-0"
               >
-                حفظ ملاحظة الحالة
+                {tr('حفظ ملاحظة الحالة', 'Save Status Note')}
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Student Statistics Cards (إحصائيات الطالب) */}
+      {/* Student Statistics Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {/* Total Exams */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
-          <span className="text-xs text-slate-500 block mb-1">الامتحانات المسجلة</span>
-          <span className="text-2xl font-black text-slate-900 font-mono">{stats.totalExams}</span>
-          <span className="text-[11px] text-slate-400 block mt-0.5">امتحان مكتمل</span>
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+          <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">{tr('الامتحانات المسجلة', 'Recorded Exams')}</span>
+          <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">{stats.totalExams}</span>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5">{tr('امتحان مكتمل', 'Completed')}</span>
         </div>
 
-        {/* Average Percentage */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-xs">
-          <span className="text-xs text-slate-500 block mb-1">متوسط الدرجات</span>
-          <span className="text-2xl font-black text-indigo-600 font-mono">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+          <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">{tr('متوسط الدرجات', 'Average Score')}</span>
+          <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
             {stats.averagePercentage}%
           </span>
-          <span className="text-[11px] text-slate-400 block mt-0.5">
-            معدل {stats.averageScore} درجات
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5">
+            {tr(`معدل ${stats.averageScore} درجات`, `Avg ${stats.averageScore} pts`)}
           </span>
         </div>
 
-        {/* Highest Score */}
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">أعلى درجة</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">{tr('أعلى درجة', 'Highest Score')}</span>
           <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
             {stats.highestPercentage}%
           </span>
           <span className="text-[11px] text-emerald-700/70 dark:text-emerald-400/80 block mt-0.5 font-mono">
-            ({stats.highestScore} درجة)
+            ({stats.highestScore} {tr('درجة', 'pts')})
           </span>
         </div>
 
-        {/* Lowest Score */}
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">أقل درجة</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">{tr('أقل درجة', 'Lowest Score')}</span>
           <span className="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">
             {stats.lowestPercentage}%
           </span>
           <span className="text-[11px] text-rose-700/70 dark:text-rose-400/80 block mt-0.5 font-mono">
-            ({stats.lowestScore} درجة)
+            ({stats.lowestScore} {tr('درجة', 'pts')})
           </span>
         </div>
 
-        {/* Latest Result */}
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">آخر نتيجة</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">{tr('آخر نتيجة', 'Latest Result')}</span>
           <span className="text-2xl font-black text-sky-600 dark:text-sky-400 font-mono">
             {stats.latestPercentage !== null ? `${stats.latestPercentage}%` : '-'}
           </span>
           <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5 truncate" title={stats.latestExamTitle || ''}>
-            {stats.latestExamTitle || 'لا يوجد'}
+            {stats.latestExamTitle || tr('لا يوجد', 'None')}
           </span>
         </div>
 
-        {/* Pass Rate */}
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">نسبة النجاح</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">{tr('نسبة النجاح', 'Pass Rate')}</span>
           <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400 font-mono">
             {stats.passRate}%
           </span>
-          <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5">في جميع الامتحانات</span>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5">{tr('في جميع الامتحانات', 'Across all exams')}</span>
         </div>
       </div>
 
-      {/* Student Level Analysis & Progress Chart (تحليل مستوى الطالب) */}
+      {/* Student Level Analysis & Progress Chart */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200/80 dark:border-slate-800">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
@@ -600,8 +608,8 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
               {stats.trend === 'steady' && <Minus className="w-5 h-5" />}
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 dark:text-white text-base">تحليل مستوى الطالب ومسار التطور</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">متابعة درجات الطالب عبر الوقت وتحديد مؤشر التحسن</p>
+              <h3 className="font-bold text-slate-900 dark:text-white text-base">{tr('تحليل مستوى الطالب ومسار التطور', 'Student Level & Progress Analysis')}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{tr('متابعة درجات الطالب عبر الوقت وتحديد مؤشر التحسن', 'Track scores over time and monitor improvement trajectory')}</p>
             </div>
           </div>
 
@@ -609,10 +617,10 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
             {(stats.improvementsCount ?? 0) > 0 && (
               <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 inline-flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                {stats.improvementsCount} تحسين درجات
+                {stats.improvementsCount} {tr('تحسين درجات', 'Improvements')}
               </span>
             )}
-            <span className="text-xs text-slate-400">حالة المسار:</span>
+            <span className="text-xs text-slate-400">{tr('حالة المسار:', 'Trend:')}</span>
             <span className={`px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1.5 ${
               stats.trend === 'improving'
                 ? 'bg-emerald-100 text-emerald-800'
@@ -620,9 +628,9 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                 ? 'bg-rose-100 text-rose-800'
                 : 'bg-slate-100 text-slate-800'
             }`}>
-              {stats.trend === 'improving' && '📈 في تحسن مستمر'}
-              {stats.trend === 'declining' && '📉 يتراجع ويحتاج متابعة'}
-              {stats.trend === 'steady' && '📊 مستوى ثابت'}
+              {stats.trend === 'improving' && tr('📈 في تحسن مستمر', '📈 Improving Steadily')}
+              {stats.trend === 'declining' && tr('📉 يتراجع ويحتاج متابعة', '📉 Declining (Needs Follow-up)')}
+              {stats.trend === 'steady' && tr('📊 مستوى ثابت', '📊 Steady Performance')}
             </span>
           </div>
         </div>
@@ -637,36 +645,36 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
         }`}>
           <Sparkles className="w-5 h-5 shrink-0 mt-0.5 text-indigo-600" />
           <div>
-            <span className="font-bold block mb-0.5">التقييم التحليلي لـ Mr. Mohamed Hesham:</span>
+            <span className="font-bold block mb-0.5">{tr('التقييم التحليلي لـ Mr. Mohamed Hesham:', "Mr. Mohamed Hesham's Analytical Assessment:")}</span>
             <p className="leading-relaxed">{stats.trendMessage}</p>
           </div>
         </div>
 
-        {/* Interactive Responsive Score Progression Visual Chart with Shape Switcher */}
+        {/* Interactive Responsive Score Progression Visual Chart */}
         <div className="mt-6">
           {timelineResults.length === 0 ? (
             <div className="py-12 text-center text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 text-xs">
-              لم يتم رصد نتائج امتحانات لهذا الطالب حتى الآن لعرض الرسم البياني.
+              {tr('لم يتم رصد نتائج امتحانات لهذا الطالب حتى الآن لعرض الرسم البياني.', 'No exam results recorded for this student yet to display chart.')}
             </div>
           ) : (
             <DynamicGradesChart
               data={timelineChartData}
               mode="percentage"
               storageKey="mh_profile_chart_type_v1"
-              title="رسم بياني لتطور نتائج الامتحانات عبر الزمن"
-              subtitle="اختر الشكل البياني المفضل (أعمدة، دائري، منحنى مساحي، خطي، أفقي، أو شبكي)"
+              title={tr('رسم بياني لتطور نتائج الامتحانات عبر الزمن', 'Exam Score Progression Over Time')}
+              subtitle={tr('اختر الشكل البياني المفضل (أعمدة، دائري، منحنى مساحي، خطي، أفقي، أو شبكي)', 'Choose your preferred chart type (bar, pie, area, line, horizontal, or radar)')}
               height={270}
             />
           )}
         </div>
       </div>
 
-      {/* Exam History Table (سجل الامتحانات) */}
+      {/* Exam History Table */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200/80 dark:border-slate-800">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
           <div>
-            <h3 className="font-bold text-slate-900 dark:text-white text-base">سجل الامتحانات والنتائج التفصيلي</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">جميع الامتحانات التي شارك بها الطالب مع إمكانية تعديل أو حذف أي نتيجة</p>
+            <h3 className="font-bold text-slate-900 dark:text-white text-base">{tr('سجل الامتحانات والنتائج التفصيلي', 'Detailed Exam & Results History')}</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{tr('جميع الامتحانات التي شارك بها الطالب مع إمكانية تعديل أو حذف أي نتيجة', 'All exams taken by this student with edit and delete options')}</p>
           </div>
 
           <div className="w-full sm:w-auto" ref={examDropdownRef}>
@@ -682,10 +690,10 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
               }}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-xl transition-all cursor-pointer border border-indigo-200 dark:border-indigo-800 shadow-xs active:scale-98"
               aria-expanded={isExamDropdownOpen}
-              title="اختيار الامتحان المطلوب رصد درجاته لهذا الطالب"
+              title={tr('اختيار الامتحان المطلوب رصد درجاته لهذا الطالب', 'Choose an exam to record a score for this student')}
             >
               <Plus className="w-4 h-4" />
-              <span>رصد نتيجة امتحان جديد لهذا الطالب</span>
+              <span>{tr('رصد نتيجة امتحان جديد لهذا الطالب', 'Record New Exam Score')}</span>
               <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExamDropdownOpen ? 'rotate-180 text-indigo-900 dark:text-indigo-100' : ''}`} />
             </button>
 
@@ -699,7 +707,8 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
               >
                 <div 
                   id="exam-select-dropdown-menu"
-                  className="w-full sm:max-w-lg bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[80vh] text-right animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200"
+                  dir={dir}
+                  className="w-full sm:max-w-lg bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[80vh] text-start animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200"
                 >
                   {/* Mobile Grab Handle */}
                   <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 sm:hidden shrink-0" />
@@ -712,22 +721,22 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                       </div>
                       <div>
                         <h4 className="font-black text-sm text-slate-900 dark:text-slate-100">
-                          اختر الامتحان المطلوب رصده
+                          {tr('اختر الامتحان المطلوب رصده', 'Select Exam to Record Score')}
                         </h4>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {student.name} • {student.grade}
+                          {student.name} • {translateGrade(student.grade, lang)}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/90 text-indigo-700 dark:text-indigo-300 font-mono">
-                        {exams.length} امتحان
+                        {exams.length} {tr('امتحان', 'exams')}
                       </span>
                       <button
                         type="button"
                         onClick={() => setIsExamDropdownOpen(false)}
                         className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
-                        title="إغلاق"
+                        title={tr('إغلاق', 'Close')}
                       >
                         <X className="w-5 h-5" />
                       </button>
@@ -746,7 +755,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                             : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                         }`}
                       >
-                        صف الطالب ({student.grade})
+                        {tr('صف الطالب', 'Student Grade')} ({translateGrade(student.grade, lang)})
                       </button>
                       <button
                         type="button"
@@ -757,7 +766,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                             : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                         }`}
                       >
-                        جميع الصفوف ({exams.length})
+                        {tr('جميع الصفوف', 'All Grades')} ({exams.length})
                       </button>
                     </div>
                   )}
@@ -769,15 +778,15 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                         type="text"
                         value={examSearchQuery}
                         onChange={(e) => setExamSearchQuery(e.target.value)}
-                        placeholder="ابحث عن امتحان بالاسم أو المادة..."
-                        className="w-full pr-9 pl-7 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-hidden focus:border-indigo-500"
+                        placeholder={tr('ابحث عن امتحان بالاسم أو المادة...', 'Search exams by title or subject...')}
+                        className="w-full ps-9 pe-7 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-hidden focus:border-indigo-500"
                       />
-                      <Search className="w-4 h-4 text-slate-400 absolute right-5 top-4 pointer-events-none" />
+                      <Search className="w-4 h-4 text-slate-400 absolute start-5 top-4 pointer-events-none" />
                       {examSearchQuery && (
                         <button
                           type="button"
                           onClick={() => setExamSearchQuery('')}
-                          className="absolute left-5 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5"
+                          className="absolute end-5 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -792,11 +801,11 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                         {exams.length === 0 ? (
                           <>
                             <AlertCircle className="w-6 h-6 text-amber-500 mx-auto mb-2" />
-                            <p className="font-bold text-slate-700 dark:text-slate-300">لا توجد امتحانات مسجلة حتى الآن</p>
-                            <p className="text-[11px] mt-0.5">يرجى إضافة امتحان أولاً من قسم الامتحانات</p>
+                            <p className="font-bold text-slate-700 dark:text-slate-300">{tr('لا توجد امتحانات مسجلة حتى الآن', 'No exams recorded yet')}</p>
+                            <p className="text-[11px] mt-0.5">{tr('يرجى إضافة امتحان أولاً من قسم الامتحانات', 'Please add an exam first in the Exams tab')}</p>
                           </>
                         ) : (
-                          <p>لا توجد امتحانات مطابقة لـ "{examSearchQuery}"</p>
+                          <p>{tr(`لا توجد امتحانات مطابقة لـ "${examSearchQuery}"`, `No exams matching "${examSearchQuery}"`)}</p>
                         )}
                       </div>
                     ) : (
@@ -813,7 +822,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                               setIsExamDropdownOpen(false);
                               onAddScoreForStudent(student, exam);
                             }}
-                            className="w-full p-3 rounded-xl text-right hover:bg-indigo-50/80 dark:hover:bg-indigo-950/40 transition-colors flex items-start justify-between gap-3 group cursor-pointer"
+                            className="w-full p-3 rounded-xl text-start hover:bg-indigo-50/80 dark:hover:bg-indigo-950/40 transition-colors flex items-start justify-between gap-3 group cursor-pointer"
                           >
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
@@ -822,33 +831,33 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                                 </span>
                                 {exam.grade && (
                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                                    {exam.grade}
+                                    {translateGrade(exam.grade, lang)}
                                   </span>
                                 )}
                               </div>
                               <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
-                                <span>{exam.subject}</span>
+                                <span>{translateSubject(exam.subject, lang)}</span>
                                 <span>•</span>
                                 <span className="font-mono">{exam.date}</span>
                                 <span>•</span>
-                                <span className="font-mono font-semibold">من {exam.totalScore}</span>
+                                <span className="font-mono font-semibold">{tr('من', 'Out of')} {exam.totalScore}</span>
                               </div>
                             </div>
 
-                            <div className="shrink-0 text-left pt-0.5">
+                            <div className="shrink-0 text-end pt-0.5">
                               {hasResults ? (
                                 <div className="flex flex-col items-end gap-0.5">
                                   <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                                     <Sparkles className="w-2.5 h-2.5" />
-                                    تحسين ({latestRes?.score}/{exam.totalScore})
+                                    {tr('تحسين', 'Retake')} ({latestRes?.score}/{exam.totalScore})
                                   </span>
                                   <span className="text-[9px] text-slate-400 font-medium">
-                                    {studentExamResults.length} {studentExamResults.length === 1 ? 'محاولة' : 'محاولات'}
+                                    {studentExamResults.length} {studentExamResults.length === 1 ? tr('محاولة', 'attempt') : tr('محاولات', 'attempts')}
                                   </span>
                                 </div>
                               ) : (
                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                  لم يُرصد بعد
+                                  {tr('لم يُرصد بعد', 'Not recorded')}
                                 </span>
                               )}
                             </div>
@@ -860,13 +869,13 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
 
                   {/* Footer hint */}
                   <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 shrink-0">
-                    <span>اضغط على أي امتحان لفتح نافذة الرصد مباشرة</span>
+                    <span>{tr('اضغط على أي امتحان لفتح نافذة الرصد مباشرة', 'Click any exam to open score entry directly')}</span>
                     <button
                       type="button"
                       onClick={() => setIsExamDropdownOpen(false)}
                       className="px-3 py-1 rounded-lg bg-slate-200/70 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors font-medium text-xs cursor-pointer"
                     >
-                      إغلاق
+                      {tr('إغلاق', 'Close')}
                     </button>
                   </div>
                 </div>
@@ -876,26 +885,26 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
         </div>
 
         <div className="mt-4 overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
-          <table className="w-full text-right text-xs">
+          <table className="w-full text-start text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
               <tr>
-                <th className="py-3 px-3.5">اسم الامتحان</th>
-                <th className="py-3 px-3.5">التاريخ</th>
-                <th className="py-3 px-3.5 text-center">الدرجة</th>
-                <th className="py-3 px-3.5 text-center">الدرجة الكلية</th>
-                <th className="py-3 px-3.5 text-center">النسبة %</th>
-                <th className="py-3 px-3.5 text-center">التقدير</th>
-                <th className="py-3 px-3.5 text-center">الحالة</th>
-                <th className="py-3 px-3 text-center">مرفق / إثبات</th>
-                <th className="py-3 px-3.5">ملاحظات المدرس</th>
-                <th className="py-3 px-3.5 text-center">إجراءات</th>
+                <th className="py-3 px-3.5">{tr('اسم الامتحان', 'Exam Title')}</th>
+                <th className="py-3 px-3.5">{tr('التاريخ', 'Date')}</th>
+                <th className="py-3 px-3.5 text-center">{tr('الدرجة', 'Score')}</th>
+                <th className="py-3 px-3.5 text-center">{tr('الدرجة الكلية', 'Max Score')}</th>
+                <th className="py-3 px-3.5 text-center">{tr('النسبة %', 'Percent %')}</th>
+                <th className="py-3 px-3.5 text-center">{tr('التقدير', 'Grade')}</th>
+                <th className="py-3 px-3.5 text-center">{tr('الحالة', 'Status')}</th>
+                <th className="py-3 px-3 text-center">{tr('مرفق / إثبات', 'Proof')}</th>
+                <th className="py-3 px-3.5">{tr('ملاحظات المدرس', 'Teacher Notes')}</th>
+                <th className="py-3 px-3.5 text-center">{tr('إجراءات', 'Actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {results.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-8 text-center text-slate-400 dark:text-slate-500">
-                    لم يتم تسجيل نتائج امتحانات لهذا الطالب بعد. اضغط "رصد نتيجة امتحان جديد" للإضافة.
+                    {tr('لم يتم تسجيل نتائج امتحانات لهذا الطالب بعد. اضغط "رصد نتيجة امتحان جديد" للإضافة.', 'No exam results recorded for this student yet. Click "Record New Exam Score" to add.')}
                   </td>
                 </tr>
               ) : (
@@ -913,11 +922,11 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
                                 <Sparkles className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
-                                {res.attemptLabel || `تحسين (محاولة ${res.attemptNumber})`}
+                                {res.attemptLabel || tr(`تحسين (محاولة ${res.attemptNumber})`, `Retake (Attempt ${res.attemptNumber})`)}
                               </span>
                               {res.previousScore !== undefined && (
                                 <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                                  (السابقة: {res.previousScore})
+                                  ({tr('السابقة:', 'Prev:')} {res.previousScore})
                                 </span>
                               )}
                               {res.previousScore !== undefined && (
@@ -986,11 +995,11 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                         }`}>
                           {res.passed ? (
                             <>
-                              <CheckCircle2 className="w-3.5 h-3.5" /> ناجح
+                              <CheckCircle2 className="w-3.5 h-3.5" /> {tr('ناجح', 'Passed')}
                             </>
                           ) : (
                             <>
-                              <AlertCircle className="w-3.5 h-3.5" /> راسب
+                              <AlertCircle className="w-3.5 h-3.5" /> {tr('راسب', 'Failed')}
                             </>
                           )}
                         </span>
@@ -1002,7 +1011,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                           <AttachmentThumbnail
                             attachment={res.attachment}
                             size="sm"
-                            tooltipPrefix={`امتحان: ${res.examTitle}`}
+                            tooltipPrefix={`${tr('امتحان:', 'Exam:')} ${res.examTitle}`}
                             onClick={() => setActiveAttachmentResult(res)}
                             onAttach={() => setActiveAttachmentResult(res)}
                           />
@@ -1010,17 +1019,17 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                       </td>
 
                       {/* Notes */}
-                      <td className="py-3 px-3.5 text-slate-600">
+                      <td className="py-3 px-3.5 text-slate-600 dark:text-slate-300">
                         {isEditing ? (
                           <input
                             type="text"
                             value={editNotesVal}
                             onChange={(e) => setEditNotesVal(e.target.value)}
-                            placeholder="ملاحظات..."
-                            className="w-full px-2 py-1 border border-slate-300 rounded text-xs text-right"
+                            placeholder={tr('ملاحظات...', 'Notes...')}
+                            className="w-full px-2 py-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded text-xs text-start"
                           />
                         ) : (
-                          res.notes || <span className="text-slate-300">-</span>
+                          res.notes || <span className="text-slate-300 dark:text-slate-600">-</span>
                         )}
                       </td>
 
@@ -1033,13 +1042,13 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                                 onClick={() => handleSaveEdit(res)}
                                 className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold cursor-pointer"
                               >
-                                حفظ
+                                {tr('حفظ', 'Save')}
                               </button>
                               <button
                                 onClick={() => setEditingResultId(null)}
                                 className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[11px] cursor-pointer"
                               >
-                                إلغاء
+                                {tr('إلغاء', 'Cancel')}
                               </button>
                             </>
                           ) : (
@@ -1050,22 +1059,22 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                                   onAddScoreForStudent(student, examObj);
                                 }}
                                 className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 rounded-lg border border-amber-200 transition cursor-pointer"
-                                title="إضافة محاولة تحسين جديدة لهذا الامتحان"
+                                title={tr('إضافة محاولة تحسين جديدة لهذا الامتحان', 'Add new retake attempt for this exam')}
                               >
                                 <Plus className="w-3 h-3" />
-                                تحسين
+                                {tr('تحسين', 'Retake')}
                               </button>
                               <button
                                 onClick={() => handleStartEdit(res)}
                                 className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
-                                title="تعديل النتيجة"
+                                title={tr('تعديل النتيجة', 'Edit score')}
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => setPendingDeleteResult(res)}
                                 className="p-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                                title="حذف النتيجة"
+                                title={tr('حذف النتيجة', 'Delete score')}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -1082,16 +1091,16 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
         </div>
       </div>
 
-      {/* Student Structures (قسم الهياكل) Progress Section */}
+      {/* Student Structures Progress Section */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
           <div>
             <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
               <Layers className="w-5 h-5 text-amber-500" />
-              <span>سجل الطالب في قسم الهياكل ونسب صحة كل سؤال ({structureProgress.length})</span>
+              <span>{tr(`سجل الطالب في قسم الهياكل ونسب صحة كل سؤال (${structureProgress.length})`, `Student Structures & Per-Question Accuracy (${structureProgress.length})`)}</span>
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              متابعة الهياكل المسجلة للطالب وعدد الأسئلة المحلولة ونسبة صحة كل سؤال
+              {tr('متابعة الهياكل المسجلة للطالب وعدد الأسئلة المحلولة ونسبة صحة كل سؤال', 'Track recorded structures, solved questions, and accuracy per question')}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1111,7 +1120,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition cursor-pointer"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>تصدير تقرير الهياكل (Excel)</span>
+                <span>{tr('تصدير تقرير الهياكل (Excel)', 'Export Structures Report (Excel)')}</span>
               </button>
             )}
             {onOpenStructures && (
@@ -1121,7 +1130,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-800 rounded-xl transition cursor-pointer"
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>إدارة ورصد في قسم الهياكل</span>
+                <span>{tr('إدارة ورصد في قسم الهياكل', 'Manage in Structures Section')}</span>
               </button>
             )}
           </div>
@@ -1129,27 +1138,27 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
 
         {structureProgress.length === 0 ? (
           <div className="py-6 text-center text-xs text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-            لا توجد هياكل مرصودة لهذا الطالب حتى الآن.
+            {tr('لا توجد هياكل مرصودة لهذا الطالب حتى الآن.', 'No structures recorded for this student yet.')}
           </div>
         ) : (
           <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
-            <table className="w-full text-right text-xs">
+            <table className="w-full text-start text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="py-2.5 px-3">الهيكل والمحاولة</th>
-                  <th className="py-2.5 px-3">الصف / الفصل / المسار / السنة / المادة</th>
-                  <th className="py-2.5 px-3 text-center">الأسئلة المحلولة</th>
-                  <th className="py-2.5 px-3 text-center">متوسط الصحة %</th>
-                  <th className="py-2.5 px-3">نسبة صحة كل سؤال</th>
+                  <th className="py-2.5 px-3">{tr('الهيكل والمحاولة', 'Structure & Attempt')}</th>
+                  <th className="py-2.5 px-3">{tr('الصف / الفصل / المسار / السنة / المادة', 'Grade / Term / Track / Year / Subject')}</th>
+                  <th className="py-2.5 px-3 text-center">{tr('الأسئلة المحلولة', 'Solved Questions')}</th>
+                  <th className="py-2.5 px-3 text-center">{tr('متوسط الصحة %', 'Avg Accuracy %')}</th>
+                  <th className="py-2.5 px-3">{tr('نسبة صحة كل سؤال', 'Per-Question Accuracy')}</th>
                   {onSaveStructureProgress && (
-                    <th className="py-2.5 px-3 text-center">التحسين والإجراءات</th>
+                    <th className="py-2.5 px-3 text-center">{tr('التحسين والإجراءات', 'Actions & Retake')}</th>
                   )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {[...structureProgress]
                   .sort((a, b) => {
-                    const cmp = a.structureTitle.localeCompare(b.structureTitle, 'ar');
+                    const cmp = a.structureTitle.localeCompare(b.structureTitle, lang === 'en' ? 'en' : 'ar');
                     if (cmp !== 0) return cmp;
                     return (a.attemptNumber || 1) - (b.attemptNumber || 1);
                   })
@@ -1202,7 +1211,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                       <tr
                         key={rec.id}
                         className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/40 ${
-                          isImp ? 'bg-amber-50/40 dark:bg-amber-950/20 border-r-4 border-r-amber-500' : ''
+                          isImp ? 'bg-amber-50/40 dark:bg-amber-950/20 border-s-4 border-s-amber-500' : ''
                         }`}
                       >
                         <td className="py-2.5 px-3 font-extrabold text-slate-900 dark:text-white">
@@ -1212,12 +1221,12 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                               {isImp && (
                                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
                                   <Sparkles className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
-                                  {rec.attemptLabel || `تحسين (محاولة ${rec.attemptNumber || 2})`}
+                                  {rec.attemptLabel || tr(`تحسين (محاولة ${rec.attemptNumber || 2})`, `Retake (Attempt ${rec.attemptNumber || 2})`)}
                                 </span>
                               )}
                               {prevAcc !== undefined && (
                                 <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                                  (السابقة: {prevAcc}%)
+                                  ({tr('السابقة:', 'Prev:')} {prevAcc}%)
                                 </span>
                               )}
                               {accDiff !== null && (
@@ -1236,14 +1245,14 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                               {qImpCount > 0 && (
                                 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                                   <Sparkles className="w-2.5 h-2.5" />
-                                  {qImpCount} سؤال محسّن
+                                  {qImpCount} {tr('سؤال محسّن', 'improved')}
                                 </span>
                               )}
                             </div>
                           </div>
                         </td>
                         <td className="py-2.5 px-3 text-[11px] text-slate-600 dark:text-slate-300">
-                          {rec.grade} • {rec.term} • {rec.track} • {rec.academicYear} • {rec.subject}
+                          {translateGrade(rec.grade, lang)} • {translateTerm(rec.term, lang)} • {translateTrack(rec.track, lang)} • {rec.academicYear} • {translateSubject(rec.subject, lang)}
                         </td>
                         <td className="py-2.5 px-3 text-center font-mono tabular-nums font-bold text-slate-900 dark:text-white">
                           {rec.solvedCount} / {rec.totalQuestions} ({rec.completionPercentage}%)
@@ -1273,11 +1282,11 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                                   }`}
                                   title={
                                     isQImp && qs.previousAccuracy !== undefined
-                                      ? `سؤال ${qs.questionNumber}: ${qs.accuracyPercentage}% (تحسين من ${qs.previousAccuracy}% • محاولة ${qs.attemptNumber || 2})`
-                                      : `سؤال ${qs.questionNumber}: ${qs.solved ? `${qs.accuracyPercentage}%` : 'لم يُحل'}`
+                                      ? `${tr('سؤال', 'Q')} ${qs.questionNumber}: ${qs.accuracyPercentage}% (${tr('تحسين من', 'improved from')} ${qs.previousAccuracy}% • ${tr('محاولة', 'attempt')} ${qs.attemptNumber || 2})`
+                                      : `${tr('سؤال', 'Q')} ${qs.questionNumber}: ${qs.solved ? `${qs.accuracyPercentage}%` : tr('لم يُحل', 'Unsolved')}`
                                   }
                                 >
-                                  س{qs.questionNumber}:{qs.solved ? `${qs.accuracyPercentage}%${isQImp ? '↑' : ''}` : '—'}
+                                  {tr('س', 'Q')}{qs.questionNumber}:{qs.solved ? `${qs.accuracyPercentage}%${isQImp ? '↑' : ''}` : '—'}
                                 </span>
                               );
                             })}
@@ -1299,10 +1308,10 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                                   })
                                 }
                                 className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 rounded-lg border border-amber-200 transition cursor-pointer"
-                                title="إضافة محاولة تحسين جديدة لهذا الهيكل"
+                                title={tr('إضافة محاولة تحسين جديدة لهذا الهيكل', 'Add new improvement attempt for this structure')}
                               >
                                 <Plus className="w-3 h-3" />
-                                تحسين
+                                {tr('تحسين', 'Retake')}
                               </button>
                               <button
                                 type="button"
@@ -1317,7 +1326,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                                   })
                                 }
                                 className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
-                                title="تعديل / تحسين أسئلة هذا السجل"
+                                title={tr('تعديل / تحسين أسئلة هذا السجل', 'Edit / improve questions in this record')}
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
@@ -1326,7 +1335,7 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
                                   type="button"
                                   onClick={() => onDeleteStructureProgress(rec)}
                                   className="p-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                                  title="حذف السجل"
+                                  title={tr('حذف السجل', 'Delete record')}
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -1356,8 +1365,8 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
       {activeAttachmentResult && (
         <AttachmentModal
           isOpen={!!activeAttachmentResult}
-          title="إثبات ومرفق مصداقية الامتحان"
-          subtitle={`طالب: ${student.name} | امتحان: ${activeAttachmentResult.examTitle} | الدرجة: ${activeAttachmentResult.score} من ${activeAttachmentResult.totalScore}`}
+          title={tr('إثبات ومرفق مصداقية الامتحان', 'Exam Verification Attachment')}
+          subtitle={`${tr('طالب:', 'Student:')} ${student.name} | ${tr('امتحان:', 'Exam:')} ${activeAttachmentResult.examTitle} | ${tr('الدرجة:', 'Score:')} ${activeAttachmentResult.score} / ${activeAttachmentResult.totalScore}`}
           attachment={activeAttachmentResult.attachment || null}
           onSave={async (attachment) => {
             if (onUpdateResultAttachment) {
@@ -1410,14 +1419,17 @@ export const StudentProfileView: React.FC<StudentProfileViewProps> = ({
       <ConfirmModal
         isOpen={!!pendingDeleteResult}
         zIndexClass="z-[70]"
-        title="حذف نتيجة الامتحان"
+        title={tr('حذف نتيجة الامتحان', 'Delete Exam Result')}
         message={
           pendingDeleteResult
-            ? `هل أنت متأكد من حذف نتيجة امتحان "${pendingDeleteResult.examTitle}" (${pendingDeleteResult.score}/${pendingDeleteResult.totalScore}) للطالب "${student.name}" نهائياً؟`
+            ? tr(
+                `هل أنت متأكد من حذف نتيجة امتحان "${pendingDeleteResult.examTitle}" (${pendingDeleteResult.score}/${pendingDeleteResult.totalScore}) للطالب "${student.name}" نهائياً؟`,
+                `Are you sure you want to permanently delete exam result "${pendingDeleteResult.examTitle}" (${pendingDeleteResult.score}/${pendingDeleteResult.totalScore}) for "${student.name}"?`
+              )
             : ''
         }
-        confirmText="تأكيد الحذف"
-        cancelText="تراجع"
+        confirmText={tr('تأكيد الحذف', 'Confirm Delete')}
+        cancelText={tr('تراجع', 'Cancel')}
         isDestructive={true}
         onConfirm={async () => {
           if (pendingDeleteResult) {

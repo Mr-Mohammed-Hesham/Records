@@ -28,6 +28,7 @@ import { getEffectiveEnrollmentStatus, ENROLLMENT_STATUS_META } from '../utils/s
 import { DynamicGradesChart } from './DynamicGradesChart';
 import { AttachmentModal } from './AttachmentModal';
 import { AttachmentThumbnail } from './AttachmentThumbnail';
+import { useLanguage, translateGrade, translateSubject } from '../utils/i18n';
 
 interface StudentAcademicReportModalProps {
   student: Student;
@@ -46,6 +47,7 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
   structureProgress = [],
   onClose,
 }) => {
+  const { lang, dir, tr } = useLanguage();
   const printRef = useRef<HTMLDivElement>(null);
   const [inspectAttachmentResult, setInspectAttachmentResult] = useState<ExamResult | null>(null);
   const savedExcelPrefs = getSavedExcelPreferences();
@@ -75,6 +77,14 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
   const stats = calculateStudentStats(results, settings.gradingScale);
   const enrollmentStatus = getEffectiveEnrollmentStatus(student);
   const statusMeta = ENROLLMENT_STATUS_META[enrollmentStatus];
+
+  const formatAcademicStatus = (status: string) => {
+    if (lang === 'ar') return status;
+    if (status === 'ممتاز') return 'Excellent';
+    if (status === 'جيد') return 'Good';
+    if (status === 'يحتاج متابعة') return 'Needs Follow-up';
+    return status;
+  };
 
   // Sorted exam results by date
   const sortedResults = [...results].sort(
@@ -127,8 +137,9 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
     >
       <div
         id="student-academic-report-modal"
+        dir={dir}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-3xl w-full flex flex-col max-h-[92dvh] sm:max-h-[90vh] shadow-2xl border border-slate-200 dark:border-slate-800 text-right overflow-hidden animate-in fade-in zoom-in-95 duration-200 print:shadow-none print:border-none print:max-h-none print:w-full"
+        className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-3xl w-full flex flex-col max-h-[92dvh] sm:max-h-[90vh] shadow-2xl border border-slate-200 dark:border-slate-800 text-start overflow-hidden animate-in fade-in zoom-in-95 duration-200 print:shadow-none print:border-none print:max-h-none print:w-full"
       >
         {/* Modal Header */}
         <div className="shrink-0 p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 print:hidden">
@@ -138,10 +149,10 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
             </div>
             <div>
               <h3 className="font-extrabold text-slate-900 dark:text-white text-base sm:text-lg">
-                التقرير الأكاديمي للطالب
+                {tr('التقرير الأكاديمي للطالب', 'Student Academic Report')}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                سجل الامتحانات ومؤشرات التقدم المعتمدة
+                {tr('سجل الامتحانات ومؤشرات التقدم المعتمدة', 'Approved exam records & progress indicators')}
               </p>
             </div>
           </div>
@@ -165,7 +176,7 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
                   <div className="shrink-0 w-20 h-14 sm:w-24 sm:h-16 rounded-xl overflow-hidden border border-amber-500/40 shadow-md bg-black/40 print:border-black">
                     <img
                       src={`${import.meta.env.BASE_URL}teacher-logo.jpg`}
-                      alt="شعار الهوية"
+                      alt={tr('شعار الهوية', 'Teacher Logo')}
                       className="w-full h-full object-cover"
                       crossOrigin="anonymous"
                       onError={(e) => {
@@ -179,39 +190,39 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
                 )}
                 <div>
                   <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block mb-1">
-                    تقرير الأداء الأكاديمي
+                    {tr('تقرير الأداء الأكاديمي', 'Academic Performance Report')}
                   </span>
                   <h1 className="text-2xl font-black text-white print:text-black">
                     {student.name}
                   </h1>
                   <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-300 print:text-slate-700">
                     <span className="bg-slate-800/80 print:bg-slate-100 px-3 py-1 rounded-lg border border-slate-700 print:border-slate-300 font-bold">
-                      الصف الدراسي: {student.grade}
+                      {tr('الصف الدراسي:', 'Grade:')} {translateGrade(student.grade, lang)}
                     </span>
                     <span className="bg-amber-500/20 text-amber-300 print:bg-slate-100 print:text-black px-3 py-1 rounded-lg border border-amber-500/40 font-bold">
-                      حالة الملف: {statusMeta.label}
+                      {tr('حالة الملف:', 'File Status:')} {lang === 'en' ? statusMeta.labelEn : statusMeta.label}
                     </span>
                     {student.subject && (
                       <span className="bg-slate-800/80 print:bg-slate-100 px-3 py-1 rounded-lg border border-slate-700 print:border-slate-300 font-bold">
-                        المادة: {student.subject}
+                        {tr('المادة:', 'Subject:')} {translateSubject(student.subject, lang)}
                       </span>
                     )}
                     {student.group && (
                       <span className="bg-slate-800/80 print:bg-slate-100 px-3 py-1 rounded-lg border border-slate-700 print:border-slate-300">
-                        الشعبة: {student.group}
+                        {tr('الشعبة:', 'Section:')} {student.group}
                       </span>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div className="text-left sm:text-right shrink-0 border-t sm:border-t-0 sm:border-r border-slate-700/80 sm:pr-5 pt-3 sm:pt-0">
-                <span className="text-[11px] text-slate-400 block">سجلات الأستاذ</span>
+              <div className="text-end sm:text-start shrink-0 border-t sm:border-t-0 sm:border-s border-slate-700/80 sm:ps-5 pt-3 sm:pt-0">
+                <span className="text-[11px] text-slate-400 block">{tr('سجلات الأستاذ', 'Educator Records')}</span>
                 <span className="text-sm font-black text-amber-400 print:text-black">
                   Mr. Mohamed Hesham
                 </span>
                 <span className="text-[10px] text-slate-400 block mt-0.5">
-                  {new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
+                  {new Date().toLocaleDateString(lang === 'en' ? 'en-US' : 'ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
                 </span>
               </div>
             </div>
@@ -221,7 +232,7 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-slate-50 dark:bg-slate-800/80 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 text-center">
               <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-1">
-                عدد الامتحانات
+                {tr('عدد الامتحانات', 'Exams Count')}
               </span>
               <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
                 {stats.totalExams}
@@ -230,7 +241,7 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
 
             <div className="bg-amber-500/10 dark:bg-amber-500/15 p-3.5 rounded-2xl border border-amber-500/20 text-center">
               <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 block mb-1">
-                المتوسط العام
+                {tr('المتوسط العام', 'Overall Average')}
               </span>
               <span className="text-2xl font-black text-amber-600 dark:text-amber-400 font-mono">
                 {stats.averagePercentage}%
@@ -239,7 +250,7 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
 
             <div className="bg-emerald-50 dark:bg-emerald-950/30 p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-800/60 text-center">
               <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 block mb-1">
-                نسبة النجاح
+                {tr('نسبة النجاح', 'Pass Rate')}
               </span>
               <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
                 {stats.passRate}%
@@ -248,10 +259,10 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
 
             <div className="bg-slate-50 dark:bg-slate-800/80 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 text-center">
               <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block mb-1">
-                التقييم العام
+                {tr('التقييم العام', 'Overall Rating')}
               </span>
               <span className="text-base font-black text-slate-900 dark:text-white block mt-1">
-                {stats.status}
+                {formatAcademicStatus(stats.status)}
               </span>
             </div>
           </div>
@@ -260,14 +271,14 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
           <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
             <div className="flex items-center gap-2 mb-1.5 font-bold text-slate-900 dark:text-white text-sm">
               <TrendingUp className="w-4 h-4 text-amber-500" />
-              <span>ملاحظات التقدم ومسار التطور الأكاديمي:</span>
+              <span>{tr('ملاحظات التقدم ومسار التطور الأكاديمي:', 'Academic Progress & Trajectory Notes:')}</span>
             </div>
             <p className="font-medium text-slate-600 dark:text-slate-300">
               {stats.trendMessage}
             </p>
             {student.notes && (
               <p className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
-                <strong className="text-slate-700 dark:text-slate-300">ملاحظات خاصة: </strong>
+                <strong className="text-slate-700 dark:text-slate-300">{tr('ملاحظات خاصة:', 'Private Notes:')} </strong>
                 {student.notes}
               </p>
             )}
@@ -279,8 +290,8 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
               data={chartData}
               mode="percentage"
               storageKey="mh_academic_modal_chart_type_v1"
-              title="الرسم البياني لتطور درجات الطالب وتوزيع التقديرات"
-              subtitle="يمكنك التبديل بين الأعمدة أو الدائرة أو المنحنى أو الشكل الشبكي"
+              title={tr('الرسم البياني لتطور درجات الطالب وتوزيع التقديرات', 'Student Score Progression & Grade Distribution Chart')}
+              subtitle={tr('يمكنك التبديل بين الأعمدة أو الدائرة أو المنحنى أو الشكل الشبكي', 'Switch between bar, pie, area, or radar chart views')}
               height={240}
             />
           )}
@@ -290,27 +301,32 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
             <div className="flex items-center justify-between mb-3">
               <h4 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
                 <Award className="w-4 h-4 text-amber-500" />
-                <span>سجل درجات الامتحانات على حدة ({sortedResults.length} امتحان)</span>
+                <span>
+                  {tr(
+                    `سجل درجات الامتحانات على حدة (${sortedResults.length} امتحان)`,
+                    `Individual Exam Results (${sortedResults.length})`
+                  )}
+                </span>
               </h4>
             </div>
 
             {sortedResults.length === 0 ? (
               <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 text-slate-400 text-xs">
-                لم يتم تسجيل أي درجات امتحانات لهذا الطالب حتى الآن
+                {tr('لم يتم تسجيل أي درجات امتحانات لهذا الطالب حتى الآن', 'No exam scores recorded for this student yet')}
               </div>
             ) : (
               <div className="overflow-x-auto border border-slate-200 dark:border-slate-700/80 rounded-2xl">
-                <table className="w-full text-right text-xs">
+                <table className="w-full text-start text-xs">
                   <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
                     <tr>
-                      <th className="py-3 px-3.5">اسم الامتحان</th>
-                      <th className="py-3 px-3 text-center">التاريخ</th>
-                      <th className="py-3 px-3 text-center">الدرجة</th>
-                      <th className="py-3 px-3 text-center">النسبة</th>
-                      <th className="py-3 px-3 text-center">التقدير</th>
-                      <th className="py-3 px-3 text-center">النتيجة</th>
-                      <th className="py-3 px-3.5">ملاحظات الامتحان</th>
-                      <th className="py-3 px-3 text-center print:hidden">إثبات ومصداقية</th>
+                      <th className="py-3 px-3.5">{tr('اسم الامتحان', 'Exam Title')}</th>
+                      <th className="py-3 px-3 text-center">{tr('التاريخ', 'Date')}</th>
+                      <th className="py-3 px-3 text-center">{tr('الدرجة', 'Score')}</th>
+                      <th className="py-3 px-3 text-center">{tr('النسبة', 'Percentage')}</th>
+                      <th className="py-3 px-3 text-center">{tr('التقدير', 'Grade')}</th>
+                      <th className="py-3 px-3 text-center">{tr('النتيجة', 'Result')}</th>
+                      <th className="py-3 px-3.5">{tr('ملاحظات الامتحان', 'Exam Notes')}</th>
+                      <th className="py-3 px-3 text-center print:hidden">{tr('إثبات ومصداقية', 'Proof')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
@@ -342,7 +358,7 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
                               ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50'
                               : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/50'
                           }`}>
-                            {r.passed ? 'ناجح' : 'راسب'}
+                            {r.passed ? tr('ناجح', 'Passed') : tr('راسب', 'Failed')}
                           </span>
                         </td>
                         <td className="py-3 px-3.5 text-slate-500 dark:text-slate-400 text-[11px]">
@@ -354,7 +370,7 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
                               attachment={r.attachment}
                               size="sm"
                               readOnly={true}
-                              tooltipPrefix={`امتحان: ${r.examTitle}`}
+                              tooltipPrefix={`${tr('امتحان:', 'Exam:')} ${r.examTitle}`}
                               onClick={() => setInspectAttachmentResult(r)}
                             />
                           </div>
@@ -376,7 +392,7 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
               className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-all cursor-pointer shadow-xs"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              تصدير التقرير لـ Excel (مع الرسم البياني)
+              {tr('تصدير التقرير لـ Excel (مع الرسم البياني)', 'Export Excel Report (with Chart)')}
             </button>
 
             {structureProgress.length > 0 && (
@@ -386,7 +402,7 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
                 className="inline-flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-indigo-800 dark:text-indigo-200 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800 rounded-xl transition-all cursor-pointer shadow-xs"
               >
                 <FileSpreadsheet className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                تصدير الهياكل (Excel)
+                {tr('تصدير الهياكل (Excel)', 'Export Structures (Excel)')}
               </button>
             )}
 
@@ -400,10 +416,10 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
                     ? 'bg-emerald-600 text-white'
                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
-                title="مقاس متناسق مع شاشة الهاتف"
+                title={tr('مقاس متناسق مع شاشة الهاتف', 'Compact mobile-friendly layout')}
               >
                 <Smartphone className="w-3 h-3" />
-                <span>وضع الهاتف</span>
+                <span>{tr('وضع الهاتف', 'Mobile')}</span>
               </button>
               <button
                 type="button"
@@ -413,10 +429,10 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
                     ? 'bg-emerald-600 text-white'
                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
-                title="مقاس واسع للكمبيوتر"
+                title={tr('مقاس واسع للكمبيوتر', 'Wide desktop layout')}
               >
                 <Monitor className="w-3 h-3" />
-                <span>كمبيوتر</span>
+                <span>{tr('كمبيوتر', 'Desktop')}</span>
               </button>
               <button
                 type="button"
@@ -426,10 +442,10 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
                     ? 'bg-amber-500 text-slate-950'
                     : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
-                title="تضمين الرسم البياني للدرجات في شيت الإكسيل"
+                title={tr('تضمين الرسم البياني للدرجات في شيت الإكسيل', 'Include grade chart in Excel sheet')}
               >
                 <BarChart3 className="w-3 h-3" />
-                <span>{excelIncludeChart ? 'بالمخطط ✔' : 'بدون مخطط'}</span>
+                <span>{excelIncludeChart ? tr('بالمخطط ✔', 'With Chart ✔') : tr('بدون مخطط', 'No Chart')}</span>
               </button>
             </div>
 
@@ -438,7 +454,7 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
               className="inline-flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition-all cursor-pointer"
             >
               <Printer className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-              طباعة / PDF
+              {tr('طباعة / PDF', 'Print / PDF')}
             </button>
 
             {/* Logo Toggle: Option to add or exclude logo */}
@@ -450,9 +466,9 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
                   ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
                   : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
               }`}
-              title="إمكانية إضافة أو عدم إضافة شعار الهوية (اللوجو) للتقرير المطبوع والمصدر"
+              title={tr('إمكانية إضافة أو عدم إضافة شعار الهوية (اللوجو) للتقرير المطبوع والمصدر', 'Toggle identity logo in printed and exported reports')}
             >
-              <span>{showLogo ? '🖼️ اللوجو مفعّل بالتقرير ✔' : '🖼️ التقرير بدون لوجو'}</span>
+              <span>{showLogo ? tr('🖼️ اللوجو مفعّل بالتقرير ✔', '🖼️ Logo Included ✔') : tr('🖼️ التقرير بدون لوجو', '🖼️ Without Logo')}</span>
             </button>
           </div>
 
@@ -460,7 +476,7 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
             onClick={onClose}
             className="px-5 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
           >
-            إغلاق
+            {tr('إغلاق', 'Close')}
           </button>
         </div>
       </div>
@@ -469,8 +485,8 @@ export const StudentAcademicReportModal: React.FC<StudentAcademicReportModalProp
         <AttachmentModal
           isOpen={!!inspectAttachmentResult}
           readOnly={true}
-          title="معاينة إثبات ومرفق مصداقية الامتحان"
-          subtitle={`طالب: ${student.name} | امتحان: ${inspectAttachmentResult.examTitle} | الدرجة: ${inspectAttachmentResult.score}/${inspectAttachmentResult.totalScore}`}
+          title={tr('معاينة إثبات ومرفق مصداقية الامتحان', 'Preview Exam Verification Attachment')}
+          subtitle={`${tr('طالب:', 'Student:')} ${student.name} | ${tr('امتحان:', 'Exam:')} ${inspectAttachmentResult.examTitle} | ${tr('الدرجة:', 'Score:')} ${inspectAttachmentResult.score}/${inspectAttachmentResult.totalScore}`}
           attachment={inspectAttachmentResult.attachment || null}
           onClose={() => setInspectAttachmentResult(null)}
         />

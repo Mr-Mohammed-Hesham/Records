@@ -21,6 +21,8 @@ import {
   Sparkles,
   Layers,
   Wallet,
+  BellRing,
+  Kanban,
 } from 'lucide-react';
 
 import {
@@ -34,6 +36,8 @@ import {
   StudentStructureProgress,
   OvertimeEntry,
   OvertimeMonthlyConfig,
+  TeacherTask,
+  TeacherNote,
 } from './types';
 
 import {
@@ -81,6 +85,10 @@ import {
   deleteOvertimeEntryPermanently,
   saveOvertimeMonthlyConfig,
   importOvertimeBackupMerge,
+  saveTeacherTask,
+  deleteTeacherTask,
+  saveTeacherNote,
+  deleteTeacherNote,
   seedSampleData,
   clearAllData,
   DEFAULT_SETTINGS,
@@ -107,6 +115,7 @@ import { StructuresView } from './components/StructuresView';
 import { ReportsView } from './components/ReportsView';
 import { SettingsView } from './components/SettingsView';
 import { OvertimeView } from './components/OvertimeView';
+import { TeacherWorkspaceView } from './components/TeacherWorkspaceView';
 import HeshamExamApp from './hesham-exam/App';
 
 /* =========================================================
@@ -119,6 +128,14 @@ import { ScoreEntryModal } from './components/ScoreEntryModal';
 import { QuickSearchModal } from './components/QuickSearchModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { ExcelExportModal } from './components/ExcelExportModal';
+import { SmartAlertsDrawerModal } from './components/SmartAlertsCenter';
+import { StructureReminderModal } from './components/StructureReminderModal';
+import {
+  computeStructureExamAlerts,
+  StructureSmartAlert,
+  isDailyAlertsDismissedToday,
+  setDailyAlertsDismissedToday,
+} from './utils/smartAlerts';
 import { Footer } from './components/Footer';
 
 import {
@@ -132,6 +149,11 @@ import {
   LoginPage,
   OFFICIAL_EMAILS,
 } from './components/LoginPage';
+import {
+  useLanguage,
+  LanguageSwitcher,
+  translateSubject,
+} from './utils/i18n';
 
 /* =========================================================
    TYPES
@@ -147,6 +169,7 @@ type ViewMode =
   | 'scoring'
   | 'reports'
   | 'overtime'
+  | 'workspace'
   | 'settings';
 
 /* =========================================================
@@ -154,6 +177,8 @@ type ViewMode =
    ========================================================= */
 
 export default function App() {
+  const { lang, dir, isRtl, tr } = useLanguage();
+
   /* =======================================================
      NAVIGATION
      ======================================================= */
@@ -201,6 +226,12 @@ export default function App() {
 
   const [overtimeMonthlyConfigs, setOvertimeMonthlyConfigs] =
     useState<OvertimeMonthlyConfig[]>([]);
+
+  const [teacherTasks, setTeacherTasks] =
+    useState<TeacherTask[]>([]);
+
+  const [teacherNotes, setTeacherNotes] =
+    useState<TeacherNote[]>([]);
 
   const [loading, setLoading] =
     useState(true);
@@ -328,6 +359,24 @@ export default function App() {
 
   const [isSearchModalOpen, setIsSearchModalOpen] =
     useState(false);
+
+  const [isAlertsDrawerOpen, setIsAlertsDrawerOpen] =
+    useState(false);
+
+  const [dailyAlertsDismissed, setDailyAlertsDismissed] =
+    useState<boolean>(() => isDailyAlertsDismissedToday());
+
+  const [globalReminderState, setGlobalReminderState] = useState<{
+    isOpen: boolean;
+    structure: ExamStructure | null;
+    studentIds?: string[];
+    audienceLabel?: string;
+    progressMap: Map<string, StudentStructureProgress[]>;
+  }>({
+    isOpen: false,
+    structure: null,
+    progressMap: new Map(),
+  });
 
   /* =======================================================
      CONFIRM MODAL
@@ -512,6 +561,15 @@ export default function App() {
       setConfirmModalConfig((prev) => ({ ...prev, isOpen: false }));
       return true;
     }
+    // 1.5 Smart Alerts / Global Reminder modals
+    if (globalReminderState.isOpen) {
+      setGlobalReminderState((prev) => ({ ...prev, isOpen: false }));
+      return true;
+    }
+    if (isAlertsDrawerOpen) {
+      setIsAlertsDrawerOpen(false);
+      return true;
+    }
     // 2. Quick Search modal
     if (isSearchModalOpen) {
       setIsSearchModalOpen(false);
@@ -555,6 +613,8 @@ export default function App() {
     return false;
   }, [
     confirmModalConfig.isOpen,
+    globalReminderState.isOpen,
+    isAlertsDrawerOpen,
     isSearchModalOpen,
     isScoreModalOpen,
     isStudentModalOpen,
@@ -660,6 +720,8 @@ export default function App() {
           setStructureProgress(data.structureProgress || []);
           setOvertimeEntries(data.overtimeEntries || []);
           setOvertimeMonthlyConfigs(data.overtimeMonthlyConfigs || []);
+          setTeacherTasks(data.teacherTasks || []);
+          setTeacherNotes(data.teacherNotes || []);
           setLoading(false);
         });
 
@@ -673,7 +735,9 @@ export default function App() {
               (fresh.structures && fresh.structures.length > 0) ||
               (fresh.structureProgress && fresh.structureProgress.length > 0) ||
               (fresh.overtimeEntries && fresh.overtimeEntries.length > 0) ||
-              (fresh.overtimeMonthlyConfigs && fresh.overtimeMonthlyConfigs.length > 0)
+              (fresh.overtimeMonthlyConfigs && fresh.overtimeMonthlyConfigs.length > 0) ||
+              (fresh.teacherTasks && fresh.teacherTasks.length > 0) ||
+              (fresh.teacherNotes && fresh.teacherNotes.length > 0)
             ) {
               setStudents(fresh.students);
               setExams(fresh.exams);
@@ -683,6 +747,8 @@ export default function App() {
               setStructureProgress(fresh.structureProgress || []);
               setOvertimeEntries(fresh.overtimeEntries || []);
               setOvertimeMonthlyConfigs(fresh.overtimeMonthlyConfigs || []);
+              setTeacherTasks(fresh.teacherTasks || []);
+              setTeacherNotes(fresh.teacherNotes || []);
             }
           })
           .catch((err) => {
@@ -1860,11 +1926,13 @@ export default function App() {
   const requestGoogleLogout = () => {
     setConfirmModalConfig({
       isOpen: true,
-      title: 'تأكيد تسجيل الخروج',
-      message:
+      title: tr('تأكيد تسجيل الخروج', 'Confirm Sign Out'),
+      message: tr(
         'هل أنت متأكد من رغبتك في تسجيل الخروج من حسابك؟ يمكنك تسجيل الدخول مجددًا في أي وقت عبر حساب Google الرسمي.',
-      confirmText: 'تسجيل الخروج',
-      cancelText: 'إلغاء',
+        'Are you sure you want to sign out? You can sign back in anytime using your official Google account.'
+      ),
+      confirmText: tr('تسجيل الخروج', 'Sign Out'),
+      cancelText: tr('إلغاء', 'Cancel'),
       isDestructive: true,
       onConfirm: async () => {
         await handleGoogleLogout();
@@ -1903,6 +1971,8 @@ export default function App() {
       setStructureProgress(freshData.structureProgress || []);
       setOvertimeEntries(freshData.overtimeEntries || []);
       setOvertimeMonthlyConfigs(freshData.overtimeMonthlyConfigs || []);
+      setTeacherTasks(freshData.teacherTasks || []);
+      setTeacherNotes(freshData.teacherNotes || []);
 
       // Also refresh service worker caches if present
       if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
@@ -1939,14 +2009,15 @@ export default function App() {
     setCurrentView(view);
     setMobileMenuOpen(false);
     const labels: Record<string, string> = {
-      dashboard: 'لوحة التحكم الرئيسية',
-      students: 'إدارة ملفات الطلاب وقائمة الكورس',
-      exams: 'سجلات الامتحانات',
-      structures: 'قسم الهياكل ومتابعة حل الأسئلة ونسب الصحة',
-      'exam-generator': 'منصة صناعة وتوليد الامتحانات الذكية (Hesham-Exam)',
-      reports: 'التقارير الأكاديمية والرسوم البيانية',
-      overtime: 'قسم المالية وحساب الأوفر تايم',
-      settings: 'إعدادات المنصة',
+      dashboard: tr('لوحة التحكم الرئيسية', 'Main Dashboard'),
+      students: tr('إدارة ملفات الطلاب وقائمة الكورس', 'Students & Course Enrollment'),
+      exams: tr('سجلات الامتحانات', 'Exams Records'),
+      structures: tr('قسم الهياكل ومتابعة حل الأسئلة ونسب الصحة', 'Structures & Progress Tracking'),
+      'exam-generator': tr('منصة صناعة وتوليد الامتحانات الذكية (Hesham-Exam)', 'Smart Exam Generator (Hesham-Exam)'),
+      reports: tr('التقارير الأكاديمية والرسوم البيانية', 'Academic Reports & Analytics'),
+      overtime: tr('قسم المالية وحساب الأوفر تايم', 'Finance & Overtime'),
+      workspace: tr('مساحة عمل المعلم', 'Teacher Workspace'),
+      settings: tr('إعدادات المنصة', 'Platform Settings'),
     };
     if (labels[view]) {
       recordLastActivity({
@@ -1954,6 +2025,117 @@ export default function App() {
         actionLabel: labels[view],
       });
     }
+  };
+
+  /* =======================================================
+     SMART DAILY ALERTS & GLOBAL WHATSAPP REMINDERS
+     ======================================================= */
+
+  const smartAlerts = React.useMemo(
+    () => computeStructureExamAlerts(structures, structureProgress, students),
+    [structures, structureProgress, students]
+  );
+
+  const urgentAlertsCount = React.useMemo(
+    () => smartAlerts.filter((a) => a.severity === 'critical' || a.severity === 'warning').length,
+    [smartAlerts]
+  );
+
+  const handleToggleDailyAlertsDismiss = (dismissed: boolean) => {
+    setDailyAlertsDismissed(dismissed);
+    setDailyAlertsDismissedToday(dismissed);
+  };
+
+  const handleOpenBulkReminderFromAlert = (
+    alert: StructureSmartAlert,
+    targetMode: 'lagging' | 'incomplete'
+  ) => {
+    const ids =
+      targetMode === 'lagging' && alert.laggingStudents.length > 0
+        ? alert.laggingStudents.map((s) => s.student.id)
+        : alert.incompleteStudents.map((s) => s.student.id);
+    const label =
+      targetMode === 'lagging' && alert.laggingStudents.length > 0
+        ? `المتأخرين (<=50%) — ${alert.structure.title}`
+        : `غير المكتملين — ${alert.structure.title}`;
+    setIsAlertsDrawerOpen(false);
+    setGlobalReminderState({
+      isOpen: true,
+      structure: alert.structure,
+      studentIds: ids,
+      audienceLabel: label,
+      progressMap: alert.progressByStudentMap,
+    });
+  };
+
+  const handleOpenBucketReminderFromDashboard = (
+    structure: ExamStructure,
+    studentIds: string[],
+    label: string
+  ) => {
+    const progressMap = new Map<string, StudentStructureProgress[]>();
+    structureProgress
+      .filter((p) => p.structureId === structure.id)
+      .forEach((p) => {
+        const list = progressMap.get(p.studentDocId) || [];
+        list.push(p);
+        progressMap.set(p.studentDocId, list);
+      });
+    progressMap.forEach((list, k) => {
+      list.sort((a, b) => (a.attemptNumber || 1) - (b.attemptNumber || 1));
+      progressMap.set(k, list);
+    });
+    setGlobalReminderState({
+      isOpen: true,
+      structure,
+      studentIds,
+      audienceLabel: label,
+      progressMap,
+    });
+  };
+
+  const handleUpdateStructureExamDate = async (
+    structureId: string,
+    examDate: string
+  ) => {
+    await updateStructure(structureId, {
+      examDate,
+      updatedAt: new Date().toISOString(),
+    });
+    addToast(`تم تحديث موعد امتحان الهيكل إلى ${examDate}`, 'success');
+  };
+
+  const handleCreateTaskFromAlert = async (alert: StructureSmartAlert) => {
+    await saveTeacherTask({
+      title: `متابعة امتحان «${alert.structure.title}» (${alert.incompleteStudents.length} طالب متأخر)`,
+      description: `${alert.reason}\nنسبة الإنجاز الحالية: ${alert.avgCompletionPct}%`,
+      status: 'todo',
+      priority: alert.severity === 'critical' ? 'high' : 'medium',
+      category: 'structures',
+      dueDate: alert.structure.examDate || undefined,
+      linkedStructureId: alert.structure.id,
+      linkedStructureTitle: alert.structure.title,
+      subtasks: [
+        {
+          id: `sub_${Date.now()}_1`,
+          text: `إرسال تذكير واتساب لعدد ${alert.incompleteStudents.length} طالب غير مكتمل`,
+          done: false,
+        },
+        {
+          id: `sub_${Date.now()}_2`,
+          text: 'مراجعة الأسئلة غير المحلولة في الحصة القادمة',
+          done: false,
+        },
+      ],
+      createdAt: new Date().toISOString(),
+    });
+      addToast(
+        tr(
+          'تمت إضافة تنبيه الهيكل إلى مساحة عمل المعلم',
+          'Structure alert added to Teacher Workspace'
+        ),
+        'success'
+      );
   };
 
   const handleStartAllFresh = () => {
@@ -1970,58 +2152,66 @@ export default function App() {
     addToast('تمت إعادة ضبط النشاط للبدء من جديد من الصفحة الرئيسية', 'info');
   };
 
+  const activeTasksCount = teacherTasks.filter((t) => t.status !== 'done').length;
+
   const navItems = [
     {
       id: 'dashboard',
-      label: 'الرئيسية',
+      label: tr('الرئيسية', 'Dashboard'),
       icon: LayoutDashboard,
       badge: null,
     },
     {
       id: 'students',
-      label: 'إدارة الطلاب',
+      label: tr('إدارة الطلاب', 'Students'),
       icon: Users,
       badge: students.length,
     },
     {
       id: 'exams',
-      label: 'إدارة الامتحانات',
+      label: tr('إدارة الامتحانات', 'Exams'),
       icon: FileSpreadsheet,
       badge: exams.length,
     },
     {
       id: 'structures',
-      label: 'قسم الهياكل',
+      label: tr('قسم الهياكل', 'Structures'),
       icon: Layers,
       badge: structures.length,
     },
     {
       id: 'exam-generator',
-      label: 'توليد الامتحانات (AI)',
+      label: tr('توليد الامتحانات (AI)', 'Exam Generator (AI)'),
       icon: Sparkles,
       badge: null,
     },
     {
       id: 'scoring',
-      label: 'رصد النتائج',
+      label: tr('رصد النتائج', 'Score Entry'),
       icon: CheckSquare,
       badge: null,
     },
     {
       id: 'reports',
-      label: 'التقارير والإحصائيات',
+      label: tr('التقارير والإحصائيات', 'Reports & Analytics'),
       icon: BarChart3,
       badge: null,
     },
     {
       id: 'overtime',
-      label: 'المالية',
+      label: tr('المالية', 'Finance'),
       icon: Wallet,
       badge: overtimeEntries.filter((e) => !e.archived).length || null,
     },
     {
+      id: 'workspace',
+      label: tr('مساحة عمل المعلم', 'Teacher Workspace'),
+      icon: Kanban,
+      badge: activeTasksCount || null,
+    },
+    {
       id: 'settings',
-      label: 'الإعدادات',
+      label: tr('الإعدادات', 'Settings'),
       icon: SettingsIcon,
       badge: null,
     },
@@ -2037,7 +2227,10 @@ export default function App() {
   ) {
     return (
       <AppLoader
-        message="جاري الاتصال بـ Firebase ومزامنة السجلات الأكاديمية..."
+        message={tr(
+          'جاري الاتصال بـ Firebase ومزامنة السجلات الأكاديمية...',
+          'Connecting to Firebase and syncing academic records...'
+        )}
       />
     );
   }
@@ -2074,7 +2267,7 @@ export default function App() {
   return (
     <div
       className="min-h-screen bg-slate-50 dark:bg-[#070b14] text-slate-900 dark:text-slate-100 flex flex-col font-sans antialiased selection:bg-amber-500 selection:text-white transition-colors"
-      dir="rtl"
+      dir={dir}
     >
       {/* =================================================
           TOASTS
@@ -2105,7 +2298,7 @@ export default function App() {
               }`}
             >
               <LayoutDashboard className="w-3.5 h-3.5" />
-              <span>منصة السجلات والدرجات</span>
+              <span>{tr('منصة السجلات والدرجات', 'Records & Grades Platform')}</span>
             </button>
 
             <button
@@ -2118,13 +2311,22 @@ export default function App() {
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span className="hidden xs:inline sm:inline">منصة صناعة وتوليد الامتحانات (Hesham-Exam)</span>
-              <span className="xs:hidden sm:hidden">مولد الامتحانات (AI)</span>
+              <span className="hidden xs:inline sm:inline">
+                {tr('منصة صناعة وتوليد الامتحانات (Hesham-Exam)', 'Smart Exam Builder (Hesham-Exam)')}
+              </span>
+              <span className="xs:hidden sm:hidden">
+                {tr('مولد الامتحانات (AI)', 'Exam AI')}
+              </span>
             </button>
           </div>
 
           <div className="hidden lg:flex items-center gap-2 text-[11px] text-slate-400 font-bold">
-            <span>المنصة الموحدة للمستر محمد هشام (السجلات + مولد الامتحانات الذكي)</span>
+            <span>
+              {tr(
+                'المنصة الموحدة للمستر محمد هشام (السجلات + مولد الامتحانات الذكي)',
+                'Mr. Mohamed Hesham Unified Platform (Records + Smart Exam Generator)'
+              )}
+            </span>
           </div>
         </div>
       </div>
@@ -2199,17 +2401,41 @@ export default function App() {
           {/* Header Tools */}
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
 
+            {/* Global Bilingual Switcher (Egypt Flag for Arabic / EN) */}
+            <LanguageSwitcher variant="compact" />
+
+            {/* Global Smart Daily Alerts Bell Button */}
+            <button
+              id="btn-smart-alerts-bell"
+              type="button"
+              onClick={() => setIsAlertsDrawerOpen(true)}
+              className={`relative px-2 py-1.5 sm:px-2.5 sm:py-2 border rounded-xl text-xs font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer shrink-0 ${
+                smartAlerts.length > 0
+                  ? 'border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
+                  : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+              title={tr('مركز التنبيهات الذكية اليومية والتذكير الجماعي عبر واتساب', 'Daily Smart Alerts & WhatsApp Bulk Reminders')}
+            >
+              <BellRing className={`w-4 h-4 ${urgentAlertsCount > 0 ? 'text-rose-500' : 'text-amber-500'}`} />
+              <span className="hidden xl:inline">{tr('التنبيهات', 'Alerts')}</span>
+              {smartAlerts.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white font-mono tabular-nums text-[10px] font-black leading-tight">
+                  {smartAlerts.length}
+                </span>
+              )}
+            </button>
+
             {/* Platform Refresh Button (تحديث المنصة) */}
             <button
               id="btn-refresh-platform"
               onClick={handleRefreshPlatform}
               disabled={isRefreshingPlatform}
               className="px-2 py-1.5 sm:px-3 sm:py-2 border border-amber-500/30 dark:border-amber-500/40 rounded-xl text-xs sm:text-sm font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center gap-1 sm:gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
-              title="تحديث المنصة ومزامنة أحدث السجلات"
+              title={tr('تحديث المنصة ومزامنة أحدث السجلات', 'Sync & Refresh Platform')}
             >
               <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500 ${isRefreshingPlatform ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">تحديث المنصة</span>
-              <span className="sm:hidden text-[11px] font-bold">تحديث</span>
+              <span className="hidden sm:inline">{tr('تحديث المنصة', 'Refresh')}</span>
+              <span className="sm:hidden text-[11px] font-bold">{tr('تحديث', 'Sync')}</span>
             </button>
 
             {/* Install Button */}
@@ -2217,10 +2443,10 @@ export default function App() {
               id="btn-install-pwa-header"
               onClick={handleTriggerInstall}
               className="hidden md:inline-flex px-3 py-2 border border-amber-500/30 dark:border-amber-500/40 rounded-xl text-xs sm:text-sm font-bold hover:bg-amber-500/15 bg-amber-500/10 text-amber-600 dark:text-amber-400 items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
-              title="تثبيت التطبيق مباشرة على الهاتف أو سطح المكتب"
+              title={tr('تثبيت التطبيق مباشرة على الهاتف أو سطح المكتب', 'Install App on Phone or Desktop')}
             >
               <Download className="w-4 h-4 text-amber-500" />
-              <span>تثبيت</span>
+              <span>{tr('تثبيت', 'Install')}</span>
             </button>
 
             {/* Theme Toggle */}
@@ -2231,8 +2457,8 @@ export default function App() {
               className="p-1.5 sm:p-2 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-600 dark:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs transition cursor-pointer shrink-0"
               title={
                 theme === 'dark'
-                  ? 'التبديل إلى الوضع الفاتح'
-                  : 'التبديل إلى الوضع الليلي'
+                  ? tr('التبديل إلى الوضع الفاتح', 'Switch to Light Mode')
+                  : tr('التبديل إلى الوضع الليلي', 'Switch to Dark Mode')
               }
             >
               {theme ===
@@ -2247,7 +2473,7 @@ export default function App() {
             <button
               onClick={() => setIsSearchModalOpen(true)}
               className="sm:hidden p-1.5 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs transition cursor-pointer shrink-0"
-              title="بحث سريع"
+              title={tr('بحث سريع', 'Quick Search')}
             >
               <Search className="w-4 h-4 text-slate-500 dark:text-slate-400" />
             </button>
@@ -2259,12 +2485,12 @@ export default function App() {
                   true
                 )
               }
-              className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800/80 px-3.5 py-1.5 sm:py-2 rounded-full w-36 md:w-52 lg:w-64 border border-transparent hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer transition-colors shrink-0"
+              className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800/80 px-3.5 py-1.5 sm:py-2 rounded-full w-36 md:w-44 lg:w-56 border border-transparent hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer transition-colors shrink-0 gap-2"
             >
               <Search className="w-4 h-4 text-slate-400 shrink-0" />
 
-              <span className="text-xs text-slate-400 dark:text-slate-400 mr-2 flex-1 truncate">
-                بحث بالاسم أو ID...
+              <span className="text-xs text-slate-400 dark:text-slate-400 flex-1 truncate">
+                {tr('بحث بالاسم أو ID...', 'Search name or ID...')}
               </span>
 
               <kbd className="hidden lg:inline font-mono text-[10px] bg-white dark:bg-slate-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600 text-slate-400">
@@ -2278,7 +2504,7 @@ export default function App() {
                 handleExportAllExcel
               }
               className="hidden md:inline-flex px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs text-slate-700 dark:text-slate-200 items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-              title="تصدير جميع البيانات إلى Excel"
+              title={tr('تصدير جميع البيانات إلى Excel', 'Export all data to Excel')}
             >
               <FileDown className="w-4 h-4 text-amber-500" />
 
@@ -2326,10 +2552,10 @@ export default function App() {
                     requestGoogleLogout
                   }
                   className="px-2 py-1 text-rose-600 dark:text-rose-400 hover:text-white hover:bg-rose-600 dark:hover:bg-rose-600 border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 dark:bg-rose-950/40 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shrink-0 text-xs font-bold active:scale-95 shadow-xs"
-                  title="تسجيل الخروج من الحساب"
+                  title={tr('تسجيل الخروج من الحساب', 'Sign Out')}
                 >
                   <LogOut className="w-3.5 h-3.5 shrink-0" />
-                  <span className="hidden sm:inline">تسجيل الخروج</span>
+                  <span className="hidden sm:inline">{tr('تسجيل الخروج', 'Sign Out')}</span>
                 </button>
               </div>
             )}
@@ -2417,7 +2643,7 @@ export default function App() {
                       }}
                       className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm transition-all duration-200 cursor-pointer ${
                         isActive
-                          ? 'bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-transparent text-amber-800 dark:text-amber-300 border-r-4 border-amber-500 font-black shadow-sm dark:shadow-none ring-1 ring-amber-500/30'
+                          ? `bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-transparent text-amber-800 dark:text-amber-300 ${isRtl ? 'border-r-4' : 'border-l-4'} border-amber-500 font-black shadow-sm dark:shadow-none ring-1 ring-amber-500/30`
                           : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
                       }`}
                     >
@@ -2480,10 +2706,8 @@ export default function App() {
                   </p>
 
                   <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
-                    مدرس{' '}
-                    {
-                      settings.defaultSubject
-                    }
+                    {tr('مدرس', 'Teacher of')}{' '}
+                    {translateSubject(settings.defaultSubject, lang)}
                   </p>
                 </div>
               </div>
@@ -2493,10 +2717,10 @@ export default function App() {
                 type="button"
                 onClick={requestGoogleLogout}
                 className="w-full mt-3 py-2 px-3 flex items-center justify-center gap-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:text-white bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 dark:hover:bg-rose-600 border border-rose-200/60 dark:border-rose-900/40 transition-all cursor-pointer shadow-xs active:scale-98"
-                title="تسجيل الخروج من المنصة"
+                title={tr('تسجيل الخروج من المنصة', 'Sign out from platform')}
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span>تسجيل الخروج</span>
+                <span>{tr('تسجيل الخروج', 'Sign Out')}</span>
               </button>
             </div>
           </div>
@@ -2584,7 +2808,7 @@ export default function App() {
                           }}
                           className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm ${
                             isActive
-                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold border-r-4 border-amber-500'
+                              ? `bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold ${isRtl ? 'border-r-4' : 'border-l-4'} border-amber-500`
                               : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                           }`}
                         >
@@ -2604,7 +2828,8 @@ export default function App() {
                 </nav>
 
                 {/* Quick Refresh in Drawer */}
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 mt-3">
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 mt-3 space-y-2">
+                  <LanguageSwitcher variant="card" />
                   <button
                     onClick={() => {
                       setMobileMenuOpen(false);
@@ -2615,7 +2840,7 @@ export default function App() {
                   >
                     <div className="flex items-center gap-3">
                       <RefreshCw className={`w-4 h-4 text-amber-500 ${isRefreshingPlatform ? 'animate-spin' : ''}`} />
-                      <span>تحديث ومزامنة المنصة</span>
+                      <span>{tr('تحديث ومزامنة المنصة', 'Refresh & Sync Platform')}</span>
                     </div>
                   </button>
                 </div>
@@ -2636,10 +2861,9 @@ export default function App() {
                   )}
 
                   <span>
-                    {theme ===
-                    'dark'
-                      ? 'الوضع النهاري'
-                      : 'الوضع الليلي'}
+                    {theme === 'dark'
+                      ? tr('الوضع النهاري', 'Light Mode')
+                      : tr('الوضع الليلي', 'Dark Mode')}
                   </span>
                 </button>
 
@@ -2653,7 +2877,7 @@ export default function App() {
                     className="w-full py-2.5 px-4 text-rose-600 dark:text-rose-400 hover:text-white bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 dark:hover:bg-rose-600 border border-rose-200/60 dark:border-rose-900/40 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98"
                   >
                     <LogOut className="w-4 h-4" />
-                    <span>تسجيل الخروج</span>
+                    <span>{tr('تسجيل الخروج', 'Sign Out')}</span>
                   </button>
                 )}
               </div>
@@ -2671,12 +2895,12 @@ export default function App() {
                   <History className="w-3.5 h-3.5" />
                 </span>
                 <span className="font-bold text-slate-700 dark:text-slate-200 truncate">
-                  حفظ التقدم التلقائي نشط:
+                  {tr('حفظ التقدم التلقائي نشط:', 'Auto progress active:')}
                 </span>
                 <span className="text-amber-600 dark:text-amber-400 font-extrabold truncate">
                   {currentView === 'profile' && selectedStudent
-                    ? `تستعرض الآن ملف الطالب: ${selectedStudent.name}`
-                    : getLastActivity()?.actionLabel || 'تم حفظ آخر تقدم لك في المنصة'}
+                    ? tr(`تستعرض الآن ملف الطالب: ${selectedStudent.name}`, `Viewing student: ${selectedStudent.name}`)
+                    : getLastActivity()?.actionLabel || tr('تم حفظ آخر تقدم لك في المنصة', 'Your latest progress is saved')}
                 </span>
               </div>
 
@@ -2698,23 +2922,23 @@ export default function App() {
                     }}
                     className="px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 font-black text-[11px] hover:bg-amber-400 transition cursor-pointer"
                   >
-                    استكمال آخر نشاط
+                    {tr('استكمال آخر نشاط', 'Resume Last Activity')}
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={handleStartAllFresh}
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-[11px] transition cursor-pointer"
-                  title="إعادة ضبط التصفح والبدء من جديد"
+                  title={tr('إعادة ضبط التصفح والبدء من جديد', 'Reset navigation & start fresh')}
                 >
                   <RotateCcw className="w-3 h-3" />
-                  <span>البدء من جديد</span>
+                  <span>{tr('البدء من جديد', 'Start Fresh')}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setLastActivityBannerDismissed(true)}
                   className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                  title="إخفاء الشريط"
+                  title={tr('إخفاء الشريط', 'Dismiss bar')}
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -2738,6 +2962,18 @@ export default function App() {
               structuresCount={structures.length}
               structures={structures}
               structureProgress={structureProgress}
+              smartAlerts={smartAlerts}
+              dailyAlertsDismissed={dailyAlertsDismissed}
+              onToggleDailyAlertsDismiss={handleToggleDailyAlertsDismiss}
+              onOpenAlertsDrawer={() => setIsAlertsDrawerOpen(true)}
+              onOpenBulkReminder={handleOpenBulkReminderFromAlert}
+              onRemindStructureBucket={handleOpenBucketReminderFromDashboard}
+              onUpdateStructureExamDate={handleUpdateStructureExamDate}
+              onCreateTaskFromAlert={handleCreateTaskFromAlert}
+              teacherTasks={teacherTasks}
+              teacherNotes={teacherNotes}
+              onSaveTask={saveTeacherTask}
+              onSaveNote={saveTeacherNote}
               onNavigate={(
                 view
               ) => {
@@ -2953,6 +3189,19 @@ export default function App() {
             />
           )}
 
+          {currentView === 'workspace' && (
+            <TeacherWorkspaceView
+              tasks={teacherTasks}
+              notes={teacherNotes}
+              structures={structures}
+              onSaveTask={saveTeacherTask}
+              onDeleteTask={deleteTeacherTask}
+              onSaveNote={saveTeacherNote}
+              onDeleteNote={deleteTeacherNote}
+              onNotify={addToast}
+            />
+          )}
+
           {currentView ===
             'settings' && (
             <SettingsView
@@ -3126,6 +3375,32 @@ export default function App() {
         defaultExportMode="all_data"
       />
 
+      <SmartAlertsDrawerModal
+        isOpen={isAlertsDrawerOpen}
+        onClose={() => setIsAlertsDrawerOpen(false)}
+        alerts={smartAlerts}
+        teacherName={settings?.teacherName}
+        onOpenBulkReminder={handleOpenBulkReminderFromAlert}
+        onUpdateStructureExamDate={handleUpdateStructureExamDate}
+        onCreateTaskFromAlert={handleCreateTaskFromAlert}
+        onNavigateToStructures={() => navigateTo('structures')}
+      />
+
+      {globalReminderState.isOpen && globalReminderState.structure && (
+        <StructureReminderModal
+          isOpen={globalReminderState.isOpen}
+          onClose={() =>
+            setGlobalReminderState((prev) => ({ ...prev, isOpen: false }))
+          }
+          structure={globalReminderState.structure}
+          students={students}
+          progressByStudentMap={globalReminderState.progressMap}
+          teacherName={settings?.teacherName}
+          initialStudentIds={globalReminderState.studentIds}
+          initialAudienceLabel={globalReminderState.audienceLabel}
+        />
+      )}
+
       <ConfirmModal
         isOpen={
           confirmModalConfig.isOpen
@@ -3195,19 +3470,25 @@ export default function App() {
         className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-1.5 py-1 pb-safe flex items-center justify-start md:justify-around gap-1 overflow-x-auto no-scrollbar shadow-lg"
       >
         {[
-          { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard },
-          { id: 'students', label: 'الطلاب', icon: Users, badge: students.length },
-          { id: 'exams', label: 'الامتحانات', icon: FileSpreadsheet, badge: exams.length },
-          { id: 'structures', label: 'الهياكل', icon: Layers, badge: structures.length },
-          { id: 'exam-generator', label: 'مولد امتحان', icon: Sparkles },
-          { id: 'reports', label: 'التقارير', icon: BarChart3 },
+          { id: 'dashboard', label: tr('الرئيسية', 'Home'), icon: LayoutDashboard },
+          { id: 'students', label: tr('الطلاب', 'Students'), icon: Users, badge: students.length },
+          { id: 'exams', label: tr('الامتحانات', 'Exams'), icon: FileSpreadsheet, badge: exams.length },
+          { id: 'structures', label: tr('الهياكل', 'Structures'), icon: Layers, badge: structures.length },
+          { id: 'exam-generator', label: tr('مولد امتحان', 'Exam AI'), icon: Sparkles },
+          { id: 'reports', label: tr('التقارير', 'Reports'), icon: BarChart3 },
           {
             id: 'overtime',
-            label: 'المالية',
+            label: tr('المالية', 'Finance'),
             icon: Wallet,
             badge: overtimeEntries.filter((e) => !e.archived).length || undefined,
           },
-          { id: 'settings', label: 'الإعدادات', icon: SettingsIcon },
+          {
+            id: 'workspace',
+            label: tr('مساحة المعلم', 'Workspace'),
+            icon: Kanban,
+            badge: activeTasksCount || undefined,
+          },
+          { id: 'settings', label: tr('الإعدادات', 'Settings'), icon: SettingsIcon },
         ].map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.id;

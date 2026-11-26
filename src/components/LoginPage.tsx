@@ -1,20 +1,21 @@
 import React, { useState } from 'react';
-import { 
-  ShieldCheck, 
-  AlertTriangle, 
+import {
+  ShieldCheck,
+  AlertTriangle,
   Sparkles,
   LogOut,
-  RefreshCw
+  RefreshCw,
 } from 'lucide-react';
-import { 
-  signInWithGoogle, 
-  signOutTeacher, 
+import {
+  signInWithGoogle,
+  signOutTeacher,
   clearTeacherSession,
-  saveTeacherSession, 
+  saveTeacherSession,
   isAllowedEmail,
-  ALLOWED_ADMIN_EMAILS
+  ALLOWED_ADMIN_EMAILS,
 } from '../services/firebase';
 import type { User } from 'firebase/auth';
+import { LanguageSwitcher, useLanguage } from '../utils/i18n';
 
 export const OFFICIAL_EMAILS = ALLOWED_ADMIN_EMAILS;
 
@@ -24,11 +25,12 @@ interface LoginPageProps {
   onSignOut?: () => void;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ 
-  currentUser, 
+export const LoginPage: React.FC<LoginPageProps> = ({
+  currentUser,
   onAuthorizedLogin,
-  onSignOut 
+  onSignOut,
 }) => {
+  const { dir, tr } = useLanguage();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -39,17 +41,33 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   // If user signed in with unauthorized email
   if (currentUser && !isEmailAllowed(currentUser.email)) {
     return (
-      <div className="min-h-screen bg-[#070b14] text-white flex items-center justify-center p-4 selection:bg-amber-500" dir="rtl">
+      <div
+        className="min-h-screen bg-[#070b14] text-white flex flex-col items-center justify-center p-4 selection:bg-amber-500"
+        dir={dir}
+      >
+        <div className="mb-4">
+          <LanguageSwitcher variant="header" />
+        </div>
         <div className="max-w-md w-full bg-slate-900 border border-red-500/40 rounded-3xl p-8 text-center shadow-2xl shadow-black/80">
           <div className="w-16 h-16 rounded-2xl bg-red-500/10 text-red-400 flex items-center justify-center mx-auto mb-4 border border-red-500/20">
             <AlertTriangle className="w-8 h-8" />
           </div>
-          <h2 className="text-xl font-bold mb-2 text-white">حساب غير مصرح له بالدخول</h2>
+          <h2 className="text-xl font-bold mb-2 text-white">
+            {tr('حساب غير مصرح له بالدخول', 'Unauthorized Account')}
+          </h2>
           <p className="text-sm text-slate-300 mb-4 leading-relaxed">
-            عذراً، البريد الحالي <span className="font-mono text-amber-300 font-semibold dir-ltr">{currentUser.email || 'غير معروف'}</span> غير مسجل ضمن الحسابات المعتمدة.
+            {tr('عذراً، البريد الحالي', 'Sorry, the email')}{' '}
+            <span className="font-mono text-amber-300 font-semibold" dir="ltr">
+              {currentUser.email || tr('غير معروف', 'Unknown')}
+            </span>{' '}
+            {tr('غير مسجل ضمن الحسابات المعتمدة.', 'is not authorized for this portal.')}
           </p>
           <div className="p-3.5 bg-slate-800/80 rounded-2xl text-xs text-slate-300 mb-6 border border-slate-700/60 leading-relaxed">
-            المنصة مخصصة حصرياً للأستاذ <strong className="text-amber-400 font-bold">محمد هشام</strong> عبر حساب Google الرسمي المعتمد.
+            {tr('المنصة مخصصة حصرياً للأستاذ', 'This platform is exclusively for')}{' '}
+            <strong className="text-amber-400 font-bold">
+              {tr('محمد هشام', 'Mr. Mohamed Hesham')}
+            </strong>{' '}
+            {tr('عبر حساب Google الرسمي المعتمد.', 'via official Google SSO.')}
           </div>
           <button
             onClick={async () => {
@@ -61,7 +79,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 active:scale-98 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow-lg shadow-rose-600/20"
           >
             <LogOut className="w-4 h-4" />
-            <span>تسجيل الخروج والتبديل إلى الحساب الرسمي</span>
+            <span>
+              {tr('تسجيل الخروج والتبديل إلى الحساب الرسمي', 'Sign Out & Switch Account')}
+            </span>
           </button>
         </div>
       </div>
@@ -80,27 +100,35 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         clearTeacherSession();
         await signOutTeacher();
         setError(
-          `عذراً، البريد (${user?.email || 'المحدد'}) غير مصرح له بالدخول. يرجى اختيار حساب الأستاذ محمد هشام الرسمي.`
+          tr(
+            `عذراً، البريد (${user?.email || 'المحدد'}) غير مصرح له بالدخول. يرجى اختيار حساب الأستاذ محمد هشام الرسمي.`,
+            `Sorry, (${user?.email || 'this email'}) is not authorized. Please choose Mr. Mohamed Hesham's official account.`
+          )
         );
       }
     } catch (err: any) {
       console.warn('Google sign-in error:', err);
       if (
-        err?.code === 'auth/popup-closed-by-user' || 
+        err?.code === 'auth/popup-closed-by-user' ||
         err?.code === 'auth/cancelled-popup-request' ||
         err?.message?.includes('closed-by-user')
       ) {
-        // Closed intentionally by user, no loud error needed
         setError(null);
       } else if (err?.code === 'auth/popup-blocked') {
         setError(
-          'تم حظر النافذة المنبثقة من قبل المتصفح. يرجى السماح بالنوافذ المنبثقة (Popups) للموقع والمحاولة مرة أخرى.'
+          tr(
+            'تم حظر النافذة المنبثقة من قبل المتصفح. يرجى السماح بالنوافذ المنبثقة (Popups) للموقع والمحاولة مرة أخرى.',
+            'Popup was blocked by your browser. Please allow popups for this site and try again.'
+          )
         );
       } else if (err?.message?.includes('غير مصرح له')) {
         setError(err.message);
       } else {
         setError(
-          'تعذر استكمال تسجيل الدخول عبر Google. يرجى التأكد من اتصال الإنترنت والمحاولة مجدداً.'
+          tr(
+            'تعذر استكمال تسجيل الدخول عبر Google. يرجى التأكد من اتصال الإنترنت والمحاولة مجدداً.',
+            'Could not complete Google sign-in. Please check your connection and try again.'
+          )
         );
       }
     } finally {
@@ -109,21 +137,28 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-white flex flex-col items-center justify-center p-4 relative overflow-hidden selection:bg-amber-500" dir="rtl">
+    <div
+      className="min-h-screen bg-[#070b14] text-white flex flex-col items-center justify-center p-4 relative overflow-hidden selection:bg-amber-500"
+      dir={dir}
+    >
       {/* Background glowing ambiance */}
       <div className="absolute top-1/4 -right-20 w-96 h-96 bg-amber-600/15 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-1/4 -left-20 w-96 h-96 bg-orange-600/15 rounded-full blur-[120px] pointer-events-none" />
 
-      <div className="w-full max-w-md relative z-10">
+      <div className="w-full max-w-md relative z-10 space-y-4">
+        <div className="flex justify-center">
+          <LanguageSwitcher variant="header" />
+        </div>
+
         {/* Card */}
         <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/80">
           <div className="text-center mb-6">
             {/* Teacher Portrait & Glow */}
             <div className="relative inline-block mb-4">
-              <div className="absolute -inset-1.5 bg-gradient-to-tr from-amber-500 to-orange-500 rounded-full blur-md opacity-70 animate-pulse" />
-              <img 
-                src={`${import.meta.env.BASE_URL}teacher-logo.jpg`} 
-                alt="Mr Mohamed Hesham" 
+              <div className="absolute -inset-1.5 bg-gradient-to-tr from-amber-500 to-orange-500 rounded-full blur-md opacity-70" />
+              <img
+                src={`${import.meta.env.BASE_URL}teacher-logo.jpg`}
+                alt="Mr Mohamed Hesham"
                 className="relative w-24 h-24 rounded-full object-cover border-2 border-amber-400 shadow-xl"
               />
               <div className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center shadow font-bold text-xs">
@@ -132,10 +167,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             </div>
 
             <h1 className="text-2xl font-black text-white tracking-tight">
-              منصة Mr. Mohamed Hesham
+              {tr('منصة Mr. Mohamed Hesham', 'Mr. Mohamed Hesham Portal')}
             </h1>
             <p className="text-xs text-amber-300/90 font-medium mt-1">
-              سجلات الطلاب والامتحانات والنتائج الأكاديمية
+              {tr(
+                'سجلات الطلاب والامتحانات والنتائج الأكاديمية',
+                'Academic Student Records, Exams & Analytics'
+              )}
             </p>
           </div>
 
@@ -166,7 +204,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               </svg>
             )}
             <span className="text-sm sm:text-base">
-              {loading ? 'جاري التحقق عبر Google...' : 'تسجيل الدخول بحساب Google المعتمد'}
+              {loading
+                ? tr('جاري التحقق عبر Google...', 'Verifying with Google...')
+                : tr('تسجيل الدخول بحساب Google المعتمد', 'Sign In with Official Google Account')}
             </span>
           </button>
 
@@ -174,7 +214,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           <div className="mt-6 pt-5 border-t border-slate-800/80 space-y-1.5 text-center">
             <div className="flex items-center justify-center gap-2 text-[11px] text-emerald-400 font-semibold">
               <ShieldCheck className="w-4 h-4" />
-              <span>تسجيل دخول رسمي ومحمي للأستاذ محمد هشام</span>
+              <span>
+                {tr(
+                  'تسجيل دخول رسمي ومحمي للأستاذ محمد هشام',
+                  'Official Protected Login for Mr. Mohamed Hesham'
+                )}
+              </span>
             </div>
             <p className="text-[10px] text-slate-500">
               Google SSO Verified Authentication

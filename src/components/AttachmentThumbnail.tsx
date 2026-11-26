@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { ResultAttachment } from '../types';
 import { getAttachmentCategory, formatFileSize } from '../utils/attachment';
+import { useLanguage } from '../utils/i18n';
 
 interface AttachmentThumbnailProps {
   attachment?: ResultAttachment | null;
@@ -32,6 +33,7 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
   className = '',
   tooltipPrefix = '',
 }) => {
+  const { tr } = useLanguage();
   // Size dimensions configuration
   const sizeConfig = {
     xs: {
@@ -85,10 +87,10 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
           className={`inline-flex items-center gap-1 rounded-xl text-[11px] font-bold text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-slate-800 border border-dashed border-slate-200 dark:border-slate-700 transition-all cursor-pointer ${
             showLabel ? 'px-2.5 py-1' : sizeConfig.btnPadding
           } ${className}`}
-          title="إرفاق صورة أو إيميل لإثبات المصداقية"
+          title={tr('إرفاق صورة أو إيميل لإثبات المصداقية', 'Attach an image or email for verification')}
         >
           <Paperclip className={sizeConfig.icon} />
-          {showLabel && <span>إرفاق</span>}
+          {showLabel && <span>{tr('إرفاق', 'Attach')}</span>}
         </button>
       );
     }
@@ -103,7 +105,7 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
   const isEmail = category === 'email';
 
   const ext = attachment.name?.split('.').pop()?.toUpperCase() || '';
-  const tooltip = `${tooltipPrefix ? `${tooltipPrefix}: ` : ''}${attachment.name} (${formatFileSize(attachment.size)}) - انقر للمعاينة السريعة`;
+  const tooltip = `${tooltipPrefix ? `${tooltipPrefix}: ` : ''}${attachment.name} (${formatFileSize(attachment.size)}) - ${tr('انقر للمعاينة السريعة', 'Click for quick preview')}`;
 
   return (
     <div className={`inline-flex items-center gap-1.5 ${className}`}>
@@ -184,7 +186,7 @@ export const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
           className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 hover:text-emerald-800 dark:hover:text-emerald-200 hover:underline cursor-pointer flex items-center gap-1"
           title={tooltip}
         >
-          <span>معاينة المرفق</span>
+          <span>{tr('معاينة المرفق', 'Preview Attachment')}</span>
         </button>
       )}
     </div>

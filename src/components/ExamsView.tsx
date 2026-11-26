@@ -20,6 +20,13 @@ import {
 import { Exam, ExamResult, Student, TeacherSettings, ResultAttachment } from '../types';
 import { exportExamResultsExcel, loadExcelPreferences } from '../utils/excel';
 import { loadViewState, saveViewState, clearViewState, recordLastActivity } from '../utils/activityTracker';
+import {
+  useLanguage,
+  translateGrade,
+  translateTerm,
+  translateTrack,
+  translateSubject,
+} from '../utils/i18n';
 import { AttachmentModal } from './AttachmentModal';
 import { AttachmentThumbnail } from './AttachmentThumbnail';
 import { ConfirmModal } from './ConfirmModal';
@@ -49,6 +56,22 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
   onUpdateExamAttachment,
   onOpenExamGenerator,
 }) => {
+  const { lang, dir, tr } = useLanguage();
+
+  const formatExamType = (type: string) => {
+    if (lang === 'ar') return type;
+    const map: Record<string, string> = {
+      'تجريبي': 'Mock Exam',
+      'امتحان قصير (Quiz)': 'Quiz',
+      'امتحان نهائي': 'Final Exam',
+      'منتصف الفصل': 'Midterm Exam',
+      'واجب / تقييم': 'Assignment / Evaluation',
+      'شهري': 'Monthly Exam',
+      'اختبار أسبوعي': 'Weekly Test',
+    };
+    return map[type] || type;
+  };
+
   const savedExamsState = useMemo(
     () =>
       loadViewState('EXAMS_VIEW', {
@@ -74,9 +97,9 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
     });
     recordLastActivity({
       tab: 'exams',
-      actionLabel: 'استعراض ورصد سجلات الامتحانات',
+      actionLabel: tr('استعراض ورصد سجلات الامتحانات', 'Viewing and scoring exam records'),
     });
-  }, [searchTerm, gradeFilter, typeFilter]);
+  }, [searchTerm, gradeFilter, typeFilter, tr]);
 
   const handleResetFilters = () => {
     clearViewState('EXAMS_VIEW');
@@ -133,7 +156,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
   }, [examStatsList, searchTerm, gradeFilter, typeFilter]);
 
   return (
-    <div id="exams-view" className="space-y-5 text-right">
+    <div id="exams-view" dir={dir} className="space-y-5 text-start">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -141,10 +164,13 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
             <div className="p-2 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl">
               <FileSpreadsheet className="w-6 h-6" />
             </div>
-            سجلات درجات الامتحانات ({exams.length})
+            {tr(`سجلات درجات الامتحانات (${exams.length})`, `Exam Score Records (${exams.length})`)}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            سجلات رصد درجات الطلاب يدوياً لكل امتحان ومتابعة متوسطات الدرجات وتصدير كشوف النتائج
+            {tr(
+              'سجلات رصد درجات الطلاب يدوياً لكل امتحان ومتابعة متوسطات الدرجات وتصدير كشوف النتائج',
+              'Manual student score logs per exam, average performance tracking, and Excel gradebook exports'
+            )}
           </p>
         </div>
 
@@ -156,7 +182,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
               className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-black text-amber-400 bg-slate-900 hover:bg-slate-800 border border-amber-500/40 active:scale-98 rounded-xl shadow-sm transition-all cursor-pointer"
             >
               <Sparkles className="w-4 h-4 text-amber-400" />
-              صناعة وتوليد امتحان جديد (AI)
+              {tr('صناعة وتوليد امتحان جديد (AI)', 'AI Exam Generator')}
             </button>
           )}
           <button
@@ -165,7 +191,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
             className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-98 rounded-xl shadow-md shadow-amber-500/20 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            + تسجيل درجات امتحان جديد
+            {tr('تسجيل درجات امتحان جديد', 'Add New Exam')}
           </button>
         </div>
       </div>
@@ -178,21 +204,21 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="ابحث باسم الامتحان أو المادة..."
-              className="w-full pr-9 pl-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right font-medium"
+              placeholder={tr('ابحث باسم الامتحان أو المادة...', 'Search by exam title or subject...')}
+              className="w-full ps-9 pe-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start font-medium"
             />
-            <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+            <Search className="w-4 h-4 text-slate-400 absolute start-3 top-2.5 pointer-events-none" />
           </div>
 
           <div className="md:col-span-3">
             <select
               value={gradeFilter}
               onChange={(e) => setGradeFilter(e.target.value)}
-              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden text-slate-900 dark:text-white text-right cursor-pointer"
+              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden text-slate-900 dark:text-white text-start cursor-pointer"
             >
-              <option value="الكل">كل الصفوف الدراسية</option>
+              <option value="الكل">{tr('كل الصفوف الدراسية', 'All Grades')}</option>
               {(settings.grades || []).map(g => (
-                <option key={g} value={g}>{g}</option>
+                <option key={g} value={g}>{translateGrade(g, lang)}</option>
               ))}
             </select>
           </div>
@@ -201,25 +227,30 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden text-slate-900 dark:text-white text-right cursor-pointer font-medium"
+              className="w-full py-2 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden text-slate-900 dark:text-white text-start cursor-pointer font-medium"
             >
-              <option value="الكل">كل أنواع الامتحانات</option>
+              <option value="الكل">{tr('كل أنواع الامتحانات', 'All Exam Types')}</option>
               {(settings.examTypes || []).map(t => (
-                <option key={t} value={t}>{t}</option>
+                <option key={t} value={t}>{formatExamType(t)}</option>
               ))}
             </select>
           </div>
         </div>
         {(searchTerm || gradeFilter !== 'الكل' || typeFilter !== 'الكل') && (
           <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-            <span className="text-slate-500">تم حفظ خيارات التصفية تلقائياً ({filteredExams.length} امتحان مطابق)</span>
+            <span className="text-slate-500">
+              {tr(
+                `تم حفظ خيارات التصفية تلقائياً (${filteredExams.length} امتحان مطابق)`,
+                `Filter preferences saved (${filteredExams.length} matching exams)`
+              )}
+            </span>
             <button
               type="button"
               onClick={handleResetFilters}
               className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 font-bold hover:underline cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>البدء من جديد / مسح التصفية</span>
+              <span>{tr('البدء من جديد / مسح التصفية', 'Reset / Clear Filters')}</span>
             </button>
           </div>
         )}
@@ -230,17 +261,24 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
         {filteredExams.length === 0 ? (
           <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl p-12 text-center border border-slate-200 dark:border-slate-800 shadow-sm text-slate-400">
             <FileSpreadsheet className="w-12 h-12 mx-auto text-amber-500/40 mb-3" />
-            <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">لا توجد سجلات امتحانات مسجلة</p>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">ابدأ بتسجيل أول امتحان لتضع درجات الطلاب يدوياً وتتابع إحصائياتهم</p>
+            <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">
+              {tr('لا توجد سجلات امتحانات مسجلة', 'No exam records found')}
+            </p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+              {tr(
+                'ابدأ بتسجيل أول امتحان لتضع درجات الطلاب يدوياً وتتابع إحصائياتهم',
+                'Add your first exam to enter student scores and track statistics'
+              )}
+            </p>
             <button
               onClick={onAddExam}
               className="mt-4 px-5 py-2.5 text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl hover:from-amber-600 hover:to-orange-600 transition-all cursor-pointer shadow-md shadow-amber-500/20"
             >
-              تسجيل درجات امتحان الآن
+              {tr('تسجيل درجات امتحان الآن', 'Add Exam Now')}
             </button>
           </div>
         ) : (
-          filteredExams.map(({ exam, results, attended, avgScore, avgPercentage, passRate, highest }) => (
+          filteredExams.map(({ exam, results, attended, avgPercentage }) => (
             <div
               key={exam.id}
               className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 hover:border-amber-400/50 dark:hover:border-amber-500/30 transition-all flex flex-col justify-between"
@@ -251,10 +289,10 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
                   <div>
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="px-2.5 py-0.5 text-[11px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 rounded-lg border border-amber-500/20">
-                        {exam.type}
+                        {formatExamType(exam.type)}
                       </span>
                       <span className="px-2.5 py-0.5 text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg">
-                        {exam.grade}
+                        {translateGrade(exam.grade, lang)}
                       </span>
                       {exam.track && (
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
@@ -262,12 +300,12 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
                             ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
                             : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                         }`}>
-                          مسار {exam.track}
+                          {tr('مسار', 'Track')} {translateTrack(exam.track, lang)}
                         </span>
                       )}
                       {exam.term && (
                         <span className="px-2 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                          {exam.term}
+                          {translateTerm(exam.term, lang)}
                         </span>
                       )}
                     </div>
@@ -275,7 +313,12 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
                       {exam.title}
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap items-center gap-2">
-                      <span>المادة: <strong className="text-slate-700 dark:text-slate-300">{exam.subject}</strong></span>
+                      <span>
+                        {tr('المادة:', 'Subject:')}{' '}
+                        <strong className="text-slate-700 dark:text-slate-300">
+                          {translateSubject(exam.subject, lang)}
+                        </strong>
+                      </span>
                       {exam.academicYear && (
                         <>
                           <span>•</span>
@@ -292,21 +335,21 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
                     <AttachmentThumbnail
                       attachment={exam.attachment}
                       size="md"
-                      tooltipPrefix={`امتحان: ${exam.title}`}
+                      tooltipPrefix={tr(`امتحان: ${exam.title}`, `Exam: ${exam.title}`)}
                       onClick={() => setAttachmentExam(exam)}
                       onAttach={() => setAttachmentExam(exam)}
                     />
                     <button
                       onClick={() => onEditExam(exam)}
                       className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                      title="تعديل بيانات الامتحان"
+                      title={tr('تعديل بيانات الامتحان', 'Edit Exam')}
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => setConfirmDeleteExam(exam)}
                       className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer"
-                      title="حذف الامتحان"
+                      title={tr('حذف الامتحان', 'Delete Exam')}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -318,7 +361,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
                   <div
                     onClick={() => setAttachmentExam(exam)}
                     className="mt-3 flex items-center justify-between gap-2 p-2 px-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 cursor-pointer hover:bg-emerald-100/70 dark:hover:bg-emerald-900/40 transition-all group"
-                    title="انقر للمعاينة السريعة للمرفق الرسمي المعتمد"
+                    title={tr('انقر للمعاينة السريعة للمرفق الرسمي المعتمد', 'Click to preview official attachment')}
                   >
                     <div className="flex items-center gap-2 overflow-hidden min-w-0">
                       <AttachmentThumbnail
@@ -327,11 +370,11 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
                         readOnly
                       />
                       <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 truncate">
-                        المرفق المعتمد: {exam.attachment.name}
+                        {tr('المرفق المعتمد:', 'Attachment:')} {exam.attachment.name}
                       </span>
                     </div>
                     <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 group-hover:underline shrink-0">
-                      معاينة سريعة ←
+                      {tr('معاينة سريعة ←', 'Quick Preview →')}
                     </span>
                   </div>
                 )}
@@ -339,19 +382,29 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
                 {/* Exam Key Metrics */}
                 <div className="grid grid-cols-4 gap-2 my-4 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-700/60 text-center">
                   <div>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 block">الدرجة الكلية</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                      {tr('الدرجة الكلية', 'Total Score')}
+                    </span>
                     <span className="font-mono font-black text-slate-800 dark:text-slate-100 text-sm">{exam.totalScore}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 block">درجة النجاح</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                      {tr('درجة النجاح', 'Pass Score')}
+                    </span>
                     <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">{exam.passScore}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 block">رُصدت درجاتهم</span>
-                    <span className="font-mono font-bold text-amber-600 dark:text-amber-400 text-sm">{attended} طالب</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                      {tr('رُصدت درجاتهم', 'Scored')}
+                    </span>
+                    <span className="font-mono font-bold text-amber-600 dark:text-amber-400 text-sm">
+                      {attended} {tr('طالب', 'students')}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 block">متوسط الدرجات</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                      {tr('متوسط الدرجات', 'Average')}
+                    </span>
                     <span className="font-mono font-bold text-slate-900 dark:text-white text-sm">
                       {attended > 0 ? `${avgPercentage}%` : '-'}
                     </span>
@@ -380,8 +433,8 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
                         [exam.id]: Math.max(0, Number(e.target.value) || 0),
                       }))
                     }
-                    title="أدخل عدد الطلاب المطلوب تصديرهم (0 = الكل)"
-                    placeholder="الكل"
+                    title={tr('أدخل عدد الطلاب المطلوب تصديرهم (0 = الكل)', 'Enter student limit to export (0 = all)')}
+                    placeholder={tr('الكل', 'All')}
                     className="w-11 px-1 py-0.5 text-center font-mono font-bold text-[11px] bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-700 rounded-lg text-slate-900 dark:text-white disabled:opacity-40"
                   />
                   <button
@@ -394,12 +447,12 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
                     }}
                     disabled={attended === 0}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
-                    title="تصدير كشف درجات هذا الامتحان إلى Excel (0 = الكل أو حدد العدد)"
+                    title={tr('تصدير كشف درجات هذا الامتحان إلى Excel (0 = الكل أو حدد العدد)', 'Export exam scores to Excel (0 = all)')}
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     {(exportLimitByExam[exam.id] || 0) > 0
-                      ? `تصدير (${exportLimitByExam[exam.id]})`
-                      : 'تصدير كشف الدرجات (.xlsx)'}
+                      ? tr(`تصدير (${exportLimitByExam[exam.id]})`, `Export (${exportLimitByExam[exam.id]})`)
+                      : tr('تصدير كشف الدرجات (.xlsx)', 'Export Scores (.xlsx)')}
                   </button>
                 </div>
 
@@ -408,7 +461,7 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
                   className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-98 rounded-xl shadow-sm transition-all cursor-pointer"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  رصد الدرجات يدوياً ({attended})
+                  {tr(`رصد الدرجات يدوياً (${attended})`, `Enter Scores (${attended})`)}
                 </button>
               </div>
             </div>
@@ -419,8 +472,11 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
       {attachmentExam && (
         <AttachmentModal
           isOpen={!!attachmentExam}
-          title="مرفق وإثبات مصداقية الامتحان الرسمي"
-          subtitle={`امتحان: ${attachmentExam.title} | المادة: ${attachmentExam.subject} | التاريخ: ${attachmentExam.date}`}
+          title={tr('مرفق وإثبات مصداقية الامتحان الرسمي', 'Official Exam Attachment')}
+          subtitle={tr(
+            `امتحان: ${attachmentExam.title} | المادة: ${attachmentExam.subject} | التاريخ: ${attachmentExam.date}`,
+            `Exam: ${attachmentExam.title} | Subject: ${translateSubject(attachmentExam.subject, lang)} | Date: ${attachmentExam.date}`
+          )}
           attachment={attachmentExam.attachment || null}
           onSave={async (attachment) => {
             if (onUpdateExamAttachment) {
@@ -434,14 +490,17 @@ export const ExamsView: React.FC<ExamsViewProps> = ({
 
       <ConfirmModal
         isOpen={!!confirmDeleteExam}
-        title="تأكيد حذف الامتحان"
+        title={tr('تأكيد حذف الامتحان', 'Confirm Delete Exam')}
         message={
           confirmDeleteExam
-            ? `هل أنت متأكد من حذف سجل "${confirmDeleteExam.title}" وجميع درجات الطلاب المسجلة له؟`
+            ? tr(
+                `هل أنت متأكد من حذف سجل "${confirmDeleteExam.title}" وجميع درجات الطلاب المسجلة له؟`,
+                `Are you sure you want to delete "${confirmDeleteExam.title}" and all its recorded student scores?`
+              )
             : ''
         }
-        confirmText="تأكيد الحذف"
-        cancelText="إلغاء"
+        confirmText={tr('تأكيد الحذف', 'Confirm Delete')}
+        cancelText={tr('إلغاء', 'Cancel')}
         isDestructive={true}
         onConfirm={() => {
           if (confirmDeleteExam) {

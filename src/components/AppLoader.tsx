@@ -1,15 +1,19 @@
 import React from 'react';
 import { Sparkles, Cloud } from 'lucide-react';
+import { useLanguage } from '../utils/i18n';
 
 interface AppLoaderProps {
   message?: string;
 }
 
 export const AppLoader: React.FC<AppLoaderProps> = ({ 
-  message = 'جاري مزامنة السجلات وقاعدة البيانات...' 
+  message,
 }) => {
+  const { tr, dir } = useLanguage();
+  const displayMessage = message || tr('جاري مزامنة السجلات وقاعدة البيانات...', 'Syncing records and cloud database...');
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950 text-white overflow-hidden selection:bg-amber-500">
+    <div dir={dir} className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950 text-white overflow-hidden selection:bg-amber-500">
       {/* Ambient background glow inspired by the vintage lantern */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-tr from-amber-600/20 via-orange-500/15 to-indigo-600/20 rounded-full blur-3xl pointer-events-none animate-pulse" />
 
@@ -34,10 +38,10 @@ export const AppLoader: React.FC<AppLoaderProps> = ({
 
         {/* Title */}
         <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white mb-1">
-          منصة Mr. Mohamed Hesham
+          {tr('منصة Mr. Mohamed Hesham', 'Mr. Mohamed Hesham Platform')}
         </h1>
         <p className="text-xs sm:text-sm font-medium text-amber-300/80 mb-6 flex items-center gap-1.5 justify-center">
-          <span>نظام السجلات الأكاديمية والمتابعة الشاملة</span>
+          <span>{tr('نظام السجلات الأكاديمية والمتابعة الشاملة', 'Comprehensive Academic Records & Tracking System')}</span>
         </p>
 
         {/* Dynamic Progress Indicator */}
@@ -48,7 +52,7 @@ export const AppLoader: React.FC<AppLoaderProps> = ({
         {/* Live sync text */}
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <Cloud className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-          <span>{message}</span>
+          <span>{displayMessage}</span>
         </div>
       </div>
     </div>

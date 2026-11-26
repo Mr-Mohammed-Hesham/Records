@@ -3,8 +3,11 @@ import { Student, StudentEnrollmentStatus } from '../types';
 export interface EnrollmentStatusMeta {
   id: StudentEnrollmentStatus;
   label: string;
+  labelEn: string;
   shortLabel: string;
+  shortLabelEn: string;
   description: string;
+  descriptionEn: string;
   badgeBg: string;
   badgeText: string;
   badgeBorder: string;
@@ -16,8 +19,11 @@ export const ENROLLMENT_STATUS_META: Record<StudentEnrollmentStatus, EnrollmentS
   active: {
     id: 'active',
     label: 'ملف فعال (مستمر بالكورس)',
+    labelEn: 'Active (Ongoing Course)',
     shortLabel: 'ملف فعال',
+    shortLabelEn: 'Active',
     description: 'الطالب منتظم حالياً ومستمر في حضور الكورس والامتحانات',
+    descriptionEn: 'Student is currently active and attending course sessions and exams',
     badgeBg: 'bg-emerald-50 dark:bg-emerald-950/60',
     badgeText: 'text-emerald-700 dark:text-emerald-300',
     badgeBorder: 'border-emerald-200 dark:border-emerald-800',
@@ -27,8 +33,11 @@ export const ENROLLMENT_STATUS_META: Record<StudentEnrollmentStatus, EnrollmentS
   completed: {
     id: 'completed',
     label: 'انتهى الكورس (أتم الكورس)',
+    labelEn: 'Course Completed',
     shortLabel: 'انتهى الكورس',
+    shortLabelEn: 'Completed',
     description: 'أنهى الطالب الكورس بنجاح ويُدرج في قائمة الطلبة المنتهي الكورس لهم',
+    descriptionEn: 'Student has successfully completed the course and is listed under completed files',
     badgeBg: 'bg-indigo-50 dark:bg-indigo-950/60',
     badgeText: 'text-indigo-700 dark:text-indigo-300',
     badgeBorder: 'border-indigo-200 dark:border-indigo-800',
@@ -38,8 +47,11 @@ export const ENROLLMENT_STATUS_META: Record<StudentEnrollmentStatus, EnrollmentS
   paused: {
     id: 'paused',
     label: 'متوقف مؤقتاً / مؤجل',
+    labelEn: 'Paused / Deferred',
     shortLabel: 'متوقف مؤقتاً',
+    shortLabelEn: 'Paused',
     description: 'الطالب متوقف لفترة مؤقتة مع إمكانية استئناف الكورس لاحقاً',
+    descriptionEn: 'Student is temporarily paused with the option to resume later',
     badgeBg: 'bg-amber-50 dark:bg-amber-950/60',
     badgeText: 'text-amber-700 dark:text-amber-300',
     badgeBorder: 'border-amber-200 dark:border-amber-800',
@@ -49,8 +61,11 @@ export const ENROLLMENT_STATUS_META: Record<StudentEnrollmentStatus, EnrollmentS
   withdrawn: {
     id: 'withdrawn',
     label: 'منقطع عن الكورس',
+    labelEn: 'Withdrawn / Inactive',
     shortLabel: 'منقطع',
+    shortLabelEn: 'Withdrawn',
     description: 'الطالب منقطع عن الحضور أو اعتذر عن استكمال الكورس',
+    descriptionEn: 'Student has discontinued attendance or withdrawn from the course',
     badgeBg: 'bg-rose-50 dark:bg-rose-950/60',
     badgeText: 'text-rose-700 dark:text-rose-300',
     badgeBorder: 'border-rose-200 dark:border-rose-800',

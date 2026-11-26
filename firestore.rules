@@ -33,6 +33,24 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Overtime & Financial Entries - سجلات الأوفر تايم والمالية
+    match /overtimeEntries/{entryId} {
+      allow read, write: if true;
+    }
+
+    match /overtimeMonthlyConfigs/{configId} {
+      allow read, write: if true;
+    }
+
+    // Teacher Workspace Tasks & Notes - لوحة مهام وملاحظات المستر
+    match /teacherTasks/{taskId} {
+      allow read, write: if true;
+    }
+
+    match /teacherNotes/{noteId} {
+      allow read, write: if true;
+    }
+
     // Connection Test
     match /test/{testId} {
       allow read, write: if true;

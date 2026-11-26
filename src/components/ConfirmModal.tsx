@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertTriangle, X } from 'lucide-react';
+import { useLanguage } from '../utils/i18n';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -18,15 +19,19 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   isOpen,
   title,
   message,
-  confirmText = 'تأكيد',
-  cancelText = 'إلغاء',
+  confirmText,
+  cancelText,
   isDestructive = true,
   zIndexClass = 'z-50',
   onConfirm,
   onCancel,
   onClose,
 }) => {
+  const { dir, tr } = useLanguage();
   if (!isOpen) return null;
+
+  const resolvedConfirm = confirmText || tr('تأكيد', 'Confirm');
+  const resolvedCancel = cancelText || tr('إلغاء', 'Cancel');
 
   const handleCancel = () => {
     if (onCancel) onCancel();
@@ -37,12 +42,12 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     <div 
       className={`fixed inset-0 ${zIndexClass} flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden animate-in fade-in duration-200`}
       onClick={handleCancel}
-      dir="rtl"
+      dir={dir}
     >
       <div 
         id="confirm-modal"
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-100 dark:border-slate-800 text-right animate-in zoom-in-95 duration-200 transition-colors max-h-[92dvh] overflow-y-auto"
+        className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-100 dark:border-slate-800 text-start animate-in zoom-in-95 duration-200 transition-colors max-h-[92dvh] overflow-y-auto"
       >
         <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800">
           <div className={`flex items-center gap-3 ${isDestructive ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`}>
@@ -60,7 +65,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           <button
             onClick={handleCancel}
             className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-            title="إغلاق"
+            title={tr('إغلاق', 'Close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -77,7 +82,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             onClick={handleCancel}
             className="px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer text-center"
           >
-            {cancelText}
+            {resolvedCancel}
           </button>
           <button
             id="confirm-action-btn"
@@ -89,7 +94,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
                 : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 shadow-amber-500/20 active:scale-98'
             }`}
           >
-            {confirmText}
+            {resolvedConfirm}
           </button>
         </div>
       </div>

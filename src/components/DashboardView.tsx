@@ -24,14 +24,29 @@ import {
   GraduationCap,
   Layers,
   Wallet,
+  Kanban,
 } from 'lucide-react';
-import { Student, Exam, ExamResult, TeacherSettings, ExamStructure, StudentStructureProgress } from '../types';
+import {
+  Student,
+  Exam,
+  ExamResult,
+  TeacherSettings,
+  ExamStructure,
+  StudentStructureProgress,
+  TeacherTask,
+  TeacherNote,
+} from '../types';
 import { calculateStudentStats } from '../utils/grading';
 import { DEFAULT_SETTINGS } from '../services/firebase';
 import { getEffectiveEnrollmentStatus, ENROLLMENT_STATUS_META } from '../utils/studentStatus';
 import { saveViewState } from '../utils/activityTracker';
 import { DynamicGradesChart } from './DynamicGradesChart';
 import { HonorBoardModal } from './HonorBoardModal';
+import { StructureSmartAlert } from '../utils/smartAlerts';
+import { SmartAlertsDashboardBanner } from './SmartAlertsCenter';
+import { TeacherWorkspaceDashboardWidget } from './TeacherWorkspaceView';
+import { DashboardStructuresAnalytics } from './DashboardStructuresAnalytics';
+import { useLanguage, translateGrade } from '../utils/i18n';
 
 interface DashboardViewProps {
   students?: Student[];
@@ -41,7 +56,29 @@ interface DashboardViewProps {
   structuresCount?: number;
   structures?: ExamStructure[];
   structureProgress?: StudentStructureProgress[];
-  onNavigate: (tab: 'dashboard' | 'students' | 'exams' | 'structures' | 'scoring' | 'reports' | 'overtime' | 'settings') => void;
+  smartAlerts?: StructureSmartAlert[];
+  dailyAlertsDismissed?: boolean;
+  onToggleDailyAlertsDismiss?: (dismissed: boolean) => void;
+  onOpenAlertsDrawer?: () => void;
+  onOpenBulkReminder?: (
+    alert: StructureSmartAlert,
+    targetMode: 'lagging' | 'incomplete'
+  ) => void;
+  onRemindStructureBucket?: (
+    structure: ExamStructure,
+    studentIds: string[],
+    label: string
+  ) => void;
+  onUpdateStructureExamDate?: (
+    structureId: string,
+    examDate: string
+  ) => Promise<void>;
+  onCreateTaskFromAlert?: (alert: StructureSmartAlert) => Promise<void>;
+  teacherTasks?: TeacherTask[];
+  teacherNotes?: TeacherNote[];
+  onSaveTask?: (task: Omit<TeacherTask, 'id'> & { id?: string }) => Promise<TeacherTask>;
+  onSaveNote?: (note: Omit<TeacherNote, 'id'> & { id?: string }) => Promise<TeacherNote>;
+  onNavigate: (tab: 'dashboard' | 'students' | 'exams' | 'structures' | 'scoring' | 'reports' | 'overtime' | 'workspace' | 'settings') => void;
   onOpenStudentProfile: (student: Student) => void;
   onAddStudent: () => void;
   onAddExam: () => void;
@@ -60,6 +97,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   structuresCount = 0,
   structures = [],
   structureProgress = [],
+  smartAlerts = [],
+  dailyAlertsDismissed = false,
+  onToggleDailyAlertsDismiss,
+  onOpenAlertsDrawer,
+  onOpenBulkReminder,
+  onRemindStructureBucket,
+  onUpdateStructureExamDate,
+  onCreateTaskFromAlert,
+  teacherTasks = [],
+  teacherNotes = [],
+  onSaveTask,
+  onSaveNote,
   onNavigate,
   onOpenStudentProfile,
   onAddStudent,
@@ -70,6 +119,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   isRefreshing = false,
   onOpenExamGenerator,
 }) => {
+  const { lang, dir, isRtl, tr } = useLanguage();
   const [isHonorBoardOpen, setIsHonorBoardOpen] = useState(false);
   const safeStudents = students || [];
   const safeExams = exams || [];
@@ -185,7 +235,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }, [safeResults]);
 
   return (
-    <div id="dashboard-view" className="space-y-5 text-right transition-colors">
+    <div id="dashboard-view" dir={dir} className="space-y-5 text-start transition-colors">
       {/* Dynamic Vibrant Hero Banner */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-indigo-600/10 dark:from-amber-950/30 dark:via-slate-900 dark:to-indigo-950/40 p-4 sm:p-6 border border-amber-300/30 dark:border-amber-500/20 shadow-sm backdrop-blur-md">
         <div className="relative z-10 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 sm:gap-5">
@@ -205,11 +255,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-1 flex-wrap text-xs text-slate-600 dark:text-slate-300">
                 <span className="font-extrabold text-amber-700 dark:text-amber-300">
-                  منصة السجلات الأكاديمية
+                  {tr('منصة السجلات الأكاديمية', 'Academic Records Platform')}
                 </span>
                 <span aria-hidden="true">·</span>
                 <span className="font-medium">
-                  مرحباً بك، <strong className="text-slate-900 dark:text-white">Mr. Mohammed Hesham</strong>
+                  {tr('مرحباً بك،', 'Welcome,')} <strong className="text-slate-900 dark:text-white">Mr. Mohammed Hesham</strong>
                 </span>
               </div>
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-slate-900 dark:text-white truncate">
@@ -226,7 +276,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold rounded-xl text-xs sm:text-sm shadow-md shadow-amber-500/20 transition cursor-pointer whitespace-nowrap"
             >
               <UserPlus className="w-4 h-4 shrink-0" />
-              <span>+ إضافة طالب</span>
+              <span>{tr('+ إضافة طالب', '+ Add Student')}</span>
             </button>
 
             <button
@@ -235,7 +285,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 hover:border-amber-400 rounded-xl text-xs sm:text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs text-slate-800 dark:text-slate-200 transition cursor-pointer whitespace-nowrap"
             >
               <Plus className="w-4 h-4 text-amber-500 shrink-0" />
-              <span>تسجيل امتحان</span>
+              <span>{tr('تسجيل امتحان', 'Add Exam')}</span>
             </button>
 
             {onOpenExamGenerator && (
@@ -243,10 +293,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 id="dash-open-exam-generator-btn"
                 onClick={onOpenExamGenerator}
                 className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-slate-900 to-slate-800 dark:from-amber-500/20 dark:to-orange-500/20 hover:from-slate-800 hover:to-slate-700 text-amber-400 dark:text-amber-300 border border-amber-500/40 rounded-xl text-xs sm:text-sm font-black shadow-sm transition cursor-pointer whitespace-nowrap"
-                title="فتح منصة صناعة وتوليد الامتحانات الذكية (Hesham-Exam)"
+                title={tr('فتح منصة صناعة وتوليد الامتحانات الذكية (Hesham-Exam)', 'Open Smart Exam Builder (Hesham-Exam)')}
               >
                 <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>توليد امتحان ذكي</span>
+                <span>{tr('توليد امتحان ذكي', 'AI Exam Builder')}</span>
               </button>
             )}
 
@@ -256,27 +306,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap"
             >
               <CheckSquare className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-              <span>رصد النتائج</span>
+              <span>{tr('رصد النتائج', 'Score Entry')}</span>
             </button>
 
             <button
               id="dash-structures-btn"
               onClick={() => onNavigate('structures')}
               className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer whitespace-nowrap"
-              title="فتح قسم الهياكل ومتابعة حل الأسئلة ونسب صحتها"
+              title={tr('فتح قسم الهياكل ومتابعة حل الأسئلة ونسب صحتها', 'Open Structures & Accuracy Tracking')}
             >
               <Layers className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span>الهياكل ({structuresCount})</span>
+              <span>{tr(`الهياكل (${structuresCount})`, `Structures (${structuresCount})`)}</span>
             </button>
 
             <button
               id="dash-finance-btn"
               onClick={() => onNavigate('overtime')}
               className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer whitespace-nowrap"
-              title="فتح قسم المالية وحساب ساعات الأوفر تايم"
+              title={tr('فتح قسم المالية وحساب ساعات الأوفر تايم', 'Open Finance & Overtime Calculator')}
             >
               <Wallet className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>المالية</span>
+              <span>{tr('المالية', 'Finance')}</span>
+            </button>
+
+            <button
+              id="dash-workspace-btn"
+              onClick={() => onNavigate('workspace')}
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-sky-50 dark:bg-sky-950/40 hover:bg-sky-100 dark:hover:bg-sky-900/50 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-800 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer whitespace-nowrap"
+              title={tr('مساحة عمل المعلم: المهام والملاحظات و To-Do List', 'Teacher Workspace: Tasks, Notes & To-Do List')}
+            >
+              <Kanban className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
+              <span>{tr('مساحة عمل المعلم', 'Teacher Workspace')}</span>
             </button>
 
             {onRefreshPlatform && (
@@ -285,10 +345,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 onClick={onRefreshPlatform}
                 disabled={isRefreshing}
                 className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer whitespace-nowrap"
-                title="مزامنة وجلب كافة السجلات من فايربيز مباشرة"
+                title={tr('مزامنة وجلب كافة السجلات من فايربيز مباشرة', 'Sync all records directly from Firebase')}
               >
                 <RefreshCw className={`w-4 h-4 text-amber-500 shrink-0 ${isRefreshing ? 'animate-spin' : ''}`} />
-                <span>{isRefreshing ? 'جاري المزامنة...' : 'مزامنة فايربيز'}</span>
+                <span>
+                  {isRefreshing
+                    ? tr('جاري المزامنة...', 'Syncing...')
+                    : tr('مزامنة فايربيز', 'Sync Firebase')}
+                </span>
               </button>
             )}
 
@@ -296,7 +360,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               id="dash-search-btn"
               onClick={onOpenQuickSearch}
               className="p-2.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-800 transition cursor-pointer"
-              title="البحث عن طالب (Ctrl + K)"
+              title={tr('البحث عن طالب (Ctrl + K)', 'Search Student (Ctrl + K)')}
             >
               <Search className="w-4 h-4" />
             </button>
@@ -305,7 +369,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               id="dash-export-btn"
               onClick={onExportAllExcel}
               className="p-2.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-800 transition cursor-pointer"
-              title="تصدير جميع البيانات إلى Excel"
+              title={tr('تصدير جميع البيانات إلى Excel', 'Export all data to Excel')}
             >
               <Download className="w-4 h-4" />
             </button>
@@ -321,8 +385,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <p className="font-bold text-slate-900 dark:text-white">هل توجد بيانات سابقة على حسابك في Firebase؟</p>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">يمكنك جلب ومزامنة كافة السجلات السحابية فوراً دون الحاجة لإعادة تحميل الصفحة.</p>
+              <p className="font-bold text-slate-900 dark:text-white">
+                {tr('هل توجد بيانات سابقة على حسابك في Firebase؟', 'Do you have previous data on your Firebase account?')}
+              </p>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                {tr('يمكنك جلب ومزامنة كافة السجلات السحابية فوراً دون الحاجة لإعادة تحميل الصفحة.', 'Fetch and sync all cloud records immediately without reloading.')}
+              </p>
             </div>
           </div>
           {onRefreshPlatform && (
@@ -332,14 +400,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black rounded-xl text-xs sm:text-sm inline-flex items-center justify-center gap-2 shrink-0 cursor-pointer shadow-md shadow-amber-500/20 transition active:scale-95"
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span>{isRefreshing ? 'جاري الاتصال والتحميل...' : 'مزامنة السجلات من السحابة الآن'}</span>
+              <span>
+                {isRefreshing
+                  ? tr('جاري الاتصال والتحميل...', 'Connecting & loading...')
+                  : tr('مزامنة السجلات من السحابة الآن', 'Sync Cloud Records Now')}
+              </span>
             </button>
           )}
         </div>
       )}
 
+      {/* Smart Daily Structure Exam Alerts & Bulk WhatsApp Reminders */}
+      <SmartAlertsDashboardBanner
+        alerts={smartAlerts}
+        dismissedToday={dailyAlertsDismissed}
+        onToggleDismissToday={(dismiss) => onToggleDailyAlertsDismiss?.(dismiss)}
+        onOpenAlertsDrawer={() => onOpenAlertsDrawer?.()}
+        onOpenBulkReminder={(alert, mode) => onOpenBulkReminder?.(alert, mode)}
+        onUpdateStructureExamDate={onUpdateStructureExamDate}
+        onCreateTaskFromAlert={onCreateTaskFromAlert}
+        onOpenStructures={() => onNavigate('structures')}
+      />
+
       {/* Vibrant 4-Metric Grid with Lively Gradients & Accents */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
         {/* Total Students Card */}
         <div 
           onClick={() => onNavigate('students')}
@@ -347,7 +431,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
-              إجمالي الطلاب
+              {tr('إجمالي الطلاب', 'Total Students')}
             </span>
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
               <Users className="w-4 h-4" />
@@ -355,10 +439,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="flex items-baseline gap-2">
             <h2 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">{safeStudents.length}</h2>
-            <span className="text-xs text-amber-600 dark:text-amber-400 font-bold">طالب</span>
+            <span className="text-xs text-amber-600 dark:text-amber-400 font-bold">{tr('طالب', 'students')}</span>
           </div>
-          <div className="mt-2.5 flex items-center text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-            <span className="ml-1">✓</span> {safeStudents.length > 0 ? 'مسجلون في السجلات' : 'في انتظار الإضافة'}
+          <div className="mt-2.5 flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+            <span>✓</span>
+            <span>
+              {safeStudents.length > 0
+                ? tr('مسجلون في السجلات', 'Enrolled in records')
+                : tr('في انتظار الإضافة', 'Waiting to add')}
+            </span>
           </div>
         </div>
 
@@ -369,7 +458,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
-              الامتحانات المسجلة
+              {tr('الامتحانات المسجلة', 'Recorded Exams')}
             </span>
             <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:scale-110 transition-transform">
               <FileSpreadsheet className="w-4 h-4" />
@@ -377,10 +466,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="flex items-baseline gap-2">
             <h2 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">{safeExams.length}</h2>
-            <span className="text-xs text-indigo-600 dark:text-indigo-400 font-bold">اختبار</span>
+            <span className="text-xs text-indigo-600 dark:text-indigo-400 font-bold">{tr('اختبار', 'exams')}</span>
           </div>
           <div className="mt-2.5 text-xs text-slate-500 dark:text-slate-400 truncate">
-            {lastExam ? `الآخير: ${lastExam.title}` : 'جاهز لإنشاء أول اختبار'}
+            {lastExam
+              ? tr(`الأخير: ${lastExam.title}`, `Latest: ${lastExam.title}`)
+              : tr('جاهز لإنشاء أول اختبار', 'Ready for first exam')}
           </div>
         </div>
 
@@ -391,7 +482,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
-              المعدل العام
+              {tr('المعدل العام', 'Overall Average')}
             </span>
             <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
               <TrendingUp className="w-4 h-4" />
@@ -403,9 +494,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </h2>
             <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">%</span>
           </div>
-          <div className="mt-2.5 flex items-center text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-            <Activity className="w-3.5 h-3.5 ml-1" />
-            <span>متوسط نتائج الامتحانات</span>
+          <div className="mt-2.5 flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+            <Activity className="w-3.5 h-3.5 shrink-0" />
+            <span>{tr('متوسط نتائج الامتحانات', 'Average exam scores')}</span>
           </div>
         </div>
 
@@ -416,7 +507,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
-              المتفوقون (80%+)
+              {tr('المتفوقون (80%+)', 'Top Performers (80%+)')}
             </span>
             <div className="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center group-hover:scale-110 transition-transform">
               <Award className="w-4 h-4" />
@@ -424,10 +515,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="flex items-baseline gap-2">
             <h2 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white">{topPerformers.length}</h2>
-            <span className="text-xs text-orange-600 dark:text-orange-400 font-bold">طالب متميز</span>
+            <span className="text-xs text-orange-600 dark:text-orange-400 font-bold">{tr('طالب متميز', 'achievers')}</span>
           </div>
           <div className="mt-2.5 text-xs text-slate-500 dark:text-slate-400">
-            أداء ممتاز مستمر
+            {tr('أداء ممتاز مستمر', 'Consistent excellence')}
           </div>
         </div>
       </section>
@@ -440,10 +531,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div>
             <h3 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
-              حالة ملفات الطلاب في الكورس
+              {tr('حالة ملفات الطلاب في الكورس', 'Student Course Enrollment Status')}
             </h3>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              تصنيف الملفات الفعالة وقائمة الطلبة الذين انتهى الكورس لهم
+              {tr('تصنيف الملفات الفعالة وقائمة الطلبة الذين انتهى الكورس لهم', 'Filter active, completed-course, and paused/withdrawn profiles')}
             </p>
           </div>
         </div>
@@ -455,7 +546,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 transition cursor-pointer"
           >
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-            <span>ملف فعال ({enrollmentCounts.active})</span>
+            <span>{tr(`ملف فعال (${enrollmentCounts.active})`, `Active (${enrollmentCounts.active})`)}</span>
           </button>
 
           <button
@@ -464,7 +555,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/60 hover:bg-sky-100 transition cursor-pointer"
           >
             <GraduationCap className="w-3.5 h-3.5 text-sky-500" />
-            <span>قائمة منتهي الكورس ({enrollmentCounts.completed})</span>
+            <span>{tr(`قائمة منتهي الكورس (${enrollmentCounts.completed})`, `Completed Course (${enrollmentCounts.completed})`)}</span>
           </button>
 
           <button
@@ -473,7 +564,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100 transition cursor-pointer"
           >
             <Clock className="w-3.5 h-3.5 text-amber-500" />
-            <span>متوقف / منقطع ({enrollmentCounts.paused + enrollmentCounts.withdrawn})</span>
+            <span>
+              {tr(
+                `متوقف / منقطع (${enrollmentCounts.paused + enrollmentCounts.withdrawn})`,
+                `Paused / Withdrawn (${enrollmentCounts.paused + enrollmentCounts.withdrawn})`
+              )}
+            </span>
           </button>
         </div>
       </div>
@@ -485,7 +581,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {recentExamsChart.length === 0 ? (
             <div className="py-20 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
               <BookOpen className="w-8 h-8 text-slate-300 dark:text-slate-700" />
-              <p>سجل امتحانات ونتائج لعرض المخطط البياني هنا.</p>
+              <p>{tr('سجل امتحانات ونتائج لعرض المخطط البياني هنا.', 'Add exams and scores to display the chart here.')}</p>
             </div>
           ) : (
             <DynamicGradesChart
@@ -498,8 +594,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   color: palette[idx % palette.length],
                 };
               })}
-              title="مخطط متوسط درجات الامتحانات الأخيرة (%)"
-              subtitle="يمكنك التبديل بين شكل الأعمدة، الدائرة، الأفقي، المساحة، المنحنى، أو الرادار"
+              title={tr('مخطط متوسط درجات الامتحانات الأخيرة (%)', 'Recent Exams Average Score Chart (%)')}
+              subtitle={tr(
+                'يمكنك التبديل بين شكل الأعمدة، الدائرة، الأفقي، المساحة، المنحنى، أو الرادار',
+                'Switch between column, pie, horizontal bar, area, line, or radar chart modes'
+              )}
               storageKey="DASHBOARD_RECENT_EXAMS_CHART"
               height={240}
             />
@@ -511,13 +610,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div>
             <h3 className="font-bold text-slate-900 dark:text-white text-base mb-4 flex items-center gap-2">
               <Zap className="w-4 h-4 text-amber-500" />
-              <span>مؤشرات الكفاءة العامة</span>
+              <span>{tr('مؤشرات الكفاءة العامة', 'Overall Efficiency Metrics')}</span>
             </h3>
 
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500 dark:text-slate-400 font-medium">نسبة النجاح العامة</span>
+                  <span className="text-slate-500 dark:text-slate-400 font-medium">{tr('نسبة النجاح العامة', 'Overall Pass Rate')}</span>
                   <span className="font-black text-slate-900 dark:text-white">{overallAvgPercentage}%</span>
                 </div>
                 <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -530,7 +629,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500 dark:text-slate-400 font-medium">معدل الامتياز والتفوق (80%+)</span>
+                  <span className="text-slate-500 dark:text-slate-400 font-medium">{tr('معدل الامتياز والتفوق (80%+)', 'Excellence Rate (80%+)')}</span>
                   <span className="font-black text-slate-900 dark:text-white">
                     {safeStudents.length > 0 ? Math.round((topPerformers.length / safeStudents.length) * 100) : 0}%
                   </span>
@@ -545,7 +644,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500 dark:text-slate-400 font-medium">حضور وتقييم الطلاب</span>
+                  <span className="text-slate-500 dark:text-slate-400 font-medium">{tr('حضور وتقييم الطلاب', 'Attendance & Evaluation Rate')}</span>
                   <span className="font-black text-slate-900 dark:text-white">
                     {safeExams.length > 0 && safeStudents.length > 0 
                       ? Math.min(100, Math.round((safeResults.length / (safeExams.length * safeStudents.length)) * 100)) 
@@ -566,16 +665,42 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="mt-6 p-4 bg-amber-500/10 dark:bg-amber-950/30 rounded-2xl border border-amber-300/40 dark:border-amber-700/30">
             <p className="text-[11px] font-extrabold uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-1 flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5" />
-              إشعار تحليلي
+              {tr('إشعار تحليلي', 'Analytical Insight')}
             </p>
             <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
               {topPerformers.length > 0
-                ? `هناك ${topPerformers.length} طالب يحافظون على تفوق مستمر. يمكنك تصدير تقاريرهم أو طباعة شيت المتابعة بنقرة واحدة.`
-                : 'أضف أول امتحانات ورصد الدرجات لمشاهدة التحليل التلقائي وتوصيات المتابعة.'}
+                ? tr(
+                    `هناك ${topPerformers.length} طالب يحافظون على تفوق مستمر. يمكنك تصدير تقاريرهم أو طباعة شيت المتابعة بنقرة واحدة.`,
+                    `${topPerformers.length} students are maintaining top performance. Export their reports or follow-up sheets in one click.`
+                  )
+                : tr(
+                    'أضف أول امتحانات ورصد الدرجات لمشاهدة التحليل التلقائي وتوصيات المتابعة.',
+                    'Add exams and record grades to unlock automatic analysis and follow-up insights.'
+                  )}
             </p>
           </div>
         </div>
       </div>
+
+      {/* Structures, Completion Tiers & Students Cohort Charts */}
+      <DashboardStructuresAnalytics
+        structures={structures}
+        structureProgress={structureProgress}
+        students={safeStudents}
+        onNavigateToStructures={() => onNavigate('structures')}
+        onRemindBucketFromDashboard={onRemindStructureBucket}
+      />
+
+      {/* Teacher Kanban Tasks, Quick To-Do & Pinned Notes Widget */}
+      {onSaveTask && onSaveNote && (
+        <TeacherWorkspaceDashboardWidget
+          tasks={teacherTasks}
+          notes={teacherNotes}
+          onSaveTask={onSaveTask}
+          onSaveNote={onSaveNote}
+          onOpenFullWorkspace={() => onNavigate('workspace')}
+        />
+      )}
 
       {/* Top Performers & Students Needing Follow-up */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -584,7 +709,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
               <Award className="w-5 h-5" />
-              <h3 className="font-bold text-slate-900 dark:text-white text-base">لوحة شرف المتفوقين</h3>
+              <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                {tr('لوحة شرف المتفوقين', 'Top Achievers Honor Board')}
+              </h3>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -592,16 +719,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 type="button"
                 onClick={() => setIsHonorBoardOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
-                title="تصدير لوحة الشرف كصورة عالية الدقة مع توقيع المعلم لإرسالها لأولياء الأمور"
+                title={tr('تصدير لوحة الشرف كصورة عالية الدقة مع توقيع المعلم لإرسالها لأولياء الأمور', 'Export HD Honor Board image to share with parents')}
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>تصدير كصورة 📸</span>
+                <span>{tr('تصدير كصورة 📸', 'Export Image 📸')}</span>
               </button>
               <button
                 onClick={() => onNavigate('students')}
                 className="text-xs text-slate-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 font-semibold cursor-pointer"
               >
-                عرض الجميع
+                {tr('عرض الجميع', 'View All')}
               </button>
             </div>
           </div>
@@ -609,7 +736,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
             {topPerformers.length === 0 ? (
               <div className="py-8 text-center text-slate-400 text-xs">
-                لم يتم تحديد متفوقين بعد (يتطلب رصد درجات امتحانات).
+                {tr('لم يتم تحديد متفوقين بعد (يتطلب رصد درجات امتحانات).', 'No top achievers yet (requires recorded exam scores).')}
               </div>
             ) : (
               topPerformers.map(({ student, stats }, idx) => (
@@ -627,17 +754,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {student.name}
                       </h4>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        {student.grade} • {student.group}
+                        {translateGrade(student.grade, lang)} • {student.group}
                       </p>
                     </div>
                   </div>
 
-                  <div className="text-left">
+                  <div className="text-end">
                     <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm block">
                       {stats.averagePercentage}%
                     </span>
                     <span className="text-[10px] text-slate-400 font-mono">
-                      {stats.totalExams} امتحانات
+                      {stats.totalExams} {tr('امتحانات', 'exams')}
                     </span>
                   </div>
                 </div>
@@ -651,7 +778,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-extrabold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
                   <Flame className="w-4 h-4 text-amber-500" />
-                  <span>مراكز أكثر الطلبة حلاً للامتحانات (فرسان المثابرة)</span>
+                  <span>{tr('مراكز أكثر الطلبة حلاً للامتحانات (فرسان المثابرة)', 'Most Active Exam Solvers')}</span>
                 </span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -663,14 +790,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   >
                     <div className="min-w-0">
                       <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 block">
-                        المركز {idx + 1} ⚡
+                        {tr(`المركز ${idx + 1} ⚡`, `Rank #${idx + 1} ⚡`)}
                       </span>
                       <span className="text-xs font-extrabold text-slate-900 dark:text-white truncate block">
                         {student.name}
                       </span>
                     </div>
                     <span className="px-2 py-0.5 rounded-lg bg-amber-500 text-slate-950 font-mono font-black text-[11px] shrink-0">
-                      {stats.totalExams} اختبار
+                      {stats.totalExams} {tr('اختبار', 'exams')}
                     </span>
                   </div>
                 ))}
@@ -683,15 +810,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                <span>لوحة شرف وتكريم رسمي لأولياء الأمور</span>
+                <span>{tr('لوحة شرف وتكريم رسمي لأولياء الأمور', 'Official Honor Board for Parents')}</span>
               </span>
               <button
                 type="button"
                 onClick={() => setIsHonorBoardOpen(true)}
                 className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer flex items-center gap-1"
               >
-                <span>تخصيص وتصدير اللوحة</span>
-                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>{tr('تخصيص وتصدير اللوحة', 'Customize & Export')}</span>
+                {isRtl ? <ChevronLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}
               </button>
             </div>
           )}
@@ -702,20 +829,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
               <AlertTriangle className="w-5 h-5" />
-              <h3 className="font-bold text-slate-900 dark:text-white text-base">يحتاجون متابعة ودعم</h3>
+              <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                {tr('يحتاجون متابعة ودعم', 'Needs Follow-Up & Support')}
+              </h3>
             </div>
             <button
               onClick={() => onNavigate('students')}
               className="text-xs text-amber-600 dark:text-amber-400 hover:underline font-semibold cursor-pointer"
             >
-              عرض الجميع
+              {tr('عرض الجميع', 'View All')}
             </button>
           </div>
 
           <div className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
             {needsFollowUp.length === 0 ? (
               <div className="py-8 text-center text-slate-400 text-xs">
-                ممتاز! لا يوجد طلاب بدرجات منخفضة حالياً.
+                {tr('ممتاز! لا يوجد طلاب بدرجات منخفضة حالياً.', 'Great! No students currently need urgent follow-up.')}
               </div>
             ) : (
               needsFollowUp.map(({ student, stats }) => (
@@ -729,16 +858,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {student.name}
                     </h4>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {student.grade} • {student.group}
+                      {translateGrade(student.grade, lang)} • {student.group}
                     </p>
                   </div>
 
-                  <div className="text-left">
+                  <div className="text-end">
                     <span className="font-mono font-bold text-rose-600 dark:text-rose-400 text-sm block">
                       {stats.averagePercentage}%
                     </span>
                     <span className="bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                      {stats.trend === 'declining' ? 'متراجع' : 'متابعة'}
+                      {stats.trend === 'declining'
+                        ? tr('متراجع', 'Declining')
+                        : tr('متابعة', 'Follow-Up')}
                     </span>
                   </div>
                 </div>

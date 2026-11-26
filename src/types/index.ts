@@ -187,6 +187,7 @@ export interface ExamStructure {
   subject: string; // المادة
   group?: string; // الشعبة / المجموعة أو الكل
   date?: string; // تاريخ اعتماد أو إضافة الهيكل
+  examDate?: string; // موعد امتحان الهيكل المحدد أو المتوقع (YYYY-MM-DD) للتنبيهات الذكية
   completionStatus?: StructureCompletionStatus; // 'ongoing' = مستمر وجاري الدراسة | 'studied_not_examined' = منتهي دراسته ولم يُمتحن بعد | 'completed' = انتهى وتم امتحان المادة
   completedAt?: string; // تاريخ انتهاء دراسة الهيكل أو امتحان المادة (اختياري)
   totalQuestions: number; // إجمالي عدد الأسئلة في الهيكل
@@ -312,3 +313,58 @@ export interface OvertimeMonthlyConfig {
   updatedAt: string;
 }
 
+/* =========================================================
+   TEACHER WORKSPACE: KANBAN TASKS, NOTES & TO-DO LIST
+   ========================================================= */
+
+export type TeacherTaskStatus = 'todo' | 'in_progress' | 'done';
+export type TeacherTaskPriority = 'high' | 'medium' | 'low';
+export type TeacherTaskCategory = 'structures' | 'exams' | 'students' | 'finance' | 'general';
+
+export interface TeacherTaskSubtask {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+export interface TeacherTask {
+  id: string;
+  title: string;
+  description?: string;
+  status: TeacherTaskStatus;
+  priority: TeacherTaskPriority;
+  category: TeacherTaskCategory;
+  dueDate?: string; // YYYY-MM-DD
+  linkedStructureId?: string;
+  linkedStructureTitle?: string;
+  subtasks?: TeacherTaskSubtask[];
+  order?: number;
+  createdAt: string;
+  updatedAt?: string;
+  completedAt?: string;
+}
+
+export type TeacherNoteColor = 'amber' | 'sky' | 'emerald' | 'rose' | 'slate';
+
+export interface TeacherNoteChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+  priority?: TeacherTaskPriority;
+  dueDate?: string;
+}
+
+export interface TeacherNote {
+  id: string;
+  title: string;
+  content: string;
+  noteType: 'note' | 'todo_list';
+  color?: TeacherNoteColor;
+  category?: string;
+  pinned?: boolean;
+  checklistItems?: TeacherNoteChecklistItem[];
+  dueDate?: string;
+  linkedStructureId?: string;
+  createdAt: string;
+  updatedAt?: string;
+}

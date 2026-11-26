@@ -48,6 +48,13 @@ import {
 } from '../services/firebase';
 import { getEffectiveEnrollmentStatus } from '../utils/studentStatus';
 import { loadViewState, saveViewState, clearViewState } from '../utils/activityTracker';
+import {
+  useLanguage,
+  translateGrade,
+  translateTerm,
+  translateTrack,
+  translateSubject,
+} from '../utils/i18n';
 
 export type HonorBoardDataSource = 'academic' | 'structures';
 export type HonorBoardType = 'overall' | 'most_active' | 'combined' | 'exam';
@@ -89,29 +96,32 @@ interface RankedStudent {
 export interface FontOption {
   id: string;
   name: string;
+  nameEn: string;
   family: string;
   category: string;
+  categoryEn: string;
   desc: string;
+  descEn: string;
 }
 
 export const FONT_OPTIONS: FontOption[] = [
-  { id: 'cairo', name: 'خط كايرو (Cairo)', family: "'Cairo', sans-serif", category: 'عصري وواضح', desc: 'الخط الافتراضي، وضوح فائق وتناسق عالي' },
-  { id: 'amiri', name: 'الخط الأميري (Amiri)', family: "'Amiri', serif", category: 'كلاسيكي رسمي', desc: 'خط نسخ تراثي فاخر مخصص للشهادات الرسمية' },
-  { id: 'tajawal', name: 'خط تجوال (Tajawal)', family: "'Tajawal', sans-serif", category: 'هندسي أنيق', desc: 'خط رشيق متوازن ومريح جداً للقراءة' },
-  { id: 'almarai', name: 'خط المراعي (Almarai)', family: "'Almarai', sans-serif", category: 'حديث وجذاب', desc: 'مستقيم وعالي المقروئية لأسماء الطلاب' },
-  { id: 'aref', name: 'خط الرقعة (Aref Ruqaa)', family: "'Aref Ruqaa', serif", category: 'تراثي فني', desc: 'خط رقعة أصيل يحاكي التخطيط بالريشة' },
-  { id: 'noto-kufi', name: 'خط كوفي حديث (Noto Kufi)', family: "'Noto Kufi Arabic', sans-serif", category: 'كوفي رسمي', desc: 'طابع كوفي هندسي متقن للشهادات واللوحات' },
-  { id: 'ibm-plex', name: 'خط آي بي إم (IBM Plex)', family: "'IBM Plex Sans Arabic', sans-serif", category: 'أكاديمي معتمد', desc: 'رسمي متزن وواضح للتقارير واللوحات' },
-  { id: 'changa', name: 'خط تشانجا (Changa)', family: "'Changa', sans-serif", category: 'عريض بارز', desc: 'عريض وقوي للعناوين البارزة والتكريم' },
+  { id: 'cairo', name: 'خط كايرو (Cairo)', nameEn: 'Cairo Font', family: "'Cairo', sans-serif", category: 'عصري وواضح', categoryEn: 'Modern & Clear', desc: 'الخط الافتراضي، وضوح فائق وتناسق عالي', descEn: 'Default font with ultra-high clarity and balance' },
+  { id: 'amiri', name: 'الخط الأميري (Amiri)', nameEn: 'Amiri Serif', family: "'Amiri', serif", category: 'كلاسيكي رسمي', categoryEn: 'Classic Formal', desc: 'خط نسخ تراثي فاخر مخصص للشهادات الرسمية', descEn: 'Refined classical script ideal for official certificates' },
+  { id: 'tajawal', name: 'خط تجوال (Tajawal)', nameEn: 'Tajawal', family: "'Tajawal', sans-serif", category: 'هندسي أنيق', categoryEn: 'Clean Geometric', desc: 'خط رشيق متوازن ومريح جداً للقراءة', descEn: 'Sleek, balanced typeface with comfortable legibility' },
+  { id: 'almarai', name: 'خط المراعي (Almarai)', nameEn: 'Almarai', family: "'Almarai', sans-serif", category: 'حديث وجذاب', categoryEn: 'Modern & Crisp', desc: 'مستقيم وعالي المقروئية لأسماء الطلاب', descEn: 'Straight and highly readable for student names' },
+  { id: 'aref', name: 'خط الرقعة (Aref Ruqaa)', nameEn: 'Aref Ruqaa', family: "'Aref Ruqaa', serif", category: 'تراثي فني', categoryEn: 'Calligraphic Art', desc: 'خط رقعة أصيل يحاكي التخطيط بالريشة', descEn: 'Authentic calligraphic style inspired by brush pen' },
+  { id: 'noto-kufi', name: 'خط كوفي حديث (Noto Kufi)', nameEn: 'Noto Kufi Arabic', family: "'Noto Kufi Arabic', sans-serif", category: 'كوفي رسمي', categoryEn: 'Formal Kufi', desc: 'طابع كوفي هندسي متقن للشهادات واللوحات', descEn: 'Structured geometric Kufi style for certificates' },
+  { id: 'ibm-plex', name: 'خط آي بي إم (IBM Plex)', nameEn: 'IBM Plex Sans', family: "'IBM Plex Sans Arabic', sans-serif", category: 'أكاديمي معتمد', categoryEn: 'Academic Standard', desc: 'رسمي متزن وواضح للتقارير واللوحات', descEn: 'Balanced academic typography for reports and boards' },
+  { id: 'changa', name: 'خط تشانجا (Changa)', nameEn: 'Changa', family: "'Changa', sans-serif", category: 'عريض بارز', categoryEn: 'Bold Display', desc: 'عريض وقوي للعناوين البارزة والتكريم', descEn: 'Strong bold display face for prominent titles' },
 ];
 
 export const THEME_PRESETS = [
-  { id: 'dark-gold', name: 'فخامة ملكية', bg: '#070b14', text: '#ffffff', accent: '#f59e0b', desc: 'كحلي وذهبي' },
-  { id: 'royal-blue', name: 'أزرق ملكي', bg: '#091326', text: '#ffffff', accent: '#38bdf8', desc: 'ياقوتي وسماوي' },
-  { id: 'classic-ivory', name: 'عاجي راقي', bg: '#fbf9f4', text: '#0f172a', accent: '#b45309', desc: 'ورق شهادات' },
-  { id: 'emerald-night', name: 'زمردي فاخر', bg: '#061a14', text: '#ffffff', accent: '#10b981', desc: 'أخضر داكن' },
-  { id: 'burgundy-royal', name: 'عنابي إمبراطوري', bg: '#1a080d', text: '#ffffff', accent: '#fbbf24', desc: 'أحمر داكن' },
-  { id: 'pure-white', name: 'أبيض ناصع', bg: '#ffffff', text: '#0f172a', accent: '#d97706', desc: 'موفر للحبر' },
+  { id: 'dark-gold', name: 'فخامة ملكية', nameEn: 'Royal Luxury', bg: '#070b14', text: '#ffffff', accent: '#f59e0b', desc: 'كحلي وذهبي', descEn: 'Navy & Gold' },
+  { id: 'royal-blue', name: 'أزرق ملكي', nameEn: 'Royal Blue', bg: '#091326', text: '#ffffff', accent: '#38bdf8', desc: 'ياقوتي وسماوي', descEn: 'Sapphire & Sky' },
+  { id: 'classic-ivory', name: 'عاجي راقي', nameEn: 'Classic Ivory', bg: '#fbf9f4', text: '#0f172a', accent: '#b45309', desc: 'ورق شهادات', descEn: 'Certificate Parchment' },
+  { id: 'emerald-night', name: 'زمردي فاخر', nameEn: 'Emerald Night', bg: '#061a14', text: '#ffffff', accent: '#10b981', desc: 'أخضر داكن', descEn: 'Deep Emerald' },
+  { id: 'burgundy-royal', name: 'عنابي إمبراطوري', nameEn: 'Imperial Burgundy', bg: '#1a080d', text: '#ffffff', accent: '#fbbf24', desc: 'أحمر داكن', descEn: 'Deep Crimson' },
+  { id: 'pure-white', name: 'أبيض ناصع', nameEn: 'Pure White', bg: '#ffffff', text: '#0f172a', accent: '#d97706', desc: 'موفر للحبر', descEn: 'Print Friendly' },
 ];
 
 export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
@@ -134,6 +144,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   initialStartDate,
   initialEndDate,
 }) => {
+  const { lang, dir, tr } = useLanguage();
   const boardRef = useRef<HTMLDivElement>(null);
 
   const normalizeAllFilter = (val?: string) => {
@@ -333,57 +344,77 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     if (src === 'structures') {
       if (type === 'most_active') {
         return {
-          title: 'لوحة شرف فرسان حل أسئلة الهياكل',
-          congrats:
+          title: tr('لوحة شرف فرسان حل أسئلة الهياكل', 'Honor Board: Top Structure Solvers'),
+          congrats: tr(
             'نبارك لأبطال المثابرة وفرسان الالتزام على اجتهادهم المتميز وحل أكبر عدد من أسئلة الهياكل بدقة عالية واستمرارية مشرفة.',
+            'Congratulations to our dedicated top achievers for their perseverance and solving the highest number of structure questions with remarkable accuracy.'
+          ),
         };
       }
       if (type === 'combined') {
         return {
-          title: 'لوحة الشرف الشاملة لقسم الهياكل',
-          congrats:
+          title: tr('لوحة الشرف الشاملة لقسم الهياكل', 'Comprehensive Structures Honor Board'),
+          congrats: tr(
             'نحتفي بصفوة طلبتنا المتميزين في قسم الهياكل: أوائل نسب الصحة العالية وفرسان الالتزام الأكثر حلاً للأسئلة، فخورون بجهودكم وتفانيكم المستمر.',
+            'Celebrating our finest students in the Structures track—top accuracy leaders and dedicated question solvers. We are proud of your continuous excellence!'
+          ),
         };
       }
       if (type === 'exam') {
         return {
-          title: targetTitle ? `لوحة شرف أوائل هيكل: ${targetTitle}` : 'لوحة شرف أوائل الهيكل',
-          congrats:
+          title: targetTitle
+            ? tr(`لوحة شرف أوائل هيكل: ${targetTitle}`, `Structure Honor Board: ${targetTitle}`)
+            : tr('لوحة شرف أوائل الهيكل', 'Structure Top Achievers Honor Board'),
+          congrats: tr(
             'يسرنا تهنئة طلبتنا المتميزين وأولياء أمورهم الكرام على تفوقهم وإتقانهم لحل أسئلة الهياكل بنسب صحة مشرفة، متمنين لهم دوام التألق والريادة الأكاديمية.',
+            'We are pleased to congratulate our outstanding students and their parents on mastering structure questions with honorable accuracy. Wishing you continued success!'
+          ),
         };
       }
       return {
-        title: 'لوحة شرف أوائل قسم الهياكل',
-        congrats:
+        title: tr('لوحة شرف أوائل قسم الهياكل', 'Structures Top Achievers Honor Board'),
+        congrats: tr(
           'يسرنا تهنئة طلبتنا المتميزين وأولياء أمورهم الكرام على تفوقهم وإتقانهم لحل أسئلة الهياكل بنسب صحة مشرفة، متمنين لهم دوام التألق والريادة الأكاديمية.',
+          'We are pleased to congratulate our outstanding students and their parents on mastering structure questions with honorable accuracy. Wishing you continued success!'
+        ),
       };
     }
 
     if (type === 'most_active') {
       return {
-        title: 'لوحة شرف فرسان الالتزام والمثابرة',
-        congrats:
+        title: tr('لوحة شرف فرسان الالتزام والمثابرة', 'Honor Board: Champions of Dedication'),
+        congrats: tr(
           'نبارك لأبطال المثابرة وفرسان الالتزام على حرصهم الدؤوب ومشاركتهم الفعالة في حل وإنجاز كافة الاختبارات والتقييمات المدرسية باجتهاد وتميز.',
+          'Congratulations to our dedicated champions for their consistent commitment and active completion of all exams and assessments with distinction.'
+        ),
       };
     }
     if (type === 'combined') {
       return {
-        title: 'لوحة الشرف والتميز الأكاديمي الشاملة',
-        congrats:
+        title: tr('لوحة الشرف والتميز الأكاديمي الشاملة', 'Comprehensive Academic Honor Board'),
+        congrats: tr(
           'نحتفي بصفوة طلبتنا المتميزين: أوائل التفوق العلمي وفرسان الالتزام الأكثر حلاً ومشاركة في الامتحانات، فخورون بجهودكم وتفانيكم المستمر.',
+          'Celebrating our top academic achievers and dedicated assessment champions. We are truly proud of your continuous hard work and excellence!'
+        ),
       };
     }
     if (type === 'exam') {
       return {
-        title: targetTitle ? `لوحة شرف أوائل: ${targetTitle}` : 'لوحة شرف أوائل الامتحان',
-        congrats:
+        title: targetTitle
+          ? tr(`لوحة شرف أوائل: ${targetTitle}`, `Exam Honor Board: ${targetTitle}`)
+          : tr('لوحة شرف أوائل الامتحان', 'Exam Top Achievers Honor Board'),
+        congrats: tr(
           'يسرنا تهنئة طلبتنا المتميزين وأولياء أمورهم الكرام على هذا الإنجاز المشرف والتفوق المستحق، متمنين لهم دوام التألق والريادة الأكاديمية.',
+          'We warmly congratulate our outstanding students and their families on this well-deserved academic achievement. Wishing you continued brilliance!'
+        ),
       };
     }
     return {
-      title: 'لوحة شرف أوائل الطلبة والمتفوقين',
-      congrats:
+      title: tr('لوحة شرف أوائل الطلبة والمتفوقين', 'Academic Top Achievers Honor Board'),
+      congrats: tr(
         'يسرنا تهنئة طلبتنا المتميزين وأولياء أمورهم الكرام على هذا الإنجاز المشرف والتفوق المستحق، متمنين لهم دوام التألق والريادة الأكاديمية.',
+        'We warmly congratulate our outstanding students and their families on this well-deserved academic achievement. Wishing you continued brilliance!'
+      ),
     };
   };
 
@@ -482,7 +513,11 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         setMinPercentage(latestAcad.minPercentage !== undefined ? latestAcad.minPercentage : 85);
         const targetExam = exams.find((e) => e.id === initialExamId);
         const defCopy = getDefaultCopy('academic', nextType, targetExam?.title);
-        setTitle(initialExamId && targetExam ? `لوحة شرف أوائل: ${targetExam.title}` : latestAcad.title || defCopy.title);
+        setTitle(
+          initialExamId && targetExam
+            ? tr(`لوحة شرف أوائل: ${targetExam.title}`, `Honor Board: ${targetExam.title}`)
+            : latestAcad.title || defCopy.title
+        );
         setCustomSubtitle(latestAcad.customSubtitle || '');
         setCongratsMessage(latestAcad.congratsMessage || defCopy.congrats);
       }
@@ -630,13 +665,13 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     setTeacherName(settings.teacherName || 'Mr. Mohamed Hesham');
     setSignatureText(defaultSignatureName);
     setSignatureStyle('arabic_calligraphy');
-    setTeacherRole('معلم المادة');
+    setTeacherRole(tr('معلم المادة', 'Subject Teacher'));
     setSchoolName('');
     setCongratsMessage(defCopy.congrats);
     setShowSignature(true);
     setShowStamp(true);
     setShowDate(true);
-    showToast('تمت إعادة الضبط للوضع الافتراضي للبدء بتصميم جديد!');
+    showToast(tr('تمت إعادة الضبط للوضع الافتراضي للبدء بتصميم جديد!', 'Reset to defaults for a fresh new design!'));
   };
 
   // Export State
@@ -731,13 +766,13 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   const periodLabel = useMemo(() => {
     if (!startDate && !endDate) return '';
     if (startDate && endDate) {
-      return `الفترة: ${startDate} إلى ${endDate}`;
+      return tr(`الفترة: ${startDate} إلى ${endDate}`, `Period: ${startDate} to ${endDate}`);
     }
     if (startDate) {
-      return `ابتداءً من: ${startDate}`;
+      return tr(`ابتداءً من: ${startDate}`, `From: ${startDate}`);
     }
-    return `حتى تاريخ: ${endDate}`;
-  }, [startDate, endDate]);
+    return tr(`حتى تاريخ: ${endDate}`, `Until: ${endDate}`);
+  }, [startDate, endDate, lang]);
 
   // Quick preset helper
   const handleSetDatePreset = (preset: 'all' | 'this_month' | 'last_30' | 'last_7') => {
@@ -853,10 +888,10 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
           completionPercentage: item.completionPercentage,
           gradeLabel:
             item.percentage >= 95
-              ? 'إتقان مع مرتبة الشرف'
+              ? tr('إتقان مع مرتبة الشرف', 'Mastery with Honors')
               : item.percentage >= 90
-              ? 'ممتاز مرتفع في الهياكل'
-              : 'متفوق متميز بالهياكل',
+              ? tr('ممتاز مرتفع في الهياكل', 'High Excellence in Structures')
+              : tr('متفوق متميز بالهياكل', 'Distinguished Achiever'),
         }));
       }
 
@@ -891,11 +926,11 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         const sliced = limitCount > 0 ? filtered.slice(0, limitCount) : filtered;
 
         return sliced.map((item, idx) => {
-          let roleLabel = 'عضو متميز بحل الهياكل';
-          if (idx === 0) roleLabel = 'بطل الالتزام الأول ⚡';
-          else if (idx === 1) roleLabel = 'فارس المثابرة الثاني 🎯';
-          else if (idx === 2) roleLabel = 'رائد المتابعة الثالث 🌟';
-          else roleLabel = `المركز ${idx + 1} في حل الهياكل`;
+          let roleLabel = tr('عضو متميز بحل الهياكل', 'Distinguished Structure Solver');
+          if (idx === 0) roleLabel = tr('بطل الالتزام الأول ⚡', '1st Dedication Champion ⚡');
+          else if (idx === 1) roleLabel = tr('فارس المثابرة الثاني 🎯', '2nd Perseverance Knight 🎯');
+          else if (idx === 2) roleLabel = tr('رائد المتابعة الثالث 🌟', '3rd Consistency Leader 🌟');
+          else roleLabel = tr(`المركز ${idx + 1} في حل الهياكل`, `Rank #${idx + 1} Structure Solver`);
 
           return {
             rank: idx + 1,
@@ -961,10 +996,10 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         examTitle: currentStructure.title,
         gradeLabel:
           item.rec.overallAccuracyPercentage >= 95
-            ? 'إتقان كامل / امتياز'
+            ? tr('إتقان كامل / امتياز', 'Full Mastery / Distinction')
             : item.rec.overallAccuracyPercentage >= 90
-            ? 'ممتاز مرتفع'
-            : 'متفوق متميز',
+            ? tr('ممتاز مرتفع', 'High Excellence')
+            : tr('متفوق متميز', 'Distinguished Achiever'),
       }));
     }
 
@@ -996,7 +1031,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         score: item.score,
         percentage: item.percentage,
         totalExams: item.totalExams,
-        gradeLabel: item.percentage >= 95 ? 'امتياز مع مرتبة الشرف' : item.percentage >= 90 ? 'ممتاز مرتفع' : 'متفوق متميز',
+        gradeLabel: item.percentage >= 95 ? tr('امتياز مع مرتبة الشرف', 'Honors Distinction') : item.percentage >= 90 ? tr('ممتاز مرتفع', 'High Excellence') : tr('متفوق متميز', 'Distinguished Achiever'),
       }));
     } else if (boardType === 'most_active') {
       const withStats = baseStudents.map(st => {
@@ -1020,11 +1055,11 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
       const sliced = limitCount > 0 ? filtered.slice(0, limitCount) : filtered;
 
       return sliced.map((item, idx) => {
-        let roleLabel = 'عضو متميز بالمثابرة';
-        if (idx === 0) roleLabel = 'بطل الالتزام الأول ⚡';
-        else if (idx === 1) roleLabel = 'فارس المثابرة الثاني 🎯';
-        else if (idx === 2) roleLabel = 'رائد المتابعة الثالث 🌟';
-        else roleLabel = `المركز ${idx + 1} في المثابرة`;
+        let roleLabel = tr('عضو متميز بالمثابرة', 'Distinguished Perseverance');
+        if (idx === 0) roleLabel = tr('بطل الالتزام الأول ⚡', '1st Dedication Champion ⚡');
+        else if (idx === 1) roleLabel = tr('فارس المثابرة الثاني 🎯', '2nd Perseverance Knight 🎯');
+        else if (idx === 2) roleLabel = tr('رائد المتابعة الثالث 🌟', '3rd Consistency Leader 🌟');
+        else roleLabel = tr(`المركز ${idx + 1} في المثابرة`, `Rank #${idx + 1} in Perseverance`);
 
         return {
           rank: idx + 1,
@@ -1065,7 +1100,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         score: item.result.score,
         percentage: item.result.percentage,
         examTitle: currentExam.title,
-        gradeLabel: item.result.percentage >= 95 ? 'الدرجة الكاملة / امتياز' : item.result.percentage >= 90 ? 'ممتاز مرتفع' : 'متفوق متميز',
+        gradeLabel: item.result.percentage >= 95 ? tr('الدرجة الكاملة / امتياز', 'Full Score / Distinction') : item.result.percentage >= 90 ? tr('ممتاز مرتفع', 'High Excellence') : tr('متفوق متميز', 'Distinguished Achiever'),
       }));
     }
   }, [
@@ -1085,6 +1120,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     currentStructure,
     startDate,
     endDate,
+    lang,
   ]);
 
   // Compute Most Active Students (Solved Most Exams OR Most Structure Questions)
@@ -1128,11 +1164,11 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
       const sliced = countToTake > 0 ? filtered.slice(0, countToTake) : filtered;
 
       return sliced.map((item, idx) => {
-        let roleLabel = 'عضو متميز بالمثابرة';
-        if (idx === 0) roleLabel = 'بطل الالتزام الأول ⚡';
-        else if (idx === 1) roleLabel = 'فارس المثابرة الثاني 🎯';
-        else if (idx === 2) roleLabel = 'رائد المتابعة الثالث 🌟';
-        else roleLabel = `المركز ${idx + 1} في الحل والمثابرة`;
+        let roleLabel = tr('عضو متميز بالمثابرة', 'Distinguished Perseverance');
+        if (idx === 0) roleLabel = tr('بطل الالتزام الأول ⚡', '1st Dedication Champion ⚡');
+        else if (idx === 1) roleLabel = tr('فارس المثابرة الثاني 🎯', '2nd Perseverance Knight 🎯');
+        else if (idx === 2) roleLabel = tr('رائد المتابعة الثالث 🌟', '3rd Consistency Leader 🌟');
+        else roleLabel = tr(`المركز ${idx + 1} في الحل والمثابرة`, `Rank #${idx + 1} in Solving`);
 
         return {
           rank: idx + 1,
@@ -1169,11 +1205,11 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     const sliced = countToTake > 0 ? filtered.slice(0, countToTake) : filtered;
 
     return sliced.map((item, idx) => {
-      let roleLabel = 'عضو متميز بالمثابرة';
-      if (idx === 0) roleLabel = 'بطل الالتزام الأول ⚡';
-      else if (idx === 1) roleLabel = 'فارس المثابرة الثاني 🎯';
-      else if (idx === 2) roleLabel = 'رائد المتابعة الثالث 🌟';
-      else roleLabel = `المركز ${idx + 1} في الحل والمثابرة`;
+      let roleLabel = tr('عضو متميز بالمثابرة', 'Distinguished Perseverance');
+      if (idx === 0) roleLabel = tr('بطل الالتزام الأول ⚡', '1st Dedication Champion ⚡');
+      else if (idx === 1) roleLabel = tr('فارس المثابرة الثاني 🎯', '2nd Perseverance Knight 🎯');
+      else if (idx === 2) roleLabel = tr('رائد المتابعة الثالث 🌟', '3rd Consistency Leader 🌟');
+      else roleLabel = tr(`المركز ${idx + 1} في الحل والمثابرة`, `Rank #${idx + 1} in Solving`);
 
       return {
         rank: idx + 1,
@@ -1196,12 +1232,13 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
     mostActiveLimit,
     boardType,
     settings.gradingScale,
+    lang,
   ]);
 
   if (!isOpen) return null;
 
   // Active Subject display
-  const displaySubject =
+  const rawSubject =
     dataSource === 'structures'
       ? boardType === 'exam' && currentStructure
         ? currentStructure.subject
@@ -1211,19 +1248,20 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
       : boardType === 'exam' && currentExam
       ? currentExam.subject
       : settings.defaultSubject || 'الرياضيات';
+  const displaySubject = translateSubject(rawSubject, lang);
 
   const displayGrade = selectedGrade === 'all'
-    ? 'جميع الصفوف'
-    : selectedGrade;
+    ? tr('جميع الصفوف', 'All Grades')
+    : translateGrade(selectedGrade, lang);
 
   const displayTrack = selectedTrack === 'all'
     ? ''
-    : `• مسار ${selectedTrack}`;
+    : `• ${tr('مسار', 'Track:')} ${translateTrack(selectedTrack, lang)}`;
 
-  const displayTermTag = dataSource === 'structures' && selectedTerm !== 'all' ? ` • ${selectedTerm}` : '';
+  const displayTermTag = dataSource === 'structures' && selectedTerm !== 'all' ? ` • ${translateTerm(selectedTerm, lang)}` : '';
   const displayYearTag = dataSource === 'structures' && selectedYear !== 'all' ? ` (${selectedYear})` : '';
 
-  const displayDate = new Date().toLocaleDateString('ar-AE', {
+  const displayDate = new Date().toLocaleDateString(lang === 'en' ? 'en-US' : 'ar-AE', {
     year: 'numeric',
     month: 'long',
     day: 'numeric'
@@ -1243,20 +1281,19 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         backgroundColor: bgColor,
       });
 
-      const cleanTitle = title.replace(/\s+/g, '_');
-      const cleanGrade = selectedGrade === 'all' ? 'عام' : selectedGrade.replace(/\s+/g, '_');
-      const srcPrefix = dataSource === 'structures' ? 'الهياكل_' : '';
-      const filename = `لوحة_شرف_${srcPrefix}${cleanGrade}_${new Date().toISOString().split('T')[0]}.png`;
+      const cleanGrade = selectedGrade === 'all' ? (lang === 'en' ? 'All' : 'عام') : selectedGrade.replace(/\s+/g, '_');
+      const srcPrefix = dataSource === 'structures' ? (lang === 'en' ? 'Structures_' : 'الهياكل_') : '';
+      const filename = `${lang === 'en' ? 'Honor_Board' : 'لوحة_شرف'}_${srcPrefix}${cleanGrade}_${new Date().toISOString().split('T')[0]}.png`;
 
       const link = document.createElement('a');
       link.download = filename;
       link.href = dataUrl;
       link.click();
 
-      showToast('تم تحميل لوحة الشرف بجودة فائقة (Ultra-HD) بنجاح!');
+      showToast(tr('تم تحميل لوحة الشرف بجودة فائقة (Ultra-HD) بنجاح!', 'Ultra-HD Honor Board image downloaded successfully!'));
     } catch (err) {
       console.error('Download error:', err);
-      showToast('حدث خطأ أثناء إنشاء الصورة، يرجى المحاولة مرة أخرى.');
+      showToast(tr('حدث خطأ أثناء إنشاء الصورة، يرجى المحاولة مرة أخرى.', 'Error generating image. Please try again.'));
     } finally {
       setIsExporting(false);
     }
@@ -1281,7 +1318,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         ]);
         setCopiedSuccess(true);
         setTimeout(() => setCopiedSuccess(false), 3000);
-        showToast('تم نسخ الصورة للحافظة! يمكنك الآن لصقها مباشرة في واتساب (Ctrl+V)');
+        showToast(tr('تم نسخ الصورة للحافظة! يمكنك الآن لصقها مباشرة في واتساب (Ctrl+V)', 'Image copied to clipboard! Paste directly in WhatsApp (Ctrl+V).'));
       } else {
         // Fallback to download
         handleDownloadImage();
@@ -1310,7 +1347,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
     printWindow.document.write(`
       <!DOCTYPE html>
-      <html dir="rtl" lang="ar">
+      <html dir="${dir}" lang="${lang}">
         <head>
           <meta charset="utf-8" />
           <title>${title} - ${displayGrade}</title>
@@ -1369,34 +1406,51 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
   };
 
   const handleShareWhatsApp = () => {
-    // Generate polite parent message
     const subjectText = displaySubject;
-    const gradeText = selectedGrade === 'all' ? 'أبنائنا وبناتنا' : `طلبة ${selectedGrade}`;
+    const gradeText = selectedGrade === 'all'
+      ? tr('أبنائنا وبناتنا', 'our students')
+      : tr(`طلبة ${selectedGrade}`, `students of ${translateGrade(selectedGrade, 'en')}`);
     const periodMsg = periodLabel ? `\n📅 *${periodLabel}*` : '';
-    const sectionLabel = dataSource === 'structures' ? `قسم الهياكل (مادة *${subjectText}*)` : `مادة *${subjectText}*`;
+    const sectionLabel = dataSource === 'structures'
+      ? tr(`قسم الهياكل (مادة *${subjectText}*)`, `Structures Section (*${subjectText}*)`)
+      : tr(`مادة *${subjectText}*`, `*${subjectText}*`);
 
     let studentsMsg = '';
     if (boardType === 'most_active') {
       if (dataSource === 'structures') {
-        studentsMsg = `⚡ *فرسان الالتزام والأكثر حلاً لأسئلة الهياكل:*\n` +
+        studentsMsg = tr(`⚡ *فرسان الالتزام والأكثر حلاً لأسئلة الهياكل:*\n`, `⚡ *Top Dedication Champions (Structure Solvers):*\n`) +
           rankedStudents
             .slice(0, 5)
-            .map(s => `🏅 المركز ${s.rank}: ${s.student.name} (${s.solvedCount || 0} سؤال محلول • ${s.totalExams || 0} هياكل • دقة ${s.percentage}%)`)
+            .map(s =>
+              lang === 'en'
+                ? `🏅 Rank #${s.rank}: ${s.student.name} (${s.solvedCount || 0} solved • ${s.totalExams || 0} structures • ${s.percentage}% accuracy)`
+                : `🏅 المركز ${s.rank}: ${s.student.name} (${s.solvedCount || 0} سؤال محلول • ${s.totalExams || 0} هياكل • دقة ${s.percentage}%)`
+            )
             .join('\n');
       } else {
-        studentsMsg = `⚡ *فرسان الالتزام والأكثر حلاً للامتحانات:*\n` +
+        studentsMsg = tr(`⚡ *فرسان الالتزام والأكثر حلاً للامتحانات:*\n`, `⚡ *Top Dedication Champions (Exam Solvers):*\n`) +
           rankedStudents
             .slice(0, 5)
-            .map(s => `🏅 المركز ${s.rank}: ${s.student.name} (${s.totalExams} اختبارات منجزة • معدل ${s.percentage}%)`)
+            .map(s =>
+              lang === 'en'
+                ? `🏅 Rank #${s.rank}: ${s.student.name} (${s.totalExams} completed exams • ${s.percentage}% avg)`
+                : `🏅 المركز ${s.rank}: ${s.student.name} (${s.totalExams} اختبارات منجزة • معدل ${s.percentage}%)`
+            )
             .join('\n');
       }
     } else {
-      studentsMsg = (dataSource === 'structures' ? `🌟 *أوائل المتفوقين في الهياكل:*\n` : `🌟 *أوائل المتفوقين دراسياً:*\n`) +
+      studentsMsg = (dataSource === 'structures'
+        ? tr(`🌟 *أوائل المتفوقين في الهياكل:*\n`, `🌟 *Top Achievers in Structures:*\n`)
+        : tr(`🌟 *أوائل المتفوقين دراسياً:*\n`, `🌟 *Top Academic Achievers:*\n`)) +
         rankedStudents
           .slice(0, 5)
           .map(s =>
             dataSource === 'structures'
-              ? `🏅 المركز ${s.rank}: ${s.student.name} (صحة ${s.percentage}% • ${s.solvedCount || 0} سؤال)`
+              ? lang === 'en'
+                ? `🏅 Rank #${s.rank}: ${s.student.name} (${s.percentage}% accuracy • ${s.solvedCount || 0} Qs)`
+                : `🏅 المركز ${s.rank}: ${s.student.name} (صحة ${s.percentage}% • ${s.solvedCount || 0} سؤال)`
+              : lang === 'en'
+              ? `🏅 Rank #${s.rank}: ${s.student.name} (${s.percentage}%)`
               : `🏅 المركز ${s.rank}: ${s.student.name} (${s.percentage}%)`
           )
           .join('\n');
@@ -1404,25 +1458,36 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
       if ((boardType === 'combined' || includeMostActiveSection) && mostActiveStudents.length > 0) {
         studentsMsg +=
           (dataSource === 'structures'
-            ? `\n\n⚡ *فرسان الالتزام (الأكثر حلاً لأسئلة الهياكل):*\n`
-            : `\n\n⚡ *فرسان الالتزام (الأكثر حلاً للامتحانات):*\n`) +
+            ? tr(`\n\n⚡ *فرسان الالتزام (الأكثر حلاً لأسئلة الهياكل):*\n`, `\n\n⚡ *Dedication Champions (Most Structure Questions Solved):*\n`)
+            : tr(`\n\n⚡ *فرسان الالتزام (الأكثر حلاً للامتحانات):*\n`, `\n\n⚡ *Dedication Champions (Most Exams Completed):*\n`)) +
           mostActiveStudents
             .slice(0, 3)
             .map(s =>
               dataSource === 'structures'
-                ? `🎯 المركز ${s.rank}: ${s.student.name} (${s.solvedCount || 0} سؤال محلول • ${s.percentage}%)`
+                ? lang === 'en'
+                  ? `🎯 Rank #${s.rank}: ${s.student.name} (${s.solvedCount || 0} solved • ${s.percentage}%)`
+                  : `🎯 المركز ${s.rank}: ${s.student.name} (${s.solvedCount || 0} سؤال محلول • ${s.percentage}%)`
+                : lang === 'en'
+                ? `🎯 Rank #${s.rank}: ${s.student.name} (${s.totalExams} completed exams)`
                 : `🎯 المركز ${s.rank}: ${s.student.name} (${s.totalExams} اختبارات منجزة)`
             )
             .join('\n');
       }
     }
 
-    const msg = `🏆 *${title}* 🏆\n\n` +
-      `السلام عليكم ورحمة الله وبركاته،\n` +
-      `أولياء أمورنا الأفاضل، يسرنا أن نشارككم لوحة الشرف في ${sectionLabel} لـ *${gradeText}*${periodMsg} تقديراً لاجتهادهم ومشاركتهم المشرفة:\n\n` +
-      `${studentsMsg}\n\n` +
-      `نسأل الله لأبنائنا وبناتنا دوام التفوق والنجاح الباهر 🌟\n` +
-      `مع تحيات: *${teacherName}* (${teacherRole})`;
+    const msg = lang === 'en'
+      ? `🏆 *${title}* 🏆\n\n` +
+        `Dear Parents,\n` +
+        `We are delighted to share the Honor Board for ${sectionLabel} (${gradeText})${periodMsg} in recognition of their outstanding effort:\n\n` +
+        `${studentsMsg}\n\n` +
+        `Wishing our students continued excellence and success 🌟\n` +
+        `Best regards, *${teacherName}* (${teacherRole})`
+      : `🏆 *${title}* 🏆\n\n` +
+        `السلام عليكم ورحمة الله وبركاته،\n` +
+        `أولياء أمورنا الأفاضل، يسرنا أن نشارككم لوحة الشرف في ${sectionLabel} لـ *${gradeText}*${periodMsg} تقديراً لاجتهادهم ومشاركتهم المشرفة:\n\n` +
+        `${studentsMsg}\n\n` +
+        `نسأل الله لأبنائنا وبناتنا دوام التفوق والنجاح الباهر 🌟\n` +
+        `مع تحيات: *${teacherName}* (${teacherRole})`;
 
     const encoded = encodeURIComponent(msg);
     window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
@@ -1437,6 +1502,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
   return (
     <div
+      dir={dir}
       className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-hidden"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -1452,13 +1518,13 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
             </div>
             <div className="min-w-0">
               <h2 className="text-sm sm:text-lg font-black text-white flex items-center gap-2 flex-wrap">
-                <span className="truncate">تصدير لوحة شرف المتفوقين كصورة</span>
+                <span className="truncate">{tr('تصدير لوحة شرف المتفوقين كصورة', 'Export Honor Board as Image')}</span>
                 <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full shrink-0">
                   Ultra-HD
                 </span>
               </h2>
               <p className="text-[11px] sm:text-xs text-slate-400 truncate">
-                تصميم وبطاقة رسمية معتمدة بتوقيع الأستاذ جاهزة للمشاركة مع أولياء الأمور
+                {tr('تصميم وبطاقة رسمية معتمدة بتوقيع الأستاذ جاهزة للمشاركة مع أولياء الأمور', 'Official certified honor card signed by the teacher, ready to share with parents')}
               </p>
             </div>
           </div>
@@ -1475,17 +1541,17 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
         <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
 
           {/* Controls Sidebar (4 cols on lg) */}
-          <div className="lg:col-span-4 space-y-4 text-right">
+          <div className="lg:col-span-4 space-y-4 text-start">
             {/* Saved Settings Status & Start Fresh Controls */}
             <div className="bg-emerald-950/40 p-3 rounded-2xl border border-emerald-500/30 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <div className="min-w-0">
                   <span className="block text-[11px] font-extrabold text-emerald-300 truncate">
-                    إعدادات الخط والخلفية محفوظة تلقائياً
+                    {tr('إعدادات الخط والخلفية محفوظة تلقائياً', 'Font & theme settings are auto-saved')}
                   </span>
                   <span className="block text-[10px] text-slate-400">
-                    تبدأ من حيث انتهيت أو يمكنك بدء تعديل جديد
+                    {tr('تبدأ من حيث انتهيت أو يمكنك بدء تعديل جديد', 'Resume where you left off or start a fresh design')}
                   </span>
                 </div>
               </div>
@@ -1493,17 +1559,17 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                 type="button"
                 onClick={handleStartFreshNewDesign}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-400 border border-amber-500/30 text-[10px] font-bold transition cursor-pointer shrink-0"
-                title="إعادة ضبط الخط والخلفية والنصوص لبدء تعديل جديد من الصفر"
+                title={tr('إعادة ضبط الخط والخلفية والنصوص لبدء تعديل جديد من الصفر', 'Reset font, colors, and text to start fresh')}
               >
                 <RotateCcw className="w-3 h-3" />
-                <span>تعديل جديد</span>
+                <span>{tr('تعديل جديد', 'New Design')}</span>
               </button>
             </div>
 
             {/* Data Source Switcher: Academic Exams vs Structures (قسم الهياكل) */}
             <div className="bg-slate-800/60 p-2.5 rounded-2xl border border-amber-500/30 space-y-2">
               <span className="block text-[11px] font-bold text-amber-400">
-                مصدر لوحة الشرف:
+                {tr('مصدر لوحة الشرف:', 'Honor Board Data Source:')}
               </span>
               <div className="grid grid-cols-2 gap-1.5">
                 <button
@@ -1516,7 +1582,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   }`}
                 >
                   <GraduationCap className="w-3.5 h-3.5" />
-                  <span>القسم العادي (الامتحانات)</span>
+                  <span>{tr('القسم العادي (الامتحانات)', 'Academic (Exams)')}</span>
                 </button>
 
                 <button
@@ -1529,7 +1595,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   }`}
                 >
                   <Layers className="w-3.5 h-3.5" />
-                  <span>قسم الهياكل</span>
+                  <span>{tr('قسم الهياكل', 'Structures Section')}</span>
                 </button>
               </div>
             </div>
@@ -1537,7 +1603,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
             {/* Board Type Selection: Overall, Most Active, Combined, or Single Exam/Structure */}
             <div className="bg-slate-800/40 p-2.5 rounded-2xl border border-slate-700/60 space-y-2.5">
               <span className="block text-[11px] font-bold text-amber-400">
-                نوع لوحة الشرف والتكريم:
+                {tr('نوع لوحة الشرف والتكريم:', 'Honor Board Type:')}
               </span>
               <div className="grid grid-cols-2 gap-1.5">
                 <button
@@ -1550,7 +1616,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   }`}
                 >
                   <Crown className="w-3.5 h-3.5" />
-                  <span>أوائل المتفوقين</span>
+                  <span>{tr('أوائل المتفوقين', 'Top Achievers')}</span>
                 </button>
 
                 <button
@@ -1563,7 +1629,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   }`}
                 >
                   <Flame className="w-3.5 h-3.5" />
-                  <span>الأكثر حلاً (المثابرة)</span>
+                  <span>{tr('الأكثر حلاً (المثابرة)', 'Most Active (Dedication)')}</span>
                 </button>
 
                 <button
@@ -1576,7 +1642,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   }`}
                 >
                   <Layers className="w-3.5 h-3.5" />
-                  <span>لوحة شاملة مزدوجة</span>
+                  <span>{tr('لوحة شاملة مزدوجة', 'Combined Dual Board')}</span>
                 </button>
 
                 <button
@@ -1589,7 +1655,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   }`}
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5" />
-                  <span>{dataSource === 'structures' ? 'هيكل محدد' : 'امتحان محدد'}</span>
+                  <span>{dataSource === 'structures' ? tr('هيكل محدد', 'Specific Structure') : tr('امتحان محدد', 'Specific Exam')}</span>
                 </button>
               </div>
 
@@ -1606,18 +1672,18 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       />
                       <span className="text-xs font-bold text-slate-200">
                         {dataSource === 'structures'
-                          ? 'تضمين مراكز أكثر الطلاب حلاً لأسئلة الهياكل'
-                          : 'تضمين مراكز أكثر الطلاب حلاً للامتحانات'}
+                          ? tr('تضمين مراكز أكثر الطلاب حلاً لأسئلة الهياكل', 'Include Top Structure Question Solvers')
+                          : tr('تضمين مراكز أكثر الطلاب حلاً للامتحانات', 'Include Most Active Exam Solvers')}
                       </span>
                     </label>
                     <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
-                      ⚡ نشاط
+                      ⚡ {tr('نشاط', 'Active')}
                     </span>
                   </div>
 
                   {includeMostActiveSection && (
                     <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-                      <span className="text-[11px] text-slate-400">عدد فرسان الالتزام باللوحة:</span>
+                      <span className="text-[11px] text-slate-400">{tr('عدد فرسان الالتزام باللوحة:', 'Dedicated Champions Count:')}</span>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {[3, 4, 5, 10, 0].map((cnt) => (
                           <button
@@ -1630,7 +1696,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                 : 'bg-slate-800 text-slate-400 hover:text-white'
                             }`}
                           >
-                            {cnt === 0 ? 'الكل' : cnt}
+                            {cnt === 0 ? tr('الكل', 'All') : cnt}
                           </button>
                         ))}
                         <input
@@ -1639,7 +1705,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                           max={200}
                           value={mostActiveLimit}
                           onChange={(e) => setMostActiveLimit(Math.max(0, Number(e.target.value) || 0))}
-                          title="أدخل عدداً مخصصاً (0 = الكل)"
+                          title={tr('أدخل عدداً مخصصاً (0 = الكل)', 'Enter custom count (0 = All)')}
                           className="w-14 px-1.5 py-0.5 text-center font-mono font-bold text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
                         />
                       </div>
@@ -1653,21 +1719,21 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
             {boardType === 'exam' && dataSource === 'academic' && (
               <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-2">
                 <label className="block text-xs font-bold text-slate-300">
-                  اختر الامتحان المراد تصدير أوائله:
+                  {tr('اختر الامتحان المراد تصدير أوائله:', 'Select Exam to Rank:')}
                 </label>
                 <select
                   value={selectedExamId}
                   onChange={(e) => setSelectedExamId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-medium text-white focus:ring-2 focus:ring-amber-500/30 text-right cursor-pointer"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-medium text-white focus:ring-2 focus:ring-amber-500/30 text-start cursor-pointer"
                 >
                   {filteredExams.length > 0 ? (
                     filteredExams.map(ex => (
                       <option key={ex.id} value={ex.id}>
-                        {ex.title} ({ex.grade} - {ex.subject}{ex.date ? ` • ${ex.date}` : ''})
+                        {ex.title} ({translateGrade(ex.grade, lang)} - {translateSubject(ex.subject, lang)}{ex.date ? ` • ${ex.date}` : ''})
                       </option>
                     ))
                   ) : (
-                    <option value="" disabled>لا توجد امتحانات في هذه الفترة الزمنية</option>
+                    <option value="" disabled>{tr('لا توجد امتحانات في هذه الفترة الزمنية', 'No exams found in this date range')}</option>
                   )}
                 </select>
               </div>
@@ -1677,7 +1743,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
             {boardType === 'exam' && dataSource === 'structures' && (
               <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-2">
                 <label className="block text-xs font-bold text-slate-300">
-                  اختر الهيكل المراد تصدير أوائله:
+                  {tr('اختر الهيكل المراد تصدير أوائله:', 'Select Structure to Rank:')}
                 </label>
                 <select
                   value={currentStructure?.id || selectedStructureId}
@@ -1686,19 +1752,19 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     setSelectedStructureId(nextId);
                     const matched = structures.find(s => s.id === nextId);
                     if (matched) {
-                      setTitle(`لوحة شرف أوائل هيكل: ${matched.title}`);
+                      setTitle(tr(`لوحة شرف أوائل هيكل: ${matched.title}`, `Structure Honor Board: ${matched.title}`));
                     }
                   }}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-medium text-white focus:ring-2 focus:ring-amber-500/30 text-right cursor-pointer"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-medium text-white focus:ring-2 focus:ring-amber-500/30 text-start cursor-pointer"
                 >
                   {filteredStructuresList.length > 0 ? (
                     filteredStructuresList.map(st => (
                       <option key={st.id} value={st.id}>
-                        {st.title} ({st.grade} - {st.term} - {st.track} • {st.subject})
+                        {st.title} ({translateGrade(st.grade, lang)} - {translateTerm(st.term, lang)} - {translateTrack(st.track, lang)} • {translateSubject(st.subject, lang)})
                       </option>
                     ))
                   ) : (
-                    <option value="" disabled>لا توجد هياكل مطابقة للتصفية الحالية</option>
+                    <option value="" disabled>{tr('لا توجد هياكل مطابقة للتصفية الحالية', 'No structures matching current filters')}</option>
                   )}
                 </select>
               </div>
@@ -1709,17 +1775,17 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5" />
-                  <span>{dataSource === 'structures' ? 'الفترة الزمنية للهياكل (من - إلى)' : 'الفترة الزمنية للاختبارات (من - إلى)'}</span>
+                  <span>{dataSource === 'structures' ? tr('الفترة الزمنية للهياكل (من - إلى)', 'Structures Date Range (From - To)') : tr('الفترة الزمنية للاختبارات (من - إلى)', 'Exams Date Range (From - To)')}</span>
                 </h3>
                 {(startDate || endDate) && (
                   <button
                     type="button"
                     onClick={() => { setStartDate(''); setEndDate(''); }}
                     className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 hover:underline cursor-pointer"
-                    title="إعادة تعيين الفترة"
+                    title={tr('إعادة تعيين الفترة', 'Reset period')}
                   >
                     <RotateCcw className="w-3 h-3" />
-                    <span>إعادة ضبط</span>
+                    <span>{tr('إعادة ضبط', 'Reset')}</span>
                   </button>
                 )}
               </div>
@@ -1735,49 +1801,49 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-600'
                   }`}
                 >
-                  كافة الفترات
+                  {tr('كافة الفترات', 'All Time')}
                 </button>
                 <button
                   type="button"
                   onClick={() => handleSetDatePreset('this_month')}
                   className="px-1.5 py-1 text-[11px] font-bold rounded-lg border bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-600 hover:text-amber-300 transition cursor-pointer text-center"
                 >
-                  هذا الشهر
+                  {tr('هذا الشهر', 'This Month')}
                 </button>
                 <button
                   type="button"
                   onClick={() => handleSetDatePreset('last_30')}
                   className="px-1.5 py-1 text-[11px] font-bold rounded-lg border bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-600 hover:text-amber-300 transition cursor-pointer text-center"
                 >
-                  آخر 30 يوم
+                  {tr('آخر 30 يوم', 'Last 30d')}
                 </button>
                 <button
                   type="button"
                   onClick={() => handleSetDatePreset('last_7')}
                   className="px-1.5 py-1 text-[11px] font-bold rounded-lg border bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-600 hover:text-amber-300 transition cursor-pointer text-center"
                 >
-                  آخر 7 أيام
+                  {tr('آخر 7 أيام', 'Last 7d')}
                 </button>
               </div>
 
               {/* Custom Date Pickers */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">من تاريخ:</label>
+                  <label className="block text-[11px] text-slate-400 mb-1">{tr('من تاريخ:', 'From Date:')}</label>
                   <input
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-start focus:ring-1 focus:ring-amber-500 cursor-pointer"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">إلى تاريخ:</label>
+                  <label className="block text-[11px] text-slate-400 mb-1">{tr('إلى تاريخ:', 'To Date:')}</label>
                   <input
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-start focus:ring-1 focus:ring-amber-500 cursor-pointer"
                   />
                 </div>
               </div>
@@ -1785,16 +1851,16 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               {/* Context info tag */}
               <div className="text-[10px] text-slate-400 flex items-center justify-between pt-0.5">
                 {dataSource === 'structures' ? (
-                  <span>سجلات الهياكل المشمولة: <strong className="text-amber-400">{filteredStructureProgress.length}</strong> سجل</span>
+                  <span>{tr('سجلات الهياكل المشمولة:', 'Structure records:')} <strong className="text-amber-400">{filteredStructureProgress.length}</strong> {tr('سجل', '')}</span>
                 ) : (
-                  <span>النتائج المشمولة: <strong className="text-amber-400">{dateFilteredResults.length}</strong> درجة</span>
+                  <span>{tr('النتائج المشمولة:', 'Included scores:')} <strong className="text-amber-400">{dateFilteredResults.length}</strong> {tr('درجة', '')}</span>
                 )}
                 {periodLabel ? (
                   <span className="text-amber-400 font-mono truncate max-w-[160px]" title={periodLabel}>
                     {periodLabel}
                   </span>
                 ) : (
-                  <span className="text-slate-500">العام الدراسي كاملاً</span>
+                  <span className="text-slate-500">{tr('العام الدراسي كاملاً', 'Full Academic Year')}</span>
                 )}
               </div>
             </div>
@@ -1803,34 +1869,34 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
             <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-3">
               <h3 className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                 <Filter className="w-3.5 h-3.5" />
-                <span>تصفية الطلاب والبيانات</span>
+                <span>{tr('تصفية الطلاب والبيانات', 'Filter Students & Data')}</span>
               </h3>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">الصف الدراسي:</label>
+                  <label className="block text-[11px] text-slate-400 mb-1">{tr('الصف الدراسي:', 'Grade:')}</label>
                   <select
                     value={selectedGrade}
                     onChange={(e) => setSelectedGrade(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right cursor-pointer"
+                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-start cursor-pointer"
                   >
-                    <option value="all">جميع الصفوف</option>
+                    <option value="all">{tr('جميع الصفوف', 'All Grades')}</option>
                     {availableGrades.map(g => (
-                      <option key={g} value={g}>{g}</option>
+                      <option key={g} value={g}>{translateGrade(g, lang)}</option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">المسار:</label>
+                  <label className="block text-[11px] text-slate-400 mb-1">{tr('المسار:', 'Track:')}</label>
                   <select
                     value={selectedTrack}
                     onChange={(e) => setSelectedTrack(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right cursor-pointer"
+                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-start cursor-pointer"
                   >
-                    <option value="all">الكل</option>
-                    {availableTracks.map(tr => (
-                      <option key={tr} value={tr}>{tr}</option>
+                    <option value="all">{tr('الكل', 'All')}</option>
+                    {availableTracks.map(trackOpt => (
+                      <option key={trackOpt} value={trackOpt}>{translateTrack(trackOpt, lang)}</option>
                     ))}
                   </select>
                 </div>
@@ -1839,41 +1905,41 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               {dataSource === 'structures' && (
                 <div className="grid grid-cols-3 gap-2 pt-0.5">
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">الفصل:</label>
+                    <label className="block text-[11px] text-slate-400 mb-1">{tr('الفصل:', 'Term:')}</label>
                     <select
                       value={selectedTerm}
                       onChange={(e) => setSelectedTerm(e.target.value)}
-                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-[11px] text-white text-right cursor-pointer"
+                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-[11px] text-white text-start cursor-pointer"
                     >
-                      <option value="all">الكل</option>
+                      <option value="all">{tr('الكل', 'All')}</option>
                       {ACADEMIC_TERMS.map(t => (
-                        <option key={t} value={t}>{t}</option>
+                        <option key={t} value={t}>{translateTerm(t, lang)}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">السنة:</label>
+                    <label className="block text-[11px] text-slate-400 mb-1">{tr('السنة:', 'Year:')}</label>
                     <select
                       value={selectedYear}
                       onChange={(e) => setSelectedYear(e.target.value)}
-                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-[11px] text-white text-right cursor-pointer"
+                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-[11px] text-white text-start cursor-pointer"
                     >
-                      <option value="all">الكل</option>
+                      <option value="all">{tr('الكل', 'All')}</option>
                       {availableYears.map(y => (
                         <option key={y} value={y}>{y}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">المادة:</label>
+                    <label className="block text-[11px] text-slate-400 mb-1">{tr('المادة:', 'Subject:')}</label>
                     <select
                       value={selectedSubject}
                       onChange={(e) => setSelectedSubject(e.target.value)}
-                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-[11px] text-white text-right cursor-pointer"
+                      className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-[11px] text-white text-start cursor-pointer"
                     >
-                      <option value="all">الكل</option>
+                      <option value="all">{tr('الكل', 'All')}</option>
                       {availableSubjects.map(sub => (
-                        <option key={sub} value={sub}>{sub}</option>
+                        <option key={sub} value={sub}>{translateSubject(sub, lang)}</option>
                       ))}
                     </select>
                   </div>
@@ -1883,9 +1949,9 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] text-slate-400">عدد الأوائل (محدد أو الكل):</label>
+                    <label className="text-[11px] text-slate-400">{tr('عدد الأوائل (محدد أو الكل):', 'Top Count (Limit or All):')}</label>
                     <span className="text-[10px] font-mono text-amber-400">
-                      {limitCount === 0 ? 'جميع المتفوقين' : `${limitCount} طالب`}
+                      {limitCount === 0 ? tr('جميع المتفوقين', 'All Top Achievers') : `${limitCount} ${tr('طالب', 'students')}`}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -1895,16 +1961,16 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         const val = Number(e.target.value);
                         if (val >= 0) setLimitCount(val);
                       }}
-                      className="flex-1 px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right cursor-pointer"
+                      className="flex-1 px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-start cursor-pointer"
                     >
-                      <option value={1}>الأول فقط (1)</option>
-                      <option value={3}>أفضل 3 (منصة التتويج)</option>
-                      <option value={5}>أفضل 5 طلاب</option>
-                      <option value={10}>أفضل 10 طلاب</option>
-                      <option value={15}>أفضل 15 طالباً</option>
-                      <option value={0}>جميع المتفوقين (الكل)</option>
+                      <option value={1}>{tr('الأول فقط (1)', 'Top 1 Only')}</option>
+                      <option value={3}>{tr('أفضل 3 (منصة التتويج)', 'Top 3 (Podium)')}</option>
+                      <option value={5}>{tr('أفضل 5 طلاب', 'Top 5 Students')}</option>
+                      <option value={10}>{tr('أفضل 10 طلاب', 'Top 10 Students')}</option>
+                      <option value={15}>{tr('أفضل 15 طالباً', 'Top 15 Students')}</option>
+                      <option value={0}>{tr('جميع المتفوقين (الكل)', 'All Achievers (All)')}</option>
                       {![1, 3, 5, 10, 15, 0].includes(limitCount) && (
-                        <option value={-1}>عدد مخصص ({limitCount})</option>
+                        <option value={-1}>{tr(`عدد مخصص (${limitCount})`, `Custom (${limitCount})`)}</option>
                       )}
                     </select>
                     <input
@@ -1913,24 +1979,24 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       max={500}
                       value={limitCount}
                       onChange={(e) => setLimitCount(Math.max(0, Number(e.target.value) || 0))}
-                      title="اكتب أي عدد طلاب (0 = الكل)"
+                      title={tr('اكتب أي عدد طلاب (0 = الكل)', 'Enter any count (0 = All)')}
                       className="w-16 px-2 py-1.5 text-center font-mono font-bold text-xs bg-slate-900 border border-slate-700 rounded-xl text-white"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">الحد الأدنى للنسبة:</label>
+                  <label className="block text-[11px] text-slate-400 mb-1">{tr('الحد الأدنى للنسبة:', 'Minimum Percentage:')}</label>
                   <select
                     value={minPercentage}
                     onChange={(e) => setMinPercentage(Number(e.target.value))}
-                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right cursor-pointer"
+                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-start cursor-pointer"
                   >
-                    <option value={90}>≥ 90% (امتياز فقط)</option>
-                    <option value={85}>≥ 85% (أوائل ومتميزين)</option>
-                    <option value={80}>≥ 80% (جيد جداً فما فوق)</option>
-                    <option value={70}>≥ 70% (جميع الناجحين بتفوق)</option>
-                    <option value={60}>≥ 60% (متفوقين ومجتهدين)</option>
+                    <option value={90}>{tr('≥ 90% (امتياز فقط)', '≥ 90% (Distinction Only)')}</option>
+                    <option value={85}>{tr('≥ 85% (أوائل ومتميزين)', '≥ 85% (Top Achievers)')}</option>
+                    <option value={80}>{tr('≥ 80% (جيد جداً فما فوق)', '≥ 80% (Very Good & Above)')}</option>
+                    <option value={70}>{tr('≥ 70% (جميع الناجحين بتفوق)', '≥ 70% (Honor Pass)')}</option>
+                    <option value={60}>{tr('≥ 60% (متفوقين ومجتهدين)', '≥ 60% (Achievers & Diligent)')}</option>
                   </select>
                 </div>
               </div>
@@ -1942,7 +2008,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   onChange={(e) => setExcludeCompleted(e.target.checked)}
                   className="rounded text-amber-500 focus:ring-amber-400 cursor-pointer"
                 />
-                <span>استبعاد الطلبة منتهيي الملف (النشطين فقط)</span>
+                <span>{tr('استبعاد الطلبة منتهيي الملف (النشطين فقط)', 'Exclude completed files (Active only)')}</span>
               </label>
             </div>
 
@@ -1951,22 +2017,22 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                   <Palette className="w-3.5 h-3.5" />
-                  <span>ألوان الخلفية والنصوص</span>
+                  <span>{tr('ألوان الخلفية والنصوص', 'Background & Text Colors')}</span>
                 </label>
                 <button
                   type="button"
                   onClick={handleResetAppearance}
                   className="text-[10px] text-slate-400 hover:text-amber-400 flex items-center gap-1 transition cursor-pointer"
-                  title="استعادة الألوان والخط الافتراضي"
+                  title={tr('استعادة الألوان والخط الافتراضي', 'Restore default colors and font')}
                 >
                   <RotateCcw className="w-3 h-3" />
-                  <span>إعادة ضبط</span>
+                  <span>{tr('إعادة ضبط', 'Reset')}</span>
                 </button>
               </div>
 
               {/* Theme Presets */}
               <div className="space-y-1.5">
-                <span className="text-[11px] text-slate-400 block">أنماط جاهزة سريعة:</span>
+                <span className="text-[11px] text-slate-400 block">{tr('أنماط جاهزة سريعة:', 'Quick Theme Presets:')}</span>
                 <div className="grid grid-cols-3 gap-2">
                   {THEME_PRESETS.map((p) => {
                     const isSelected = bgColor.toLowerCase() === p.bg.toLowerCase() && textColor.toLowerCase() === p.text.toLowerCase();
@@ -1985,8 +2051,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                           <span className="w-3 h-3 rounded-full border border-white/20 inline-block shadow-xs" style={{ backgroundColor: p.bg }} />
                           <span className="w-2.5 h-2.5 rounded-full border border-white/20 inline-block" style={{ backgroundColor: p.accent }} />
                         </div>
-                        <span className="text-[11px] leading-tight font-bold">{p.name}</span>
-                        <span className="text-[9px] text-slate-400">{p.desc}</span>
+                        <span className="text-[11px] leading-tight font-bold">{lang === 'en' ? p.nameEn : p.name}</span>
+                        <span className="text-[9px] text-slate-400">{lang === 'en' ? p.descEn : p.desc}</span>
                       </button>
                     );
                   })}
@@ -1995,13 +2061,13 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
               {/* Custom Color Pickers */}
               <div className="pt-2 border-t border-slate-700/50 space-y-2.5">
-                <span className="text-[11px] text-slate-400 block font-medium">تعديل الألوان يدوياً:</span>
+                <span className="text-[11px] text-slate-400 block font-medium">{tr('تعديل الألوان يدوياً:', 'Custom Color Overrides:')}</span>
 
                 <div className="grid grid-cols-2 gap-2">
                   {/* Background Color */}
                   <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-700/70 flex items-center justify-between">
                     <div>
-                      <span className="block text-[11px] text-slate-300 font-bold">لون الخلفية</span>
+                      <span className="block text-[11px] text-slate-300 font-bold">{tr('لون الخلفية', 'Background')}</span>
                       <span className="text-[10px] text-slate-400 font-mono">{bgColor}</span>
                     </div>
                     <div className="relative">
@@ -2010,7 +2076,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         value={bgColor}
                         onChange={(e) => setBgColor(e.target.value)}
                         className="w-8 h-8 rounded-lg border-2 border-slate-600 cursor-pointer p-0 bg-transparent"
-                        title="اختر لون الخلفية"
+                        title={tr('اختر لون الخلفية', 'Choose background color')}
                       />
                     </div>
                   </div>
@@ -2018,7 +2084,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   {/* Text Color */}
                   <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-700/70 flex items-center justify-between">
                     <div>
-                      <span className="block text-[11px] text-slate-300 font-bold">لون الكلام</span>
+                      <span className="block text-[11px] text-slate-300 font-bold">{tr('لون الكلام', 'Text Color')}</span>
                       <span className="text-[10px] text-slate-400 font-mono">{textColor}</span>
                     </div>
                     <div className="relative">
@@ -2027,7 +2093,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         value={textColor}
                         onChange={(e) => setTextColor(e.target.value)}
                         className="w-8 h-8 rounded-lg border-2 border-slate-600 cursor-pointer p-0 bg-transparent"
-                        title="اختر لون الكلام الأساسي"
+                        title={tr('اختر لون الكلام الأساسي', 'Choose primary text color')}
                       />
                     </div>
                   </div>
@@ -2038,7 +2104,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   {/* Accent Color */}
                   <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-700/70 flex items-center justify-between">
                     <div>
-                      <span className="block text-[11px] text-slate-300 font-bold">لون الزخارف</span>
+                      <span className="block text-[11px] text-slate-300 font-bold">{tr('لون الزخارف', 'Accent Color')}</span>
                       <span className="text-[10px] text-slate-400 font-mono">{accentColor}</span>
                     </div>
                     <div className="relative">
@@ -2047,21 +2113,21 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         value={accentColor}
                         onChange={(e) => setAccentColor(e.target.value)}
                         className="w-8 h-8 rounded-lg border-2 border-slate-600 cursor-pointer p-0 bg-transparent"
-                        title="اختر لون التفاصيل والنسب المئوية"
+                        title={tr('اختر لون التفاصيل والنسب المئوية', 'Choose accent & badge color')}
                       />
                     </div>
                   </div>
 
                   {/* Quick Text Swatches */}
                   <div className="p-2 bg-slate-900/80 rounded-xl border border-slate-700/70 flex flex-col justify-center">
-                    <span className="text-[10px] text-slate-400 mb-1">ألوان كلام سريعة:</span>
+                    <span className="text-[10px] text-slate-400 mb-1">{tr('ألوان كلام سريعة:', 'Quick Text Colors:')}</span>
                     <div className="flex items-center gap-1.5">
                       {[
-                        { color: '#ffffff', label: 'أبيض' },
-                        { color: '#0f172a', label: 'كحلي داكن' },
-                        { color: '#f59e0b', label: 'ذهبي' },
-                        { color: '#38bdf8', label: 'سماوي' },
-                        { color: '#10b981', label: 'زمردي' },
+                        { color: '#ffffff', label: tr('أبيض', 'White') },
+                        { color: '#0f172a', label: tr('كحلي داكن', 'Dark Navy') },
+                        { color: '#f59e0b', label: tr('ذهبي', 'Gold') },
+                        { color: '#38bdf8', label: tr('سماوي', 'Sky Blue') },
+                        { color: '#10b981', label: tr('زمردي', 'Emerald') },
                       ].map((sw) => (
                         <button
                           key={sw.color}
@@ -2086,15 +2152,15 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
             <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-3">
               <label className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                 <Type className="w-3.5 h-3.5" />
-                <span>نوع وحجم الخط للشهادة</span>
+                <span>{tr('نوع وحجم الخط للشهادة', 'Certificate Font & Size')}</span>
               </label>
 
               {/* Font Family Selection Dropdown */}
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400 font-medium">نوع الخط العربي (قائمة منتقاة):</span>
+                  <span className="text-[11px] text-slate-400 font-medium">{tr('نوع الخط (قائمة منتقاة):', 'Font Family (Curated List):')}</span>
                   <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
-                    تطبيق فوري
+                    {tr('تطبيق فوري', 'Live Preview')}
                   </span>
                 </div>
 
@@ -2104,7 +2170,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     id="certificate-font-family-select"
                     value={fontFamily}
                     onChange={(e) => setFontFamily(e.target.value)}
-                    className="w-full appearance-none px-3.5 py-2.5 bg-slate-900 border border-slate-700 hover:border-slate-600 focus:border-amber-400 focus:ring-1 focus:ring-amber-500/50 rounded-xl text-xs font-bold text-slate-100 cursor-pointer transition pr-4 pl-9"
+                    className="w-full appearance-none px-3.5 py-2.5 bg-slate-900 border border-slate-700 hover:border-slate-600 focus:border-amber-400 focus:ring-1 focus:ring-amber-500/50 rounded-xl text-xs font-bold text-slate-100 cursor-pointer transition ps-4 pe-9"
                     style={{ fontFamily: fontFamily }}
                   >
                     {FONT_OPTIONS.map((f) => (
@@ -2113,23 +2179,23 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         value={f.family}
                         className="bg-slate-900 text-white py-1.5"
                       >
-                        {f.name} — {f.category}
+                        {lang === 'en' ? `${f.nameEn} — ${f.categoryEn}` : `${f.name} — ${f.category}`}
                       </option>
                     ))}
                   </select>
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                  <div className="absolute end-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                     <ChevronDown className="w-4 h-4" />
                   </div>
                 </div>
 
                 {/* Quick Selection Shortcuts for popular fonts */}
                 <div className="space-y-1">
-                  <span className="block text-[10px] text-slate-500">أشهر الخطوط للشهادات:</span>
+                  <span className="block text-[10px] text-slate-500">{tr('أشهر الخطوط للشهادات:', 'Popular Certificate Fonts:')}</span>
                   <div className="grid grid-cols-3 gap-1.5">
                     {[
-                      { id: 'cairo', name: 'خط كايرو', family: "'Cairo', sans-serif" },
-                      { id: 'amiri', name: 'الخط الأميري', family: "'Amiri', serif" },
-                      { id: 'tajawal', name: 'خط تجوال', family: "'Tajawal', sans-serif" },
+                      { id: 'cairo', name: tr('خط كايرو', 'Cairo'), family: "'Cairo', sans-serif" },
+                      { id: 'amiri', name: tr('الخط الأميري', 'Amiri'), family: "'Amiri', serif" },
+                      { id: 'tajawal', name: tr('خط تجوال', 'Tajawal'), family: "'Tajawal', sans-serif" },
                     ].map((item) => {
                       const isSelected = fontFamily === item.family;
                       return (
@@ -2157,16 +2223,16 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   return (
                     <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700/70 space-y-1">
                       <div className="flex items-center justify-between text-[10px]">
-                        <span className="font-bold text-amber-400">الخط المطبق: {currentFont.name}</span>
-                        <span className="text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded font-medium">{currentFont.category}</span>
+                        <span className="font-bold text-amber-400">{tr('الخط المطبق:', 'Active Font:')} {lang === 'en' ? currentFont.nameEn : currentFont.name}</span>
+                        <span className="text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded font-medium">{lang === 'en' ? currentFont.categoryEn : currentFont.category}</span>
                       </div>
                       <p
                         className="text-xs text-slate-200 truncate pt-0.5"
                         style={{ fontFamily: fontFamily }}
                       >
-                        لوحة الشرف والتفوق الأكاديمي • أوائل متميزون
+                        {tr('لوحة الشرف والتفوق الأكاديمي • أوائل متميزون', 'Honor Board & Academic Excellence • Top Achievers')}
                       </p>
-                      <p className="text-[10px] text-slate-400">{currentFont.desc}</p>
+                      <p className="text-[10px] text-slate-400">{lang === 'en' ? currentFont.descEn : currentFont.desc}</p>
                     </div>
                   );
                 })()}
@@ -2175,13 +2241,13 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               {/* Font Size Scaling */}
               <div className="pt-2 border-t border-slate-700/50 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400">حجم الخط الإجمالي:</span>
+                  <span className="text-[11px] text-slate-400">{tr('حجم الخط الإجمالي:', 'Overall Font Scale:')}</span>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setFontSizeScale(prev => Math.max(80, prev - 5))}
                       className="p-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-                      title="تصغير الخط"
+                      title={tr('تصغير الخط', 'Decrease font size')}
                     >
                       <Minus className="w-3 h-3" />
                     </button>
@@ -2192,7 +2258,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       type="button"
                       onClick={() => setFontSizeScale(prev => Math.min(135, prev + 5))}
                       className="p-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-                      title="تكبير الخط"
+                      title={tr('تكبير الخط', 'Increase font size')}
                     >
                       <Plus className="w-3 h-3" />
                     </button>
@@ -2213,10 +2279,10 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                 {/* Quick Size Presets */}
                 <div className="grid grid-cols-4 gap-1.5 pt-1">
                   {[
-                    { label: 'مدمج', scale: 90 },
-                    { label: 'قياسي', scale: 100 },
-                    { label: 'كبير', scale: 115 },
-                    { label: 'بارز', scale: 130 },
+                    { label: tr('مدمج', 'Compact'), scale: 90 },
+                    { label: tr('قياسي', 'Standard'), scale: 100 },
+                    { label: tr('كبير', 'Large'), scale: 115 },
+                    { label: tr('بارز', 'Bold'), scale: 130 },
                   ].map((p) => (
                     <button
                       key={p.scale}
@@ -2239,34 +2305,34 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
             <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-3">
               <h3 className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5" />
-                <span>بيانات المعلم والاعتماد</span>
+                <span>{tr('بيانات المعلم والاعتماد', 'Teacher Details & Accreditation')}</span>
               </h3>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">اسم المعلم المطبوع:</label>
+                  <label className="block text-[11px] text-slate-400 mb-1">{tr('اسم المعلم المطبوع:', 'Printed Teacher Name:')}</label>
                   <input
                     type="text"
                     value={teacherName}
                     onChange={(e) => setTeacherName(e.target.value)}
                     placeholder="Mr. Mohamed Hesham"
-                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right focus:ring-1 focus:ring-amber-500"
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-start focus:ring-1 focus:ring-amber-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">نص التوقيع اليدوي:</label>
+                  <label className="block text-[11px] text-slate-400 mb-1">{tr('نص التوقيع اليدوي:', 'Handwritten Signature Text:')}</label>
                   <input
                     type="text"
                     value={signatureText}
                     onChange={(e) => setSignatureText(e.target.value)}
                     placeholder="محمد هشام"
-                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-amber-300 font-bold text-right focus:ring-1 focus:ring-amber-500"
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-amber-300 font-bold text-start focus:ring-1 focus:ring-amber-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] text-slate-400 mb-1.5">نمط وشكل التوقيع:</label>
+                <label className="block text-[11px] text-slate-400 mb-1.5">{tr('نمط وشكل التوقيع:', 'Signature Style:')}</label>
                 <div className="grid grid-cols-3 gap-1.5">
                   <button
                     type="button"
@@ -2277,7 +2343,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-600'
                     }`}
                   >
-                    رقعة يدوي
+                    {tr('رقعة يدوي', 'Calligraphy')}
                   </button>
                   <button
                     type="button"
@@ -2288,7 +2354,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-600'
                     }`}
                   >
-                    انسيابي حديث
+                    {tr('انسيابي حديث', 'Cursive Script')}
                   </button>
                   <button
                     type="button"
@@ -2299,30 +2365,30 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:border-slate-600'
                     }`}
                   >
-                    شارة اعتماد
+                    {tr('شارة اعتماد', 'Official Badge')}
                   </button>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">الصفة / اللقب:</label>
+                  <label className="block text-[11px] text-slate-400 mb-1">{tr('الصفة / اللقب:', 'Role / Title:')}</label>
                   <input
                     type="text"
                     value={teacherRole}
                     onChange={(e) => setTeacherRole(e.target.value)}
-                    placeholder="معلم المادة"
-                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right focus:ring-1 focus:ring-amber-500"
+                    placeholder={tr('معلم المادة', 'Subject Teacher')}
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-start focus:ring-1 focus:ring-amber-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">اسم المدرسة (اختياري):</label>
+                  <label className="block text-[11px] text-slate-400 mb-1">{tr('اسم المدرسة (اختياري):', 'School / Institute (Optional):')}</label>
                   <input
                     type="text"
                     value={schoolName}
                     onChange={(e) => setSchoolName(e.target.value)}
-                    placeholder="مدرستنا العامرة"
-                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-right focus:ring-1 focus:ring-amber-500"
+                    placeholder={tr('مدرستنا العامرة', 'Academy Name')}
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white text-start focus:ring-1 focus:ring-amber-500"
                   />
                 </div>
               </div>
@@ -2335,7 +2401,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     onChange={(e) => setShowSignature(e.target.checked)}
                     className="rounded text-amber-500 focus:ring-amber-400 cursor-pointer"
                   />
-                  <span>إظهار توقيع الأستاذ المعتمد</span>
+                  <span>{tr('إظهار توقيع الأستاذ المعتمد', 'Show certified teacher signature')}</span>
                 </label>
 
                 <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
@@ -2345,7 +2411,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     onChange={(e) => setShowStamp(e.target.checked)}
                     className="rounded text-amber-500 focus:ring-amber-400 cursor-pointer"
                   />
-                  <span>إظهار ختم التميز والاعتماد الذهبي</span>
+                  <span>{tr('إظهار ختم التميز والاعتماد الذهبي', 'Show Golden Excellence Seal')}</span>
                 </label>
 
                 {/* Honor Board Dedicated Logo Toggle & Choice */}
@@ -2357,11 +2423,11 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       onChange={(e) => setShowLogo(e.target.checked)}
                       className="rounded text-amber-500 focus:ring-amber-400 cursor-pointer w-4 h-4"
                     />
-                    <span>إظهار لوجو لوحة الشرف (THE WAY INSTITUTE)</span>
+                    <span>{tr('إظهار لوجو لوحة الشرف (THE WAY INSTITUTE)', 'Show Honor Board Logo (THE WAY INSTITUTE)')}</span>
                   </label>
 
                   {showLogo && (
-                    <div className="flex flex-wrap items-center gap-1.5 pr-6 text-[11px]">
+                    <div className="flex flex-wrap items-center gap-1.5 ps-6 text-[11px]">
                       <button
                         type="button"
                         onClick={() => setLogoChoice('institute')}
@@ -2371,7 +2437,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                             : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
                         }`}
                       >
-                        لوجو المعهد (THE WAY)
+                        {tr('لوجو المعهد (THE WAY)', 'Institute Logo (THE WAY)')}
                       </button>
                       <button
                         type="button"
@@ -2382,7 +2448,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                             : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
                         }`}
                       >
-                        لوجو الأستاذ
+                        {tr('لوجو الأستاذ', 'Teacher Logo')}
                       </button>
                     </div>
                   )}
@@ -2394,38 +2460,38 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
             <div className="bg-slate-800/40 p-3.5 rounded-2xl border border-slate-700/60 space-y-2.5">
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                  العنوان الرئيسي للوحة الشرف:
+                  {tr('العنوان الرئيسي للوحة الشرف:', 'Honor Board Main Title:')}
                 </label>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white font-bold text-right focus:ring-1 focus:ring-amber-500"
+                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white font-bold text-start focus:ring-1 focus:ring-amber-500"
                 />
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                  العنوان الفرعي / الوصف (اختياري):
+                  {tr('العنوان الفرعي / الوصف (اختياري):', 'Subtitle / Description (Optional):')}
                 </label>
                 <input
                   type="text"
                   value={customSubtitle}
                   onChange={(e) => setCustomSubtitle(e.target.value)}
-                  placeholder="يُنشأ تلقائياً إذا تُرك فارغاً..."
-                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-200 text-right focus:ring-1 focus:ring-amber-500"
+                  placeholder={tr('يُنشأ تلقائياً إذا تُرك فارغاً...', 'Auto-generated if left blank...')}
+                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-200 text-start focus:ring-1 focus:ring-amber-500"
                 />
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                  رسالة التهنئة الموجهة لأولياء الأمور:
+                  {tr('رسالة التهنئة الموجهة لأولياء الأمور:', 'Congratulatory Note for Parents:')}
                 </label>
                 <textarea
                   rows={2}
                   value={congratsMessage}
                   onChange={(e) => setCongratsMessage(e.target.value)}
-                  className="w-full p-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-200 text-right focus:ring-1 focus:ring-amber-500"
+                  className="w-full p-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-200 text-start focus:ring-1 focus:ring-amber-500"
                 />
               </div>
             </div>
@@ -2436,7 +2502,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
             <div className="w-full flex flex-wrap items-center justify-between gap-2 mb-3 text-xs text-slate-400 px-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span>معاينة لوحة الشرف ({dataSource === 'structures' ? 'قسم الهياكل' : 'القسم العادي'}):</span>
+                <span>{tr('معاينة لوحة الشرف', 'Honor Board Preview')} ({dataSource === 'structures' ? tr('قسم الهياكل', 'Structures') : tr('القسم العادي', 'Academic')}):</span>
                 <button
                   type="button"
                   onClick={() => setShowLogo(!showLogo)}
@@ -2445,17 +2511,17 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
                       : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                   }`}
-                  title="إمكانية إضافة أو عدم إضافة اللوجو للوحة الشرف"
+                  title={tr('إمكانية إضافة أو عدم إضافة اللوجو للوحة الشرف', 'Toggle logo visibility on Honor Board')}
                 >
                   {showLogo
                     ? logoChoice === 'teacher'
-                      ? '🖼️ لوجو الأستاذ مفعّل ✔'
-                      : '🖼️ لوجو THE WAY INSTITUTE مفعّل ✔'
-                    : '🖼️ بدون إضافة اللوجو'}
+                      ? tr('🖼️ لوجو الأستاذ مفعّل ✔', '🖼️ Teacher Logo Enabled ✔')
+                      : tr('🖼️ لوجو THE WAY INSTITUTE مفعّل ✔', '🖼️ THE WAY INSTITUTE Logo Enabled ✔')
+                    : tr('🖼️ بدون إضافة اللوجو', '🖼️ No Logo')}
                 </button>
               </div>
               <span className="text-amber-400 font-bold">
-                {rankedStudents.length} طلاب متفوقين
+                {rankedStudents.length} {tr('طلاب متفوقين', 'honored students')}
               </span>
             </div>
 
@@ -2465,13 +2531,14 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               {/* THE EXPORTABLE BOARD CONTAINER */}
               <div
                 ref={boardRef}
+                dir={dir}
                 style={{
                   width: '740px',
                   backgroundColor: bgColor,
                   color: textColor,
                   fontFamily: fontFamily
                 }}
-                className={`p-7 rounded-3xl transition-all select-none text-right shadow-2xl ${
+                className={`p-7 rounded-3xl transition-all select-none text-start shadow-2xl ${
                   isLightBg
                     ? 'border-4 border-amber-600/30'
                     : 'border-4 border-amber-500/40'
@@ -2489,14 +2556,14 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                   {/* Subtle Background Radial Glow */}
                   <div
                     style={{ backgroundColor: `${accentColor}15` }}
-                    className="absolute top-0 right-1/2 translate-x-1/2 w-96 h-40 rounded-full blur-3xl pointer-events-none"
+                    className="absolute top-0 start-1/2 -translate-x-1/2 rtl:translate-x-1/2 w-96 h-40 rounded-full blur-3xl pointer-events-none"
                   />
 
                   {/* Corner Ornaments */}
-                  <div style={{ color: `${accentColor}60` }} className="absolute top-2 right-2 text-xs font-serif">✦</div>
-                  <div style={{ color: `${accentColor}60` }} className="absolute top-2 left-2 text-xs font-serif">✦</div>
-                  <div style={{ color: `${accentColor}60` }} className="absolute bottom-2 right-2 text-xs font-serif">✦</div>
-                  <div style={{ color: `${accentColor}60` }} className="absolute bottom-2 left-2 text-xs font-serif">✦</div>
+                  <div style={{ color: `${accentColor}60` }} className="absolute top-2 start-2 text-xs font-serif">✦</div>
+                  <div style={{ color: `${accentColor}60` }} className="absolute top-2 end-2 text-xs font-serif">✦</div>
+                  <div style={{ color: `${accentColor}60` }} className="absolute bottom-2 start-2 text-xs font-serif">✦</div>
+                  <div style={{ color: `${accentColor}60` }} className="absolute bottom-2 end-2 text-xs font-serif">✦</div>
 
                   {/* Top Header Section */}
                   <div
@@ -2522,7 +2589,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                           }}
                           className="font-bold"
                         >
-                          {showLogo && logoChoice === 'institute' ? 'THE WAY INSTITUTE' : 'سجل التميز والإنجاز الأكاديمي'}
+                          {showLogo && logoChoice === 'institute' ? 'THE WAY INSTITUTE' : tr('سجل التميز والإنجاز الأكاديمي', 'Record of Academic Excellence')}
                         </p>
                       )}
                       <p
@@ -2532,7 +2599,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         }}
                         className="font-bold mt-0.5"
                       >
-                        مادة {displaySubject}
+                        {tr('مادة', 'Subject:')} {displaySubject}
                       </p>
                     </div>
 
@@ -2548,7 +2615,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         >
                           <img
                             src={logoChoice === 'teacher' ? `${import.meta.env.BASE_URL}teacher-logo.jpg` : `${import.meta.env.BASE_URL}the-way-institute-logo.svg`}
-                            alt={logoChoice === 'teacher' ? 'شعار الأستاذ' : 'شعار معهد THE WAY INSTITUTE'}
+                            alt={logoChoice === 'teacher' ? tr('شعار الأستاذ', 'Teacher Logo') : tr('شعار معهد THE WAY INSTITUTE', 'THE WAY INSTITUTE Logo')}
                             className="w-20 h-14 object-contain rounded-xl"
                             crossOrigin="anonymous"
                             onError={(e) => {
@@ -2574,7 +2641,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       )}
                     </div>
 
-                    <div className="text-left">
+                    <div className="text-end">
                       <span
                         style={{
                           backgroundColor: `${accentColor}18`,
@@ -2628,8 +2695,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                           <Flame className="w-3.5 h-3.5" style={{ color: accentColor }} />
                           <span>
                             {dataSource === 'structures'
-                              ? 'وسام فرسان الالتزام في حل الهياكل'
-                              : 'وسام فرسان الالتزام والمثابرة'}
+                              ? tr('وسام فرسان الالتزام في حل الهياكل', 'Badge of Excellence in Structure Solving')
+                              : tr('وسام فرسان الالتزام والمثابرة', 'Badge of Dedication & Perseverance')}
                           </span>
                           <Flame className="w-3.5 h-3.5" style={{ color: accentColor }} />
                         </>
@@ -2638,8 +2705,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                           <Crown className="w-3.5 h-3.5" style={{ color: accentColor }} />
                           <span>
                             {dataSource === 'structures'
-                              ? 'وسام الشرف الشامل لقسم الهياكل'
-                              : 'وسام الشرف والتميز الأكاديمي الشامل'}
+                              ? tr('وسام الشرف الشامل لقسم الهياكل', 'Comprehensive Structures Honor Seal')
+                              : tr('وسام الشرف والتميز الأكاديمي الشامل', 'Comprehensive Academic Honor Seal')}
                           </span>
                           <Flame className="w-3.5 h-3.5" style={{ color: accentColor }} />
                         </>
@@ -2648,8 +2715,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                           <Sparkles className="w-3.5 h-3.5" style={{ color: accentColor }} />
                           <span>
                             {dataSource === 'structures'
-                              ? 'وسام التميز وإتقان الهياكل'
-                              : 'وسام التميز والتفوق المستمر'}
+                              ? tr('وسام التميز وإتقان الهياكل', 'Structures Mastery Distinction Seal')
+                              : tr('وسام التميز والتفوق المستمر', 'Continuous Academic Excellence Seal')}
                           </span>
                           <Sparkles className="w-3.5 h-3.5" style={{ color: accentColor }} />
                         </>
@@ -2678,19 +2745,43 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     >
                       {dataSource === 'structures'
                         ? boardType === 'exam' && currentStructure
-                          ? `نتائج أوائل هيكل: ${currentStructure.title} (إجمالي الأسئلة: ${currentStructure.totalQuestions} سؤال)${periodLabel ? ` • ${periodLabel}` : ''}`
+                          ? tr(
+                              `نتائج أوائل هيكل: ${currentStructure.title} (إجمالي الأسئلة: ${currentStructure.totalQuestions} سؤال)${periodLabel ? ` • ${periodLabel}` : ''}`,
+                              `Top Achievers for Structure: ${currentStructure.title} (Total: ${currentStructure.totalQuestions} Qs)${periodLabel ? ` • ${periodLabel}` : ''}`
+                            )
                           : boardType === 'most_active'
-                          ? customSubtitle || `تكريم الطلاب الأكثر حلاً لأسئلة الهياكل • مادة ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
+                          ? customSubtitle || tr(
+                              `تكريم الطلاب الأكثر حلاً لأسئلة الهياكل • مادة ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`,
+                              `Honoring the Most Active Structure Solvers • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
+                            )
                           : boardType === 'combined'
-                          ? customSubtitle || `لوحة شرف الهياكل الشاملة: أوائل نسب الصحة وفرسان حل الأسئلة • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
-                          : customSubtitle || `لوحة شرف قسم الهياكل لأعلى نسب صحة الأسئلة • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
+                          ? customSubtitle || tr(
+                              `لوحة شرف الهياكل الشاملة: أوائل نسب الصحة وفرسان حل الأسئلة • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`,
+                              `Comprehensive Structures Board: Top Accuracy & Active Solvers • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
+                            )
+                          : customSubtitle || tr(
+                              `لوحة شرف قسم الهياكل لأعلى نسب صحة الأسئلة • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`,
+                              `Structures Section Honor Board for Highest Accuracy • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
+                            )
                         : boardType === 'exam' && currentExam
-                        ? `نتائج أوائل: ${currentExam.title} (الدرجة الكاملة: ${currentExam.totalScore})${periodLabel ? ` • ${periodLabel}` : ''}`
+                        ? tr(
+                            `نتائج أوائل: ${currentExam.title} (الدرجة الكاملة: ${currentExam.totalScore})${periodLabel ? ` • ${periodLabel}` : ''}`,
+                            `Top Results: ${currentExam.title} (Full Score: ${currentExam.totalScore})${periodLabel ? ` • ${periodLabel}` : ''}`
+                          )
                         : boardType === 'most_active'
-                        ? customSubtitle || `تكريم الطلاب الأكثر حلاً للاختبارات والمشاركات • مادة ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
+                        ? customSubtitle || tr(
+                            `تكريم الطلاب الأكثر حلاً للاختبارات والمشاركات • مادة ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`,
+                            `Honoring the Most Active Exam Takers • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
+                          )
                         : boardType === 'combined'
-                        ? customSubtitle || `لوحة الشرف الشاملة: أوائل المتفوقين وفرسان الالتزام • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
-                        : customSubtitle || `لوحة الشرف العامة لأوائل الطلبة • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`}
+                        ? customSubtitle || tr(
+                            `لوحة الشرف الشاملة: أوائل المتفوقين وفرسان الالتزام • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`,
+                            `Comprehensive Honor Board: Top Achievers & Dedicated Champions • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
+                          )
+                        : customSubtitle || tr(
+                            `لوحة الشرف العامة لأوائل الطلبة • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`,
+                            `General Academic Top Achievers Honor Board • ${displaySubject}${periodLabel ? ` (${periodLabel})` : ''}`
+                          )}
                     </p>
 
                     {/* Encouraging Note for Parents & Students */}
@@ -2715,8 +2806,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         className="text-xs font-bold"
                       >
                         {dataSource === 'structures'
-                          ? 'القسم الأول: أوائل التفوق وإتقان أسئلة الهياكل'
-                          : 'القسم الأول: أوائل التفوق والامتياز الدراسي'}
+                          ? tr('القسم الأول: أوائل التفوق وإتقان أسئلة الهياكل', 'Section 1: Top Achievers in Structure Accuracy')
+                          : tr('القسم الأول: أوائل التفوق والامتياز الدراسي', 'Section 1: Top Academic Achievers')}
                       </h2>
                     </div>
                   )}
@@ -2726,8 +2817,14 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     {rankedStudents.length === 0 ? (
                       <div className="py-10 text-center text-slate-400 text-xs">
                         {dataSource === 'structures'
-                          ? `لا يوجد طلاب في نطاق التفوق المحدد بالهياكل (${minPercentage}% فأعلى). يمكنك تعديل التصفية أو تخفيض النسبة.`
-                          : `لا يوجد طلاب في نطاق التفوق المحدد (${minPercentage}% فأعلى). يمكنك تخفيض نسبة التفوق من الإعدادات.`}
+                          ? tr(
+                              `لا يوجد طلاب في نطاق التفوق المحدد بالهياكل (${minPercentage}% فأعلى). يمكنك تعديل التصفية أو تخفيض النسبة.`,
+                              `No students meet the ${minPercentage}% minimum accuracy threshold in Structures. Adjust filters or lower the threshold.`
+                            )
+                          : tr(
+                              `لا يوجد طلاب في نطاق التفوق المحدد (${minPercentage}% فأعلى). يمكنك تخفيض نسبة التفوق من الإعدادات.`,
+                              `No students meet the ${minPercentage}% minimum threshold. Lower the threshold from settings.`
+                            )}
                       </div>
                     ) : (
                       rankedStudents.map((item) => {
@@ -2750,7 +2847,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                               isFirst ? 'shadow-md' : 'shadow-xs'
                             }`}
                           >
-                            {/* Right: Rank Badge & Student Details */}
+                            {/* Start: Rank Badge & Student Details */}
                             <div className="flex items-center gap-3">
                               {/* Rank Badge */}
                               <div
@@ -2792,7 +2889,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                       }}
                                       className="px-2 py-0.5 font-bold border rounded-full"
                                     >
-                                      {boardType === 'most_active' ? 'بطل الالتزام الأول' : 'المركز الأول'}
+                                      {boardType === 'most_active' ? tr('بطل الالتزام الأول', 'Top Dedication Champion') : tr('المركز الأول', '1st Place')}
                                     </span>
                                   )}
                                 </div>
@@ -2803,16 +2900,16 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                   }}
                                   className="flex items-center gap-1.5 mt-0.5"
                                 >
-                                  <span>{item.student.grade}</span>
-                                  {item.student.track && <span>• مسار {item.student.track}</span>}
-                                  {item.student.studentId && <span>• كود: {item.student.studentId}</span>}
+                                  <span>{translateGrade(item.student.grade, lang)}</span>
+                                  {item.student.track && <span>• {tr('مسار', 'Track:')} {translateTrack(item.student.track, lang)}</span>}
+                                  {item.student.studentId && <span>• {tr('كود:', 'ID:')} {item.student.studentId}</span>}
                                 </p>
                               </div>
                             </div>
 
-                            {/* Left: Score & Recognition Pill */}
-                            <div className="text-left flex items-center gap-3">
-                              <div className="hidden sm:block text-right">
+                            {/* End: Score & Recognition Pill */}
+                            <div className="text-end flex items-center gap-3">
+                              <div className="hidden sm:block text-start">
                                 <span
                                   style={{
                                     color: item.percentage >= 95 ? '#10b981' : accentColor,
@@ -2831,15 +2928,15 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                 >
                                   {dataSource === 'structures'
                                     ? boardType === 'most_active'
-                                      ? `متوسط الصحة: ${item.percentage}% • ${item.totalExams || 0} هياكل`
+                                      ? tr(`متوسط الصحة: ${item.percentage}% • ${item.totalExams || 0} هياكل`, `Avg Accuracy: ${item.percentage}% • ${item.totalExams || 0} structures`)
                                       : boardType === 'overall' || boardType === 'combined'
-                                      ? `${item.totalExams || 0} هياكل (${item.solvedCount || 0}/${item.totalQuestions || 0} سؤال)`
-                                      : `المحلول: ${item.solvedCount || 0}/${item.totalQuestions || 0} سؤال (إنجاز ${item.completionPercentage || 0}%)`
+                                      ? tr(`${item.totalExams || 0} هياكل (${item.solvedCount || 0}/${item.totalQuestions || 0} سؤال)`, `${item.totalExams || 0} structures (${item.solvedCount || 0}/${item.totalQuestions || 0} Qs)`)
+                                      : tr(`المحلول: ${item.solvedCount || 0}/${item.totalQuestions || 0} سؤال (إنجاز ${item.completionPercentage || 0}%)`, `Solved: ${item.solvedCount || 0}/${item.totalQuestions || 0} Qs (${item.completionPercentage || 0}% done)`)
                                     : boardType === 'most_active'
-                                    ? `متوسط الدرجات: ${item.percentage}%`
+                                    ? tr(`متوسط الدرجات: ${item.percentage}%`, `Score Average: ${item.percentage}%`)
                                     : boardType === 'overall' || boardType === 'combined'
-                                    ? `${item.totalExams} اختبارات مقيمة`
-                                    : `الدرجة: ${item.score}/${currentExam?.totalScore || 100}`}
+                                    ? tr(`${item.totalExams} اختبارات مقيمة`, `${item.totalExams} graded exams`)
+                                    : tr(`الدرجة: ${item.score}/${currentExam?.totalScore || 100}`, `Score: ${item.score}/${currentExam?.totalScore || 100}`)}
                                 </span>
                               </div>
 
@@ -2859,7 +2956,9 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                       }}
                                       className="font-black font-mono block leading-tight"
                                     >
-                                      {dataSource === 'structures' ? `${item.solvedCount || 0} سؤال` : `${item.totalExams} اختبار`}
+                                      {dataSource === 'structures'
+                                        ? `${item.solvedCount || 0} ${tr('سؤال', 'Qs')}`
+                                        : `${item.totalExams} ${tr('اختبار', 'Exams')}`}
                                     </span>
                                     <span
                                       style={{
@@ -2868,7 +2967,9 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                       }}
                                       className="block font-bold mt-0.5"
                                     >
-                                      {dataSource === 'structures' ? `في ${item.totalExams || 0} هيكل` : 'تم حلها'}
+                                      {dataSource === 'structures'
+                                        ? tr(`في ${item.totalExams || 0} هيكل`, `in ${item.totalExams || 0} structures`)
+                                        : tr('تم حلها', 'completed')}
                                     </span>
                                   </>
                                 ) : (
@@ -2890,7 +2991,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                         }}
                                         className="block font-mono mt-0.5"
                                       >
-                                        {item.solvedCount || 0}/{item.totalQuestions || 0} س
+                                        {item.solvedCount || 0}/{item.totalQuestions || 0} {tr('س', 'Q')}
                                       </span>
                                     )}
                                   </>
@@ -2931,8 +3032,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                               className="font-black leading-tight"
                             >
                               {dataSource === 'structures'
-                                ? 'فرسان الالتزام والمثابرة • الأكثر حلاً لأسئلة الهياكل'
-                                : 'فرسان الالتزام والمثابرة • الأكثر حلاً للامتحانات'}
+                                ? tr('فرسان الالتزام والمثابرة • الأكثر حلاً لأسئلة الهياكل', 'Dedication Champions • Most Structure Questions Solved')
+                                : tr('فرسان الالتزام والمثابرة • الأكثر حلاً للامتحانات', 'Dedication Champions • Most Exams Completed')}
                             </h2>
                             <p
                               style={{
@@ -2941,8 +3042,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                               }}
                             >
                               {dataSource === 'structures'
-                                ? 'تقديراً للحرص الدؤوب والاجتهاد في حل وإنجاز أسئلة الهياكل بدقة متميزة'
-                                : 'تقديراً للحرص الدؤوب والمشاركة الفعالة في إنجاز التقييمات والاختبارات'}
+                                ? tr('تقديراً للحرص الدؤوب والاجتهاد في حل وإنجاز أسئلة الهياكل بدقة متميزة', 'In recognition of persistent diligence and accuracy in completing structure questions')
+                                : tr('تقديراً للحرص الدؤوب والمشاركة الفعالة في إنجاز التقييمات والاختبارات', 'In recognition of consistent effort and active participation across assessments')}
                             </p>
                           </div>
                         </div>
@@ -2955,7 +3056,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                           }}
                           className="px-2.5 py-0.5 rounded-full font-bold border"
                         >
-                          أعلى مشاركة ⚡
+                          {tr('أعلى مشاركة ⚡', 'Top Participation ⚡')}
                         </span>
                       </div>
 
@@ -3027,7 +3128,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                   }}
                                   className="font-black font-mono block leading-none"
                                 >
-                                  {dataSource === 'structures' ? `${act.solvedCount || 0} سؤال` : `${act.totalExams} اختبار`}
+                                  {dataSource === 'structures' ? `${act.solvedCount || 0} ${tr('سؤال', 'Qs')}` : `${act.totalExams} ${tr('اختبار', 'Exams')}`}
                                 </span>
                                 <span
                                   style={{
@@ -3036,7 +3137,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                   }}
                                   className="block font-mono mt-0.5"
                                 >
-                                  {dataSource === 'structures' ? `${act.totalExams || 0} هيكل • ${act.percentage}%` : `${act.percentage}%`}
+                                  {dataSource === 'structures' ? `${act.totalExams || 0} ${tr('هيكل', 'structures')} • ${act.percentage}%` : `${act.percentage}%`}
                                 </span>
                               </div>
                             </div>
@@ -3052,8 +3153,8 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                     className="mt-6 pt-5 border-t grid grid-cols-3 items-center"
                   >
 
-                    {/* Right: Official Accreditation Statement */}
-                    <div className="text-right">
+                    {/* Start: Official Accreditation Statement */}
+                    <div className="text-start">
                       <p
                         style={{
                           color: isLightBg ? '#334155' : '#cbd5e1',
@@ -3061,7 +3162,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         }}
                         className="font-bold"
                       >
-                        الاعتماد الرسمي
+                        {tr('الاعتماد الرسمي', 'Official Accreditation')}
                       </p>
                       <p
                         style={{
@@ -3070,11 +3171,11 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                         }}
                         className="mt-0.5 leading-relaxed"
                       >
-                        صدرت هذه اللوحة إلكترونياً تقديراً للمثابرة والتفوق الدراسي المشرف.
+                        {tr('صدرت هذه اللوحة إلكترونياً تقديراً للمثابرة والتفوق الدراسي المشرف.', 'Issued electronically in recognition of diligence and honorable academic excellence.')}
                       </p>
                       <div className="flex items-center gap-1 mt-1 text-[10px] text-emerald-500 font-bold">
                         <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                        <span>بيانات موثقة ومعتمدة</span>
+                        <span>{tr('بيانات موثقة ومعتمدة', 'Verified & Certified Records')}</span>
                       </div>
                     </div>
 
@@ -3097,7 +3198,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                               style={{ color: accentColor }}
                               className="text-[8px] font-black uppercase tracking-tighter leading-none"
                             >
-                              ختم التميز
+                              {tr('ختم التميز', 'SEAL OF')}
                             </span>
                             <span
                               style={{ color: accentColor }}
@@ -3116,7 +3217,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                       )}
                     </div>
 
-                    {/* Left: Teacher Signature */}
+                    {/* End: Teacher Signature */}
                     <div className="flex flex-col items-center justify-center text-center min-w-[150px]">
                       <p
                         style={{
@@ -3160,7 +3261,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                 }}
                                 className="text-[8px] px-1.5 py-0.5 rounded font-mono font-bold"
                               >
-                                معتمد ✓
+                                {tr('معتمد ✓', 'VERIFIED ✓')}
                               </span>
                             </div>
                           ) : (
@@ -3210,7 +3311,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
                                 className="flex items-center gap-1 mt-1 text-[9px] font-mono whitespace-nowrap"
                               >
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                <span>توقيع رسمي معتمد</span>
+                                <span>{tr('توقيع رسمي معتمد', 'Certified Official Signature')}</span>
                               </div>
                             </div>
                           )}
@@ -3227,7 +3328,10 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
 
             {/* Hint below preview */}
             <p className="text-[11px] text-slate-400 mt-2 text-center">
-              💡 نصيحة: يمكنك النقر على زر "نسخ الصورة" للصقها فوراً في واتساب ويب أو تليجرام، أو تحميلها كملف صورة عالي الدقة لإرسالها لأولياء الأمور.
+              {tr(
+                '💡 نصيحة: يمكنك النقر على زر "نسخ الصورة" للصقها فوراً في واتساب ويب أو تليجرام، أو تحميلها كملف صورة عالي الدقة لإرسالها لأولياء الأمور.',
+                '💡 Tip: Click "Copy Image" to paste directly into WhatsApp Web or Telegram, or download the ultra-HD PNG to share with parents.'
+              )}
             </p>
           </div>
 
@@ -3242,7 +3346,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               onClick={onClose}
               className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer"
             >
-              إلغاء
+              {tr('إلغاء', 'Cancel')}
             </button>
           </div>
 
@@ -3254,10 +3358,10 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               disabled={isExporting}
               onClick={handlePrintCertificate}
               className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold text-slate-200 bg-slate-800 hover:bg-slate-700 active:scale-95 rounded-xl border border-slate-700 transition cursor-pointer disabled:opacity-50"
-              title="طباعة الشهادة أو حفظها بصيغة PDF"
+              title={tr('طباعة الشهادة أو حفظها بصيغة PDF', 'Print certificate or save as PDF')}
             >
               <Printer className="w-4 h-4 text-amber-400" />
-              <span>طباعة الشهادة (PDF)</span>
+              <span>{tr('طباعة الشهادة (PDF)', 'Print Certificate (PDF)')}</span>
             </button>
 
             {/* Copy image button */}
@@ -3270,12 +3374,12 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               {copiedSuccess ? (
                 <>
                   <Check className="w-4 h-4 text-emerald-400" />
-                  <span className="text-emerald-400">تم النسخ للحافظة!</span>
+                  <span className="text-emerald-400">{tr('تم النسخ للحافظة!', 'Copied to clipboard!')}</span>
                 </>
               ) : (
                 <>
                   <Copy className="w-4 h-4 text-slate-400" />
-                  <span>نسخ الصورة (للواتساب)</span>
+                  <span>{tr('نسخ الصورة (للواتساب)', 'Copy Image (WhatsApp)')}</span>
                 </>
               )}
             </button>
@@ -3288,7 +3392,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:scale-95 rounded-xl shadow-md shadow-emerald-600/20 transition cursor-pointer disabled:opacity-50"
             >
               <MessageCircle className="w-4 h-4" />
-              <span>مشاركة عبر واتساب</span>
+              <span>{tr('مشاركة عبر واتساب', 'Share via WhatsApp')}</span>
             </button>
 
             {/* Download Ultra-HD Image */}
@@ -3300,7 +3404,7 @@ export const HonorBoardModal: React.FC<HonorBoardModalProps> = ({
               className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 rounded-xl shadow-md shadow-amber-500/20 transition cursor-pointer disabled:opacity-50"
             >
               <Download className="w-4 h-4" />
-              <span>{isExporting ? 'جاري تجهيز الصورة...' : 'تحميل الصورة فائقة الدقة (PNG)'}</span>
+              <span>{isExporting ? tr('جاري تجهيز الصورة...', 'Preparing image...') : tr('تحميل الصورة فائقة الدقة (PNG)', 'Download Ultra-HD PNG')}</span>
             </button>
           </div>
 

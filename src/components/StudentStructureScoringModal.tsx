@@ -29,6 +29,13 @@ import {
   clearStructureScoringDraft,
 } from '../utils/activityTracker';
 import { ConfirmModal } from './ConfirmModal';
+import {
+  useLanguage,
+  translateGrade,
+  translateTerm,
+  translateTrack,
+  translateSubject,
+} from '../utils/i18n';
 
 export interface StudentStructureScoringModalProps {
   isOpen: boolean;
@@ -63,6 +70,7 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
   onClose,
   onSave,
 }) => {
+  const { lang, dir, tr } = useLanguage();
   const totalQ = Math.max(1, structure.totalQuestions || structure.questions?.length || 1);
   const inputRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
 
@@ -283,10 +291,13 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
     }
     setConfirmState({
       isOpen: true,
-      title: 'تحذير: تعديلات غير محفوظة',
-      message: `لديك تعديلات غير محفوظة للطالب "${student.name}" في هيكل "${structure.title}". في حال الخروج الآن سيتم تجاهل التعديلات غير المحفوظة. هل تريد الخروج دون حفظ؟`,
-      confirmText: 'تجاهل التعديلات والخروج',
-      cancelText: 'البقاء وحفظ التعديلات',
+      title: tr('تحذير: تعديلات غير محفوظة', 'Warning: Unsaved Changes'),
+      message: tr(
+        `لديك تعديلات غير محفوظة للطالب "${student.name}" في هيكل "${structure.title}". في حال الخروج الآن سيتم تجاهل التعديلات غير المحفوظة. هل تريد الخروج دون حفظ؟`,
+        `You have unsaved changes for "${student.name}" in structure "${structure.title}". Closing now will discard unsaved edits. Exit without saving?`
+      ),
+      confirmText: tr('تجاهل التعديلات والخروج', 'Discard & Exit'),
+      cancelText: tr('البقاء وحفظ التعديلات', 'Stay & Save'),
       isDestructive: true,
       onConfirm: () => {
         clearStructureScoringDraft(draftKey);
@@ -362,10 +373,13 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
     if (liveStats.solvedCount === 0) return;
     setConfirmState({
       isOpen: true,
-      title: 'تأكيد تفريغ جميع الأسئلة',
-      message: `هل تريد إلغاء تحديد جميع الأسئلة المحلولة (${liveStats.solvedCount} سؤال) وإرجاع نسبتها إلى 0%؟`,
-      confirmText: 'تفريغ الكل',
-      cancelText: 'تراجع',
+      title: tr('تأكيد تفريغ جميع الأسئلة', 'Confirm Clear All Questions'),
+      message: tr(
+        `هل تريد إلغاء تحديد جميع الأسئلة المحلولة (${liveStats.solvedCount} سؤال) وإرجاع نسبتها إلى 0%؟`,
+        `Clear all ${liveStats.solvedCount} solved questions and reset accuracy to 0%?`
+      ),
+      confirmText: tr('تفريغ الكل', 'Clear All'),
+      cancelText: tr('تراجع', 'Cancel'),
       isDestructive: true,
       onConfirm: () => {
         setAllQuestionsState(false, 0);
@@ -525,10 +539,13 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
   const requestRemoveQuestionImprovement = (qs: StructureQuestionScore) => {
     setConfirmState({
       isOpen: true,
-      title: `حذف محاولة التحسين للسؤال س${qs.questionNumber}`,
-      message: `هل أنت متأكد من التراجع عن محاولة التحسين رقم (${qs.attemptNumber || 2}) للسؤال س${qs.questionNumber} وإرجاع النسبة إلى المحاولة السابقة؟`,
-      confirmText: 'حذف محاولة التحسين',
-      cancelText: 'تراجع',
+      title: tr(`حذف محاولة التحسين للسؤال س${qs.questionNumber}`, `Remove Retake Attempt for Q${qs.questionNumber}`),
+      message: tr(
+        `هل أنت متأكد من التراجع عن محاولة التحسين رقم (${qs.attemptNumber || 2}) للسؤال س${qs.questionNumber} وإرجاع النسبة إلى المحاولة السابقة؟`,
+        `Revert retake attempt #${qs.attemptNumber || 2} for Q${qs.questionNumber} back to the previous accuracy?`
+      ),
+      confirmText: tr('حذف محاولة التحسين', 'Remove Retake'),
+      cancelText: tr('تراجع', 'Cancel'),
       isDestructive: true,
       onConfirm: () => {
         executeRemoveQuestionImprovement(qs.questionNumber);
@@ -645,8 +662,9 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
       }}
     >
       <div
+        dir={dir}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[92vh] text-right"
+        className="w-full max-w-5xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[92vh] text-start"
       >
         {/* Header */}
         <div className="shrink-0 px-4 sm:px-5 py-3.5 sm:py-4 bg-slate-50 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
@@ -654,27 +672,27 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="font-black text-base text-slate-900 dark:text-white">
                 {isNewImprovementAttempt
-                  ? `تحسين درجة الهيكل للطالب: ${student.name}`
-                  : `رصد حل أسئلة الهيكل للطالب: ${student.name}`}
+                  ? tr(`تحسين درجة الهيكل للطالب: ${student.name}`, `Improve Structure Score for: ${student.name}`)
+                  : tr(`رصد حل أسئلة الهيكل للطالب: ${student.name}`, `Record Structure Questions for: ${student.name}`)}
               </h3>
               {isDirty && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
                   <History className="w-3 h-3" />
-                  مسودة تقدم محفوظة
+                  {tr('مسودة تقدم محفوظة', 'Progress draft saved')}
                 </span>
               )}
               {isStudentImprovement && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
                   <Sparkles className="w-3 h-3 text-amber-600" />
-                  تحسين (محاولة {effectiveAttemptNumber})
+                  {tr(`تحسين (محاولة ${effectiveAttemptNumber})`, `Retake (Attempt ${effectiveAttemptNumber})`)}
                 </span>
               )}
               {effectivePreviousAccuracy !== undefined && (
                 <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                  (النسبة السابقة: {effectivePreviousAccuracy}%
+                  ({tr('النسبة السابقة:', 'Prev Accuracy:')} {effectivePreviousAccuracy}%
                   {accuracyDiff !== null && (
                     <strong
-                      className={`mr-1 ${
+                      className={`ms-1 ${
                         accuracyDiff > 0
                           ? 'text-emerald-600 dark:text-emerald-400'
                           : accuracyDiff < 0
@@ -690,7 +708,7 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
               )}
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              الهيكل: <strong className="text-amber-600 dark:text-amber-400">{structure.title}</strong> • إجمالي الأسئلة: <strong className="font-mono">{totalQ}</strong>
+              {tr('الهيكل:', 'Structure:')} <strong className="text-amber-600 dark:text-amber-400">{structure.title}</strong> • {tr('إجمالي الأسئلة:', 'Total Questions:')} <strong className="font-mono">{totalQ}</strong>
             </p>
           </div>
           <button
@@ -709,7 +727,7 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
               <div className="flex items-center gap-2">
                 <History className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                 <span className="font-bold text-amber-900 dark:text-amber-100">
-                  توجد مسودة تقدم محفوظة تلقائياً لهذا الطالب من جلسة سابقة
+                  {tr('توجد مسودة تقدم محفوظة تلقائياً لهذا الطالب من جلسة سابقة', 'Auto-saved progress draft found from a previous session')}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
@@ -719,14 +737,14 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
                   className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black cursor-pointer"
                 >
                   <RotateCcw className="w-3 h-3" />
-                  <span>استعادة التعديلات</span>
+                  <span>{tr('استعادة التعديلات', 'Restore Edits')}</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleDiscardDraft}
                   className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold cursor-pointer"
                 >
-                  تجاهل المسودة
+                  {tr('تجاهل المسودة', 'Discard')}
                 </button>
               </div>
             </div>
@@ -734,35 +752,35 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
           {/* Live Summary Banner */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">قام بحل</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">{tr('قام بحل', 'Solved')}</span>
               <span className="text-xl font-black font-mono tabular-nums text-slate-900 dark:text-white">
-                {liveStats.solvedCount} / {totalQ} سؤال
+                {liveStats.solvedCount} / {totalQ} {tr('سؤال', 'Q')}
               </span>
             </div>
             <div className="p-3 bg-amber-50/70 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800/70 text-center">
-              <span className="text-[11px] text-amber-700 dark:text-amber-400 block">نسبة إنجاز الهيكل</span>
+              <span className="text-[11px] text-amber-700 dark:text-amber-400 block">{tr('نسبة إنجاز الهيكل', 'Completion Rate')}</span>
               <span className="text-xl font-black font-mono tabular-nums text-amber-600 dark:text-amber-400">
                 {liveStats.completionPercentage}%
               </span>
             </div>
             <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800/70 text-center">
-              <span className="text-[11px] text-emerald-700 dark:text-emerald-400 block">متوسط نسبة الصحة</span>
+              <span className="text-[11px] text-emerald-700 dark:text-emerald-400 block">{tr('متوسط نسبة الصحة', 'Avg Accuracy')}</span>
               <span className="text-xl font-black font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
                 {liveStats.overallAccuracyPercentage}%
               </span>
             </div>
             <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/30 rounded-xl border border-indigo-200 dark:border-indigo-800/70 text-center">
-              <span className="text-[11px] text-indigo-700 dark:text-indigo-400 block">الأسئلة المحسّنة</span>
+              <span className="text-[11px] text-indigo-700 dark:text-indigo-400 block">{tr('الأسئلة المحسّنة', 'Improved Questions')}</span>
               <span className="text-xl font-black font-mono tabular-nums text-indigo-600 dark:text-indigo-400">
-                {liveStats.improvedQuestionsCount} سؤال
+                {liveStats.improvedQuestionsCount} {tr('سؤال', 'Q')}
               </span>
             </div>
           </div>
 
-          {/* Complete Academic Metadata per Student-Haykal Record */}
+          {/* Complete Academic Metadata */}
           <div className="p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2.5">
             <span className="font-bold text-slate-700 dark:text-slate-300 block">
-              بيانات القيد الأكاديمي لهذا السجل (الصف / الفصل / المسار / السنة / المادة):
+              {tr('بيانات القيد الأكاديمي لهذا السجل (الصف / الفصل / المسار / السنة / المادة):', 'Academic Metadata for This Record (Grade / Term / Track / Year / Subject):')}
             </span>
             <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
               <select
@@ -772,10 +790,10 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
                   setGrade(e.target.value);
                 }}
                 className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold"
-                title="الصف"
+                title={tr('الصف', 'Grade')}
               >
                 {Array.from(new Set([...gradesList, grade])).map((g) => (
-                  <option key={g} value={g}>{g}</option>
+                  <option key={g} value={g}>{translateGrade(g, lang)}</option>
                 ))}
               </select>
 
@@ -786,10 +804,10 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
                   setTerm(e.target.value);
                 }}
                 className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold"
-                title="الفصل"
+                title={tr('الفصل', 'Term')}
               >
                 {ACADEMIC_TERMS.map((t) => (
-                  <option key={t} value={t}>{t}</option>
+                  <option key={t} value={t}>{translateTerm(t, lang)}</option>
                 ))}
               </select>
 
@@ -800,10 +818,10 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
                   setTrack(e.target.value);
                 }}
                 className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold"
-                title="المسار"
+                title={tr('المسار', 'Track')}
               >
-                {Array.from(new Set([...tracksList, track])).map((tr) => (
-                  <option key={tr} value={tr}>{tr}</option>
+                {Array.from(new Set([...tracksList, track])).map((trVal) => (
+                  <option key={trVal} value={trVal}>{translateTrack(trVal, lang)}</option>
                 ))}
               </select>
 
@@ -814,7 +832,7 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
                   setAcademicYear(e.target.value);
                 }}
                 className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono font-semibold"
-                title="السنة الدراسية"
+                title={tr('السنة الدراسية', 'Academic Year')}
               >
                 {Array.from(new Set([...yearsList, academicYear])).map((y) => (
                   <option key={y} value={y}>{y}</option>
@@ -828,10 +846,10 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
                   setSubject(e.target.value);
                 }}
                 className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold"
-                title="المادة"
+                title={tr('المادة', 'Subject')}
               >
                 {Array.from(new Set([...subjectsList, subject])).map((sb) => (
-                  <option key={sb} value={sb}>{sb}</option>
+                  <option key={sb} value={sb}>{translateSubject(sb, lang)}</option>
                 ))}
               </select>
 
@@ -843,7 +861,7 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
                   setDate(e.target.value);
                 }}
                 className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono"
-                title="تاريخ التقييم"
+                title={tr('تاريخ التقييم', 'Evaluation Date')}
               />
             </div>
           </div>
@@ -851,48 +869,48 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
           {/* Improvement tip + Quick Bulk Presets */}
           <div className="space-y-2">
             <div className="text-[11px] font-medium text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-1.5 rounded-xl border border-amber-200 dark:border-amber-800/50">
-              💡 يمكنك إضافة محاولة تحسين لأي سؤال بالضغط على «+ تحسين» بجانب السؤال، كما يمكنك إضافة محاولة تحسين كاملة للطالب من جدول الهياكل تماماً مثل الامتحانات العادية.
+              💡 {tr('يمكنك إضافة محاولة تحسين لأي سؤال بالضغط على «+ تحسين» بجانب السؤال، كما يمكنك إضافة محاولة تحسين كاملة للطالب من جدول الهياكل تماماً مثل الامتحانات العادية.', 'You can add a retake attempt for any question via "+ Retake", or add a full student improvement attempt from the structures table.')}
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
-              <span className="font-bold text-slate-600 dark:text-slate-300">إجراءات سريعة للأسئلة:</span>
+              <span className="font-bold text-slate-600 dark:text-slate-300">{tr('إجراءات سريعة للأسئلة:', 'Quick Question Actions:')}</span>
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => setAllQuestionsState(true, 100)}
                   className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold text-[11px] cursor-pointer hover:bg-emerald-500"
                 >
-                  حل الكل (100%)
+                  {tr('حل الكل (100%)', 'Solve All (100%)')}
                 </button>
                 <button
                   type="button"
                   onClick={() => applyAccuracyToSolved(100)}
                   className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold text-[11px] cursor-pointer"
                 >
-                  تعيين 100% للمحلول
+                  {tr('تعيين 100% للمحلول', 'Set 100% for Solved')}
                 </button>
                 <button
                   type="button"
                   onClick={() => applyAccuracyToSolved(50)}
                   className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold text-[11px] cursor-pointer"
                 >
-                  تعيين 50% للمحلول
+                  {tr('تعيين 50% للمحلول', 'Set 50% for Solved')}
                 </button>
                 <button
                   type="button"
                   onClick={handleImproveIncompleteQuestions}
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700 font-bold text-[11px] cursor-pointer hover:bg-amber-200/70"
-                  title="فتح محاولة تحسين لكل الأسئلة الأقل من 100% أو غير المحلولة"
+                  title={tr('فتح محاولة تحسين لكل الأسئلة الأقل من 100% أو غير المحلولة', 'Open retake attempt for all questions below 100% or unsolved')}
                 >
                   <Sparkles className="w-3 h-3" />
-                  <span>تحسين الأسئلة الناقصة (&lt;100%)</span>
+                  <span>{tr('تحسين الأسئلة الناقصة (<100%)', 'Improve Incomplete (<100%)')}</span>
                 </button>
                 <button
                   type="button"
                   onClick={requestClearAllQuestions}
                   className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] cursor-pointer"
                 >
-                  تفريغ الكل
+                  {tr('تفريغ الكل', 'Clear All')}
                 </button>
               </div>
             </div>
@@ -900,14 +918,14 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
 
           {/* Per-Question List */}
           <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-            <table className="w-full text-right text-xs">
+            <table className="w-full text-start text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
                 <tr>
-                  <th className="py-2.5 px-3 min-w-[140px]">السؤال والمحاولة</th>
-                  <th className="py-2.5 px-3">حالة الحل</th>
-                  <th className="py-2.5 px-3">نسبة صحة السؤال (0% - 100%)</th>
-                  <th className="py-2.5 px-3 hidden md:table-cell">تحديد سريع</th>
-                  <th className="py-2.5 px-3 text-center w-28">التحسين</th>
+                  <th className="py-2.5 px-3 min-w-[140px]">{tr('السؤال والمحاولة', 'Question & Attempt')}</th>
+                  <th className="py-2.5 px-3">{tr('حالة الحل', 'Solved Status')}</th>
+                  <th className="py-2.5 px-3">{tr('نسبة صحة السؤال (0% - 100%)', 'Accuracy (0% - 100%)')}</th>
+                  <th className="py-2.5 px-3 hidden md:table-cell">{tr('تحديد سريع', 'Quick Pick')}</th>
+                  <th className="py-2.5 px-3 text-center w-28">{tr('التحسين', 'Retake')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
@@ -927,7 +945,7 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
                       key={qs.questionNumber}
                       className={`transition-colors ${
                         isQImp || (isNewImprovementAttempt && diff !== null && diff !== 0)
-                          ? 'bg-amber-50/40 dark:bg-amber-950/20 border-r-4 border-r-amber-500'
+                          ? 'bg-amber-50/40 dark:bg-amber-950/20 border-s-4 border-s-amber-500'
                           : qs.solved
                           ? 'bg-emerald-50/20 dark:bg-emerald-950/10'
                           : 'bg-white dark:bg-slate-900'
@@ -937,7 +955,7 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
                         <div className="flex flex-col gap-0.5">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-mono font-black text-slate-900 dark:text-white">
-                              س{qs.questionNumber}
+                              {tr('س', 'Q')}{qs.questionNumber}
                             </span>
                             {qMeta?.title && (
                               <span className="text-[11px] text-slate-600 dark:text-slate-300 truncate max-w-[140px]">
@@ -950,17 +968,17 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
                             {isQImp ? (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
                                 <Sparkles className="w-2.5 h-2.5 text-amber-600" />
-                                تحسين (محاولة {qs.attemptNumber || 2})
+                                {tr(`تحسين (محاولة ${qs.attemptNumber || 2})`, `Retake (Attempt ${qs.attemptNumber || 2})`)}
                               </span>
                             ) : (
                               <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                                المحاولة الأساسية
+                                {tr('المحاولة الأساسية', 'Initial Attempt')}
                               </span>
                             )}
 
                             {prevAcc !== undefined && (
                               <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                                (السابقة: {prevAcc}%)
+                                ({tr('السابقة:', 'Prev:')} {prevAcc}%)
                               </span>
                             )}
 
@@ -983,7 +1001,7 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
                             <div className="flex items-center gap-1 flex-wrap text-[9px] font-mono text-slate-400">
                               {qs.attempts.map((att, idx) => (
                                 <span key={idx}>
-                                  {idx > 0 ? ' ← ' : ''}م{att.attemptNumber}: {att.accuracyPercentage}%
+                                  {idx > 0 ? ' ← ' : ''}{tr('م', 'A')}{att.attemptNumber}: {att.accuracyPercentage}%
                                 </span>
                               ))}
                             </div>
@@ -1004,12 +1022,12 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
                           {qs.solved ? (
                             <>
                               <CheckSquare className="w-3.5 h-3.5" />
-                              <span>تم الحل</span>
+                              <span>{tr('تم الحل', 'Solved')}</span>
                             </>
                           ) : (
                             <>
                               <Square className="w-3.5 h-3.5" />
-                              <span>لم يُحل</span>
+                              <span>{tr('لم يُحل', 'Unsolved')}</span>
                             </>
                           )}
                         </button>
@@ -1069,17 +1087,16 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
                         </div>
                       </td>
 
-                      {/* Per-Question Improvement Action (exact ScoreEntryModal style) */}
                       <td className="py-2 px-3 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button
                             type="button"
                             onClick={() => handleAddQuestionImprovement(qs.questionNumber)}
                             className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-300/80 dark:border-amber-700/80 rounded-lg transition-all cursor-pointer shadow-2xs"
-                            title="إضافة محاولة تحسين جديدة لهذا السؤال"
+                            title={tr('إضافة محاولة تحسين جديدة لهذا السؤال', 'Add retake attempt for this question')}
                           >
                             <Plus className="w-3 h-3" />
-                            تحسين
+                            {tr('تحسين', 'Retake')}
                           </button>
 
                           {isQImp && (
@@ -1087,7 +1104,7 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
                               type="button"
                               onClick={() => requestRemoveQuestionImprovement(qs)}
                               className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded cursor-pointer transition-colors"
-                              title="حذف محاولة التحسين الأخيرة لهذا السؤال"
+                              title={tr('حذف محاولة التحسين الأخيرة لهذا السؤال', 'Remove latest retake attempt')}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -1103,7 +1120,7 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
 
           <div>
             <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-              ملاحظات على أداء الطالب في هذا الهيكل
+              {tr('ملاحظات على أداء الطالب في هذا الهيكل', 'Notes on Student Performance in This Structure')}
             </label>
             <input
               type="text"
@@ -1112,7 +1129,7 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
                 markDirty();
                 setNotes(e.target.value);
               }}
-              placeholder="مثال: متقن لأسئلة الرسم البياني وتم تحسين السؤال 4 بنجاح..."
+              placeholder={tr('مثال: متقن لأسئلة الرسم البياني وتم تحسين السؤال 4 بنجاح...', 'e.g. Strong on graphing questions, improved Q4...')}
               className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
             />
           </div>
@@ -1123,7 +1140,7 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
               onClick={requestSafeClose}
               className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
             >
-              إلغاء
+              {tr('إلغاء', 'Cancel')}
             </button>
             <button
               type="submit"
@@ -1133,10 +1150,10 @@ export const StudentStructureScoringModal: React.FC<StudentStructureScoringModal
               <Save className="w-4 h-4" />
               <span>
                 {saving
-                  ? 'جاري الحفظ...'
+                  ? tr('جاري الحفظ...', 'Saving...')
                   : isNewImprovementAttempt
-                  ? `حفظ محاولة التحسين (${effectiveAttemptNumber})`
-                  : 'حفظ رصد الهيكل للطالب'}
+                  ? tr(`حفظ محاولة التحسين (${effectiveAttemptNumber})`, `Save Retake Attempt (${effectiveAttemptNumber})`)
+                  : tr('حفظ رصد الهيكل للطالب', 'Save Student Structure Record')}
               </span>
             </button>
           </div>

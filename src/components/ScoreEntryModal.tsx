@@ -31,6 +31,13 @@ import {
 import { AttachmentModal } from './AttachmentModal';
 import { AttachmentThumbnail } from './AttachmentThumbnail';
 import { ConfirmModal } from './ConfirmModal';
+import {
+  useLanguage,
+  translateGrade,
+  translateTerm,
+  translateTrack,
+  translateSubject,
+} from '../utils/i18n';
 
 interface ScoreEntryModalProps {
   isOpen: boolean;
@@ -106,6 +113,18 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
     updatedAt: string;
   } | null>(null);
 
+  const { lang, dir, tr } = useLanguage();
+
+  const translateRating = (label: string) => {
+    if (lang === 'ar') return label;
+    if (label === 'ممتاز') return 'Excellent';
+    if (label === 'جيد جداً') return 'Very Good';
+    if (label === 'جيد') return 'Good';
+    if (label === 'مقبول') return 'Acceptable';
+    if (label === 'يحتاج إلى تحسين') return 'Needs Improvement';
+    return label;
+  };
+
   // ConfirmModal state for destructive deletes, bulk overwrite & unsaved exit
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean;
@@ -119,8 +138,8 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
     isOpen: false,
     title: '',
     message: '',
-    confirmText: 'تأكيد',
-    cancelText: 'تراجع',
+    confirmText: tr('تأكيد', 'Confirm'),
+    cancelText: tr('تراجع', 'Cancel'),
     isDestructive: true,
     onConfirm: () => {},
   });
@@ -283,7 +302,10 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
      * ترتيب صفوف الجدول أبجدياً حسب اسم الطالب، ثم حسب رقم المحاولة
      */
     initialRows.sort((a, b) => {
-      const nameCompare = a.studentName.localeCompare(b.studentName, 'ar');
+      const nameCompare = a.studentName.localeCompare(
+        b.studentName,
+        lang === 'en' ? 'en' : 'ar'
+      );
       if (nameCompare !== 0) return nameCompare;
       return a.attemptNumber - b.attemptNumber;
     });
@@ -339,10 +361,13 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
     }
     setConfirmState({
       isOpen: true,
-      title: 'تحذير: تعديلات غير محفوظة',
-      message: `يوجد (${modifiedRowsCount}) درجة/تعديل لم يتم حفظه بعد في امتحان "${exam?.title || ''}". في حال الخروج الآن سيتم تجاهل التعديلات غير المحفوظة. هل تريد الخروج دون حفظ؟`,
-      confirmText: 'تجاهل التعديلات والخروج',
-      cancelText: 'البقاء وحفظ الدرجات',
+      title: tr('تحذير: تعديلات غير محفوظة', 'Warning: Unsaved Changes'),
+      message: tr(
+        `يوجد (${modifiedRowsCount}) درجة/تعديل لم يتم حفظه بعد في امتحان "${exam?.title || ''}". في حال الخروج الآن سيتم تجاهل التعديلات غير المحفوظة. هل تريد الخروج دون حفظ؟`,
+        `There are (${modifiedRowsCount}) unsaved score/edit(s) in "${exam?.title || ''}". Closing now will discard unsaved changes. Exit without saving?`
+      ),
+      confirmText: tr('تجاهل التعديلات والخروج', 'Discard & Close'),
+      cancelText: tr('البقاء وحفظ الدرجات', 'Stay & Save Scores'),
       isDestructive: true,
       onConfirm: () => {
         if (exam) clearScoreEntryDraft(exam.id);
@@ -360,10 +385,13 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
     }
     setConfirmState({
       isOpen: true,
-      title: 'تحذير: الانتقال لامتحان آخر قبل الحفظ',
-      message: `لديك (${modifiedRowsCount}) تعديل غير محفوظ في امتحان "${exam.title}". الانتقال إلى "${chosenExam.title}" سيتجاهل التعديلات الحالية غير المحفوظة. هل تريد المتابعة؟`,
-      confirmText: 'الانتقال بدون حفظ',
-      cancelText: 'البقاء في الامتحان الحالي',
+      title: tr('تحذير: الانتقال لامتحان آخر قبل الحفظ', 'Warning: Switch Exam Before Saving'),
+      message: tr(
+        `لديك (${modifiedRowsCount}) تعديل غير محفوظ في امتحان "${exam.title}". الانتقال إلى "${chosenExam.title}" سيتجاهل التعديلات الحالية غير المحفوظة. هل تريد المتابعة؟`,
+        `You have (${modifiedRowsCount}) unsaved edit(s) in "${exam.title}". Switching to "${chosenExam.title}" will discard current unsaved changes. Continue?`
+      ),
+      confirmText: tr('الانتقال بدون حفظ', 'Switch Without Saving'),
+      cancelText: tr('البقاء في الامتحان الحالي', 'Stay on Current Exam'),
       isDestructive: true,
       onConfirm: () => {
         clearScoreEntryDraft(exam.id);
@@ -487,12 +515,22 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   const requestRemoveAttempt = (row: ScoreRowState) => {
     setConfirmState({
       isOpen: true,
-      title: row.resultId ? 'حذف محاولة تحسين محفوظة' : 'إلغاء صف محاولة التحسين',
+      title: row.resultId
+        ? tr('حذف محاولة تحسين محفوظة', 'Delete Saved Improvement Attempt')
+        : tr('إلغاء صف محاولة التحسين', 'Remove Improvement Attempt Row'),
       message: row.resultId
-        ? `هل أنت متأكد من حذف محاولة التحسين رقم (${row.attemptNumber}) للطالب "${row.studentName}" (${row.score || '-'}/${exam.totalScore}) نهائياً من قاعدة البيانات؟`
-        : `هل تريد إلغاء صف محاولة التحسين رقم (${row.attemptNumber}) للطالب "${row.studentName}"؟`,
-      confirmText: row.resultId ? 'تأكيد الحذف النهائي' : 'إزالة الصف',
-      cancelText: 'تراجع',
+        ? tr(
+            `هل أنت متأكد من حذف محاولة التحسين رقم (${row.attemptNumber}) للطالب "${row.studentName}" (${row.score || '-'}/${exam.totalScore}) نهائياً من قاعدة البيانات؟`,
+            `Are you sure you want to permanently delete improvement attempt #${row.attemptNumber} for "${row.studentName}" (${row.score || '-'}/${exam.totalScore}) from the database?`
+          )
+        : tr(
+            `هل تريد إلغاء صف محاولة التحسين رقم (${row.attemptNumber}) للطالب "${row.studentName}"؟`,
+            `Remove improvement attempt row #${row.attemptNumber} for "${row.studentName}"?`
+          ),
+      confirmText: row.resultId
+        ? tr('تأكيد الحذف النهائي', 'Confirm Permanent Delete')
+        : tr('إزالة الصف', 'Remove Row'),
+      cancelText: tr('تراجع', 'Cancel'),
       isDestructive: true,
       onConfirm: async () => {
         await executeRemoveAttempt(row.rowKey, row.resultId);
@@ -567,10 +605,13 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   const handleSetFullScoreForAll = () => {
     setConfirmState({
       isOpen: true,
-      title: 'تأكيد رصد الدرجة النهائية للجميع',
-      message: `هل أنت متأكد من رصد الدرجة النهائية (${exam.totalScore}) لجميع الطلاب في القائمة (${rows.length} صف)؟ سيتم تعديل أي درجات مسجلة سابقاً قبل الضغط على حفظ.`,
-      confirmText: `تعيين ${exam.totalScore} للكل`,
-      cancelText: 'إلغاء',
+      title: tr('تأكيد رصد الدرجة النهائية للجميع', 'Confirm Full Score for All'),
+      message: tr(
+        `هل أنت متأكد من رصد الدرجة النهائية (${exam.totalScore}) لجميع الطلاب في القائمة (${rows.length} صف)؟ سيتم تعديل أي درجات مسجلة سابقاً قبل الضغط على حفظ.`,
+        `Are you sure you want to set the full score (${exam.totalScore}) for all students in the list (${rows.length} rows)? Previously entered scores will be updated before saving.`
+      ),
+      confirmText: tr(`تعيين ${exam.totalScore} للكل`, `Set ${exam.totalScore} for All`),
+      cancelText: tr('إلغاء', 'Cancel'),
       isDestructive: false,
       onConfirm: () => {
         setRows((previousRows) =>
@@ -735,7 +776,12 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   const handleApplyScoreToSelected = () => {
     if (selectedRowKeys.size === 0) return;
     if (bulkScoreValue.trim() === '' || isNaN(Number(bulkScoreValue))) {
-      setErrorMessage('يرجى إدخال الدرجة الموحدة أولاً لتطبيقها على الطلاب المحددين.');
+      setErrorMessage(
+        tr(
+          'يرجى إدخال الدرجة الموحدة أولاً لتطبيقها على الطلاب المحددين.',
+          'Please enter a unified score first to apply it to selected students.'
+        )
+      );
       return;
     }
     const clampedVal = String(
@@ -778,7 +824,10 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
 
     if (toSave.length === 0) {
       setErrorMessage(
-        'يرجى إدخال درجة موحدة في الشريط العلوي أو في خانات الطلاب المحددين قبل الحفظ.'
+        tr(
+          'يرجى إدخال درجة موحدة في الشريط العلوي أو في خانات الطلاب المحددين قبل الحفظ.',
+          'Please enter a unified score in the bar above or in the selected student rows before saving.'
+        )
       );
       return;
     }
@@ -805,7 +854,12 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
       setTimeout(() => setSaveSuccess(false), 3500);
     } catch (error) {
       console.error('Error saving selected rows:', error);
-      setErrorMessage('حدث خطأ أثناء حفظ درجات الطلاب المحددين.');
+      setErrorMessage(
+        tr(
+          'حدث خطأ أثناء حفظ درجات الطلاب المحددين.',
+          'An error occurred while saving selected student scores.'
+        )
+      );
     } finally {
       setLoading(false);
     }
@@ -951,7 +1005,12 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
       }
 
       if (toSave.length === 0) {
-        setErrorMessage('لم يتم إدخال أي درجات للحفظ. يرجى إدخال درجة واحدة على الأقل.');
+        setErrorMessage(
+          tr(
+            'لم يتم إدخال أي درجات للحفظ. يرجى إدخال درجة واحدة على الأقل.',
+            'No scores entered to save. Please enter at least one score.'
+          )
+        );
         return;
       }
 
@@ -987,7 +1046,12 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
       }, 3500);
     } catch (error) {
       console.error('Error saving batch scores in modal:', error);
-      setErrorMessage('حدث خطأ أثناء حفظ النتائج. يرجى المحاولة مرة أخرى.');
+      setErrorMessage(
+        tr(
+          'حدث خطأ أثناء حفظ النتائج. يرجى المحاولة مرة أخرى.',
+          'An error occurred while saving results. Please try again.'
+        )
+      );
     } finally {
       setLoading(false);
     }
@@ -1077,8 +1141,9 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
       >
       <div
         id="score-entry-modal"
+        dir={dir}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-5xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-right flex flex-col max-h-[92dvh] sm:max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-5xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-start flex flex-col max-h-[92dvh] sm:max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
       >
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 gap-3">
@@ -1090,19 +1155,21 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-extrabold text-slate-900 dark:text-white text-lg">
-                  رصد درجات الامتحان: {exam.title}
+                  {tr('رصد درجات الامتحان:', 'Exam Score Entry:')} {exam.title}
                 </h3>
 
                 {hasUnsavedChanges && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
                     <History className="w-3 h-3" />
-                    مسودة غير محفوظة ({modifiedRowsCount})
+                    {tr(`مسودة غير محفوظة (${modifiedRowsCount})`, `Unsaved Draft (${modifiedRowsCount})`)}
                   </span>
                 )}
 
                 {exams && exams.length > 1 && onSelectExam && (
                   <div className="flex items-center gap-1.5 bg-indigo-50/80 dark:bg-indigo-950/60 px-2 py-1 rounded-xl border border-indigo-200 dark:border-indigo-800/80 max-w-full">
-                    <span className="text-[11px] text-indigo-700 dark:text-indigo-300 font-bold shrink-0">تغيير الامتحان:</span>
+                    <span className="text-[11px] text-indigo-700 dark:text-indigo-300 font-bold shrink-0">
+                      {tr('تغيير الامتحان:', 'Switch Exam:')}
+                    </span>
                     <select
                       id="score-modal-exam-dropdown"
                       value={exam.id}
@@ -1114,7 +1181,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                     >
                       {exams.map((ex) => (
                         <option key={ex.id} value={ex.id}>
-                          {ex.title} ({ex.grade || 'عام'} - {ex.subject})
+                          {ex.title} ({ex.grade ? translateGrade(ex.grade, lang) : tr('عام', 'General')} - {translateSubject(ex.subject, lang)})
                         </option>
                       ))}
                     </select>
@@ -1122,7 +1189,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                 )}
 
                 <span className="px-2.5 py-0.5 text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg">
-                  {exam.grade}
+                  {translateGrade(exam.grade, lang)}
                 </span>
 
                 {exam.track && (
@@ -1131,31 +1198,31 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                       ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
                       : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                   }`}>
-                    مسار {exam.track}
+                    {tr(`مسار ${exam.track}`, `${translateTrack(exam.track, lang)} Track`)}
                   </span>
                 )}
 
                 {exam.term && (
                   <span className="px-2.5 py-0.5 text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg border border-slate-200 dark:border-slate-700">
-                    {exam.term}
+                    {translateTerm(exam.term, lang)}
                   </span>
                 )}
 
                 <span className="px-2.5 py-0.5 text-xs font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 rounded-lg border border-amber-500/20">
-                  {exam.subject}
+                  {translateSubject(exam.subject, lang)}
                 </span>
               </div>
 
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-2">
                 <span>
-                  الدرجة الكلية:{' '}
+                  {tr('الدرجة الكلية:', 'Total Score:')}{' '}
                   <strong className="text-slate-800 dark:text-slate-200 font-mono">
                     {exam.totalScore}
                   </strong>
                 </span>
                 <span>|</span>
                 <span>
-                  درجة النجاح:{' '}
+                  {tr('درجة النجاح:', 'Pass Score:')}{' '}
                   <strong className="text-emerald-600 dark:text-emerald-400 font-mono">
                     {exam.passScore}
                   </strong>
@@ -1163,11 +1230,14 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                 {exam.academicYear && (
                   <>
                     <span>|</span>
-                    <span>السنة: <strong className="text-slate-700 dark:text-slate-300 font-mono">{exam.academicYear}</strong></span>
+                    <span>
+                      {tr('السنة:', 'Year:')}{' '}
+                      <strong className="text-slate-700 dark:text-slate-300 font-mono">{exam.academicYear}</strong>
+                    </span>
                   </>
                 )}
                 <span>|</span>
-                <span>التاريخ: {exam.date}</span>
+                <span>{tr('التاريخ:', 'Date:')} {exam.date}</span>
               </p>
             </div>
           </div>
@@ -1176,19 +1246,19 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
             <button
               onClick={handleExportExcel}
               className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 rounded-xl transition-all cursor-pointer whitespace-nowrap"
-              title="تصدير نتائج هذا الامتحان (الكل أو المحددين) إلى ملف Excel"
+              title={tr('تصدير نتائج هذا الامتحان (الكل أو المحددين) إلى ملف Excel', 'Export this exam results (all or selected) to Excel')}
             >
               <FileSpreadsheet className="w-4 h-4" />
               {selectedRowKeys.size > 0
-                ? `تصدير المحددين Excel (${selectedRowKeys.size})`
-                : 'تصدير Excel'}
+                ? tr(`تصدير المحددين Excel (${selectedRowKeys.size})`, `Export Selected Excel (${selectedRowKeys.size})`)
+                : tr('تصدير Excel', 'Export Excel')}
             </button>
 
             <button
               type="button"
               onClick={requestSafeClose}
               className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-              title="إغلاق"
+              title={tr('إغلاق', 'Close')}
             >
               <X className="w-5 h-5" />
             </button>
@@ -1199,27 +1269,27 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 my-3 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-700/60 text-xs">
           <div>
             <span className="text-slate-400 dark:text-slate-500 block">
-              إجمالي الصفوف والنتائج:
+              {tr('إجمالي الصفوف والنتائج:', 'Total Rows & Results:')}
             </span>
 
             <span className="font-bold text-slate-800 dark:text-slate-100 text-sm">
-              {rows.length} نتيجة
+              {rows.length} {tr('نتيجة', 'results')}
             </span>
           </div>
 
           <div>
             <span className="text-slate-400 dark:text-slate-500 block">
-              تم رصد درجاتهم:
+              {tr('تم رصد درجاتهم:', 'Scores Entered:')}
             </span>
 
             <span className="font-bold text-amber-600 dark:text-amber-400 text-sm">
-              {totalEntered} من {rows.length}
+              {totalEntered} {tr('من', 'of')} {rows.length}
             </span>
           </div>
 
           <div>
             <span className="text-slate-400 dark:text-slate-500 block">
-              نسبة النجاح الحالية:
+              {tr('نسبة النجاح الحالية:', 'Current Pass Rate:')}
             </span>
 
             <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
@@ -1238,18 +1308,18 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
               type="button"
               onClick={handleSetFullScoreForAll}
               className="px-2.5 py-1 text-[11px] font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg cursor-pointer transition-colors"
-              title="رصد الدرجة الكاملة للكل"
+              title={tr('رصد الدرجة الكاملة للكل', 'Set full score for all')}
             >
-              درجة كاملة للكل
+              {tr('درجة كاملة للكل', 'Full Score All')}
             </button>
 
             <button
               type="button"
               onClick={handleSetPassingScoreForEmpty}
               className="px-2.5 py-1 text-[11px] font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600 rounded-lg cursor-pointer transition-colors"
-              title="رصد درجة النجاح لمن لم يرصد بعد"
+              title={tr('رصد درجة النجاح لمن لم يرصد بعد', 'Set pass score for unrecorded')}
             >
-              نجاح للمتبقي
+              {tr('نجاح للمتبقي', 'Pass Empty')}
             </button>
           </div>
         </div>
@@ -1260,7 +1330,10 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
             <div className="flex items-center gap-2">
               <History className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span className="font-bold text-amber-900 dark:text-amber-100">
-                توجد مسودة تقدم محفوظة تلقائياً ({Object.keys(pendingDraft.rows).length} تعديل غير محفوظ)
+                {tr(
+                  `توجد مسودة تقدم محفوظة تلقائياً (${Object.keys(pendingDraft.rows).length} تعديل غير محفوظ)`,
+                  `Auto-saved progress draft found (${Object.keys(pendingDraft.rows).length} unsaved edits)`
+                )}
               </span>
             </div>
             <div className="flex items-center gap-1.5">
@@ -1270,14 +1343,14 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                 className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3" />
-                <span>استعادة التعديلات</span>
+                <span>{tr('استعادة التعديلات', 'Restore Edits')}</span>
               </button>
               <button
                 type="button"
                 onClick={handleDiscardDraft}
                 className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold cursor-pointer"
               >
-                تجاهل المسودة
+                {tr('تجاهل المسودة', 'Discard Draft')}
               </button>
             </div>
           </div>
@@ -1292,11 +1365,11 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
               onChange={(event) =>
                 setSearchTerm(event.target.value)
               }
-              placeholder="ابحث عن طالب بالاسم أو الرقم التعريفي..."
-              className="w-full pr-9 pl-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white text-right"
+              placeholder={tr('ابحث عن طالب بالاسم أو الرقم التعريفي...', 'Search student by name or ID...')}
+              className="w-full ps-9 pe-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white text-start"
             />
 
-            <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+            <Search className="w-4 h-4 text-slate-400 absolute start-3 top-2.5 pointer-events-none" />
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -1306,12 +1379,15 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
               className="px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer"
             >
               {showAllStudents
-                ? '← إظهار طلاب المادة والصف فقط'
-                : 'عرض جميع الطلاب المسجلين'}
+                ? tr('← إظهار طلاب المادة والصف فقط', 'Show matching subject & grade only')
+                : tr('عرض جميع الطلاب المسجلين', 'Show All Registered Students')}
             </button>
 
             <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800/50">
-              💡 يمكنك إضافة أكثر من درجة لنفس الامتحان إذا قام الطالب بالتحسين بالضغط على "+ تحسين"
+              {tr(
+                '💡 يمكنك إضافة أكثر من درجة لنفس الامتحان إذا قام الطالب بالتحسين بالضغط على "+ تحسين"',
+                '💡 You can add multiple scores for the same exam for improvement attempts via "+ Improve"'
+              )}
             </span>
           </div>
         </div>
@@ -1319,9 +1395,9 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
         {/* Multi-Selection Controls Toolbar */}
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5 p-2.5 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1 ml-1">
+            <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1 me-1">
               <Users className="w-3.5 h-3.5 text-amber-500" />
-              <span>تحديد الطلاب:</span>
+              <span>{tr('تحديد الطلاب:', 'Select Students:')}</span>
             </span>
 
             <button
@@ -1330,7 +1406,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
               disabled={filteredRows.length === 0}
               className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] hover:border-amber-500 cursor-pointer disabled:opacity-40"
             >
-              تحديد الكل ({filteredRows.length})
+              {tr(`تحديد الكل (${filteredRows.length})`, `Select All (${filteredRows.length})`)}
             </button>
 
             <button
@@ -1339,11 +1415,11 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
               disabled={filteredRows.length === 0}
               className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-[11px] hover:border-amber-500 cursor-pointer disabled:opacity-40"
             >
-              تحديد غير المرصودين
+              {tr('تحديد غير المرصودين', 'Select Unrecorded')}
             </button>
 
             <div className="inline-flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-1.5 py-0.5">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400">تحديد عدد:</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">{tr('تحديد عدد:', 'Select count:')}</span>
               <input
                 type="number"
                 min={1}
@@ -1358,7 +1434,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                 disabled={filteredRows.length === 0}
                 className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] cursor-pointer disabled:opacity-40"
               >
-                تحديد
+                {tr('تحديد', 'Select')}
               </button>
             </div>
 
@@ -1368,13 +1444,13 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                 onClick={handleClearSelection}
                 className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-bold text-[11px] cursor-pointer hover:bg-rose-100"
               >
-                إلغاء التحديد ({selectedRowKeys.size})
+                {tr(`إلغاء التحديد (${selectedRowKeys.size})`, `Clear (${selectedRowKeys.size})`)}
               </button>
             )}
           </div>
 
           <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 font-mono">
-            المحدد: <strong className="text-amber-600 dark:text-amber-400">{selectedRowKeys.size}</strong>
+            {tr('المحدد:', 'Selected:')} <strong className="text-amber-600 dark:text-amber-400">{selectedRowKeys.size}</strong>
           </span>
         </div>
 
@@ -1383,7 +1459,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
           <div className="mb-2.5 p-3 rounded-xl bg-amber-50/90 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 flex flex-wrap items-center justify-between gap-2.5 text-xs animate-in fade-in duration-150">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-black text-amber-900 dark:text-amber-200">
-                رصد درجة مرة واحدة للمحددين ({selectedRowKeys.size}):
+                {tr(`رصد درجة مرة واحدة للمحددين (${selectedRowKeys.size}):`, `Batch Score for Selected (${selectedRowKeys.size}):`)}
               </span>
 
               <div className="inline-flex items-center gap-1">
@@ -1394,7 +1470,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                   max={exam.totalScore}
                   value={bulkScoreValue}
                   onChange={(e) => setBulkScoreValue(e.target.value)}
-                  placeholder={`الدرجة / ${exam.totalScore}`}
+                  placeholder={tr(`الدرجة / ${exam.totalScore}`, `Score / ${exam.totalScore}`)}
                   className="w-28 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 font-mono font-bold text-center text-slate-900 dark:text-white"
                 />
                 <button
@@ -1402,14 +1478,14 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                   onClick={() => setBulkScoreValue(String(exam.totalScore))}
                   className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 cursor-pointer hover:bg-emerald-50"
                 >
-                  كاملة ({exam.totalScore})
+                  {tr(`كاملة (${exam.totalScore})`, `Full (${exam.totalScore})`)}
                 </button>
                 <button
                   type="button"
                   onClick={() => setBulkScoreValue(String(exam.passScore))}
                   className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-amber-700 dark:text-amber-300 cursor-pointer hover:bg-amber-50"
                 >
-                  نجاح ({exam.passScore})
+                  {tr(`نجاح (${exam.passScore})`, `Pass (${exam.passScore})`)}
                 </button>
               </div>
 
@@ -1417,7 +1493,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                 type="text"
                 value={bulkNotesValue}
                 onChange={(e) => setBulkNotesValue(e.target.value)}
-                placeholder="ملاحظة موحدة (اختياري)..."
+                placeholder={tr('ملاحظة موحدة (اختياري)...', 'Unified note (optional)...')}
                 className="w-44 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
               />
             </div>
@@ -1428,7 +1504,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                 onClick={handleApplyScoreToSelected}
                 className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-amber-400 dark:border-amber-700 text-amber-800 dark:text-amber-200 font-bold text-[11px] cursor-pointer hover:bg-amber-100/70"
               >
-                تعبئة للمحددين
+                {tr('تعبئة للمحددين', 'Fill Selected')}
               </button>
               <button
                 type="button"
@@ -1437,7 +1513,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                 className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] cursor-pointer shadow-xs disabled:opacity-50"
               >
                 <Save className="w-3.5 h-3.5" />
-                <span>رصد وحفظ المحددين فوراً ({selectedRowKeys.size})</span>
+                <span>{tr(`رصد وحفظ المحددين فوراً (${selectedRowKeys.size})`, `Save Selected Now (${selectedRowKeys.size})`)}</span>
               </button>
             </div>
           </div>
@@ -1457,7 +1533,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
 
         {/* Table */}
         <div className="flex-1 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-2xl">
-          <table className="w-full text-right text-xs">
+          <table className="w-full text-start text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700 sticky top-0 z-10">
               <tr>
                 <th className="py-2.5 px-2.5 w-10 text-center">
@@ -1467,7 +1543,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                       allFilteredSelected ? handleClearSelection() : handleSelectAllFiltered()
                     }
                     className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-amber-600 dark:text-amber-400 cursor-pointer inline-flex items-center justify-center"
-                    title={allFilteredSelected ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+                    title={allFilteredSelected ? tr('إلغاء تحديد الكل', 'Deselect All') : tr('تحديد الكل', 'Select All')}
                   >
                     {allFilteredSelected ? (
                       <CheckSquare className="w-4 h-4" />
@@ -1477,20 +1553,20 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                   </button>
                 </th>
                 <th className="py-2.5 px-2 w-9 text-center">#</th>
-                <th className="py-2.5 px-3">اسم الطالب والمحاولة</th>
-                <th className="py-2.5 px-3 w-24">الصف</th>
+                <th className="py-2.5 px-3">{tr('اسم الطالب والمحاولة', 'Student & Attempt')}</th>
+                <th className="py-2.5 px-3 w-24">{tr('الصف', 'Grade')}</th>
                 <th className="py-2.5 px-3 w-32 text-center">
-                  الدرجة{' '}
+                  {tr('الدرجة', 'Score')}{' '}
                   <span className="text-slate-400 font-normal">
                     / {exam.totalScore}
                   </span>
                 </th>
-                <th className="py-2.5 px-3 w-20 text-center">النسبة %</th>
-                <th className="py-2.5 px-3 w-24 text-center">التقدير</th>
-                <th className="py-2.5 px-3 w-20 text-center">الحالة</th>
-                <th className="py-2.5 px-3 min-w-[140px]">ملاحظات</th>
-                <th className="py-2.5 px-3 w-24 text-center">المرفق</th>
-                <th className="py-2.5 px-3 w-28 text-center">التحسين</th>
+                <th className="py-2.5 px-3 w-20 text-center">{tr('النسبة %', 'Pct %')}</th>
+                <th className="py-2.5 px-3 w-24 text-center">{tr('التقدير', 'Rating')}</th>
+                <th className="py-2.5 px-3 w-20 text-center">{tr('الحالة', 'Status')}</th>
+                <th className="py-2.5 px-3 min-w-[140px]">{tr('ملاحظات', 'Notes')}</th>
+                <th className="py-2.5 px-3 w-24 text-center">{tr('المرفق', 'Proof')}</th>
+                <th className="py-2.5 px-3 w-28 text-center">{tr('التحسين', 'Improve')}</th>
               </tr>
             </thead>
 
@@ -1501,8 +1577,9 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                     colSpan={11}
                     className="py-10 text-center text-slate-400 dark:text-slate-500"
                   >
-                    لا يوجد طلاب مسجلون في مادة{' '}
-                    <strong>{exam.subject}</strong> ومطابقون للصف المحدد.
+                    {tr('لا يوجد طلاب مسجلون في مادة', 'No students enrolled in')}{' '}
+                    <strong>{translateSubject(exam.subject, lang)}</strong>{' '}
+                    {tr('ومطابقون للصف المحدد.', 'matching the selected grade.')}
                   </td>
                 </tr>
               ) : (
@@ -1531,7 +1608,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                         isRowSelected
                           ? 'bg-amber-100/50 dark:bg-amber-900/25'
                           : isImprovement
-                          ? 'bg-amber-50/40 dark:bg-amber-950/20 border-r-4 border-r-amber-500'
+                          ? 'bg-amber-50/40 dark:bg-amber-950/20 border-s-4 border-s-amber-500'
                           : row.isModified
                           ? 'bg-amber-500/10 dark:bg-amber-950/20'
                           : ''
@@ -1545,7 +1622,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                             toggleSelectRow(row.rowKey);
                           }}
                           className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer inline-flex items-center justify-center"
-                          title={isRowSelected ? 'إلغاء تحديد الطالب' : 'تحديد الطالب'}
+                          title={isRowSelected ? tr('إلغاء تحديد الطالب', 'Deselect Student') : tr('تحديد الطالب', 'Select Student')}
                         >
                           {isRowSelected ? (
                             <CheckSquare className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -1575,17 +1652,17 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                             {isImprovement ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
                                 <Sparkles className="w-2.5 h-2.5 text-amber-600" />
-                                تحسين (محاولة {row.attemptNumber})
+                                {tr(`تحسين (محاولة ${row.attemptNumber})`, `Improvement (Attempt ${row.attemptNumber})`)}
                               </span>
                             ) : (
                               <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
-                                المحاولة الأساسية
+                                {tr('المحاولة الأساسية', 'Primary Attempt')}
                               </span>
                             )}
 
                             {row.previousScore !== undefined && (
                               <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                                (الدرجة السابقة: {row.previousScore})
+                                ({tr('الدرجة السابقة:', 'Prev:')} {row.previousScore})
                               </span>
                             )}
 
@@ -1606,7 +1683,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
 
                       {/* Grade */}
                       <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400 text-[11px]">
-                        {row.grade}
+                        {row.grade !== '-' ? translateGrade(row.grade, lang) : '-'}
                       </td>
 
                       {/* Score Input */}
@@ -1652,7 +1729,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                           <span
                             className={`inline-block px-2 py-0.5 rounded-md font-bold text-[11px] border ${rating.badgeBg}`}
                           >
-                            {rating.label}
+                            {translateRating(rating.label)}
                           </span>
                         ) : (
                           <span className="text-slate-300 dark:text-slate-600">
@@ -1674,12 +1751,12 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                             {isPassed ? (
                               <>
                                 <Check className="w-3.5 h-3.5" />
-                                ناجح
+                                {tr('ناجح', 'Passed')}
                               </>
                             ) : (
                               <>
                                 <AlertCircle className="w-3.5 h-3.5" />
-                                راسب
+                                {tr('راسب', 'Failed')}
                               </>
                             )}
                           </span>
@@ -1698,8 +1775,8 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                           onChange={(event) =>
                             handleNotesChange(row.rowKey, event.target.value)
                           }
-                          placeholder="ملاحظات فردية..."
-                          className="w-full text-xs py-1 px-2 bg-transparent border-b border-transparent focus:border-slate-300 dark:focus:border-slate-600 focus:bg-slate-50 dark:focus:bg-slate-800 rounded transition-all text-right text-slate-800 dark:text-slate-200"
+                          placeholder={tr('ملاحظات فردية...', 'Individual notes...')}
+                          className="w-full text-xs py-1 px-2 bg-transparent border-b border-transparent focus:border-slate-300 dark:focus:border-slate-600 focus:bg-slate-50 dark:focus:bg-slate-800 rounded transition-all text-start text-slate-800 dark:text-slate-200"
                         />
                       </td>
 
@@ -1711,17 +1788,17 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                               <AttachmentThumbnail
                                 attachment={row.attachment}
                                 size="sm"
-                                tooltipPrefix={`طالب: ${row.studentName}`}
+                                tooltipPrefix={`${tr('طالب:', 'Student:')} ${row.studentName}`}
                                 onClick={() => setAttachmentTargetRow(row)}
                               />
                               <button
                                 type="button"
                                 onClick={() => setAttachmentTargetRow(row)}
                                 className="text-[11px] font-extrabold text-emerald-800 dark:text-emerald-300 hover:underline cursor-pointer flex items-center gap-0.5"
-                                title="معاينة أو استبدال المرفق"
+                                title={tr('معاينة أو استبدال المرفق', 'Preview or replace attachment')}
                               >
                                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                                <span>معتمد</span>
+                                <span>{tr('معتمد', 'Verified')}</span>
                               </button>
                             </div>
                           ) : (
@@ -1729,10 +1806,10 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                               type="button"
                               onClick={() => setAttachmentTargetRow(row)}
                               className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-300/80 dark:border-amber-700/80 rounded-xl transition-all cursor-pointer shadow-2xs group"
-                              title="إرفاق ورقة الإجابة أو صورة إثبات المصداقية"
+                              title={tr('إرفاق ورقة الإجابة أو صورة إثبات المصداقية', 'Attach answer sheet or proof image')}
                             >
                               <Paperclip className="w-3.5 h-3.5 group-hover:rotate-12 transition-transform text-amber-600 dark:text-amber-400" />
-                              <span>إرفاق ورقة</span>
+                              <span>{tr('إرفاق ورقة', 'Attach')}</span>
                             </button>
                           )}
                         </div>
@@ -1745,10 +1822,10 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                             type="button"
                             onClick={() => handleAddImprovementAttempt(row.studentDocId)}
                             className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-300/80 dark:border-amber-700/80 rounded-lg transition-all cursor-pointer shadow-2xs"
-                            title="إضافة درجة تحسين جديدة لنفس الطالب لنفس الامتحان"
+                            title={tr('إضافة درجة تحسين جديدة لنفس الطالب لنفس الامتحان', 'Add new improvement score for this student')}
                           >
                             <Plus className="w-3 h-3" />
-                            تحسين
+                            {tr('تحسين', 'Improve')}
                           </button>
 
                           {isImprovement && (
@@ -1756,7 +1833,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
                               type="button"
                               onClick={() => requestRemoveAttempt(row)}
                               className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded cursor-pointer transition-colors"
-                              title="حذف محاولة التحسين"
+                              title={tr('حذف محاولة التحسين', 'Delete Improvement Attempt')}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -1775,7 +1852,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-3 pt-4 mt-2 border-t border-slate-100 dark:border-slate-800 pb-safe shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              عدد النتائج الجاهزة للحفظ:{' '}
+              {tr('عدد النتائج الجاهزة للحفظ:', 'Results ready to save:')}{' '}
               <strong className="text-slate-900 dark:text-white font-mono">
                 {filledRows.length}
               </strong>
@@ -1784,7 +1861,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
             {saveSuccess && (
               <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 animate-in fade-in duration-300">
                 <CheckCircle2 className="w-4 h-4" />
-                تم حفظ الدرجات ومحاولات التحسين بنجاح!
+                {tr('تم حفظ الدرجات ومحاولات التحسين بنجاح!', 'Scores and improvement attempts saved successfully!')}
               </span>
             )}
           </div>
@@ -1795,7 +1872,7 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
               onClick={requestSafeClose}
               className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
             >
-              إغلاق
+              {tr('إغلاق', 'Close')}
             </button>
 
             <button
@@ -1808,8 +1885,8 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
               <Save className="w-4 h-4" />
 
               {loading
-                ? 'جاري الحفظ الآمن...'
-                : 'حفظ جميع الدرجات'}
+                ? tr('جاري الحفظ الآمن...', 'Saving safely...')
+                : tr('حفظ جميع الدرجات', 'Save All Scores')}
             </button>
           </div>
         </div>
@@ -1821,8 +1898,11 @@ export const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
       {attachmentTargetRow && exam && (
         <AttachmentModal
           isOpen={!!attachmentTargetRow}
-          title="إثبات ومرفق مصداقية النتيجة"
-          subtitle={`طالب: ${attachmentTargetRow.studentName} | امتحان: ${exam.title} | الدرجة: ${attachmentTargetRow.score || '-'}/${exam.totalScore}`}
+          title={tr('إثبات ومرفق مصداقية النتيجة', 'Result Proof & Attachment')}
+          subtitle={tr(
+            `طالب: ${attachmentTargetRow.studentName} | امتحان: ${exam.title} | الدرجة: ${attachmentTargetRow.score || '-'}/${exam.totalScore}`,
+            `Student: ${attachmentTargetRow.studentName} | Exam: ${exam.title} | Score: ${attachmentTargetRow.score || '-'}/${exam.totalScore}`
+          )}
           attachment={attachmentTargetRow.attachment || null}
           onSave={(attachment) => handleSaveAttachmentForRow(attachmentTargetRow, attachment)}
           onClose={() => setAttachmentTargetRow(null)}

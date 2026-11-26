@@ -33,6 +33,7 @@ import {
 } from '../utils/studentStatus';
 import { loadViewState, saveViewState, clearViewState } from '../utils/activityTracker';
 import { ConfirmModal } from './ConfirmModal';
+import { useLanguage, translateGrade, translateTerm, translateTrack, translateSubject } from '../utils/i18n';
 
 interface StudentFormModalProps {
   isOpen: boolean;
@@ -56,6 +57,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const { lang, dir, tr } = useLanguage();
   const activeStudent = student || studentToEdit;
 
   const [name, setName] = useState('');
@@ -431,12 +433,12 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
     e.preventDefault();
 
     if (!name.trim()) {
-      setError('يرجى إدخال اسم الطالب كاملاً');
+      setError(tr('يرجى إدخال اسم الطالب كاملاً', 'Please enter student full name'));
       return;
     }
 
     if (!studentId.trim()) {
-      setError('يرجى تحديد الرقم التعريفي للطالب (Student ID)');
+      setError(tr('يرجى تحديد الرقم التعريفي للطالب (Student ID)', 'Please enter Student ID'));
       return;
     }
 
@@ -449,7 +451,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
       const customSubject = customSubjectText.trim();
 
       if (!customSubject) {
-        setError('يرجى كتابة اسم المادة');
+        setError(tr('يرجى كتابة اسم المادة', 'Please enter subject name'));
         return;
       }
 
@@ -470,7 +472,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
     );
 
     if (finalSubjects.length === 0) {
-      setError('يرجى اختيار مادة واحدة على الأقل');
+      setError(tr('يرجى اختيار مادة واحدة على الأقل', 'Please select at least one subject'));
       return;
     }
 
@@ -484,7 +486,10 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
 
     if (duplicate) {
       setError(
-        `الرقم التعريفي ${studentId} مستخدم بالفعل لطالب آخر (${duplicate.name})`
+        tr(
+          `الرقم التعريفي ${studentId} مستخدم بالفعل لطالب آخر (${duplicate.name})`,
+          `Student ID ${studentId} is already assigned to ${duplicate.name}`
+        )
       );
       return;
     }
@@ -536,7 +541,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
       onClose();
     } catch (err: any) {
       setError(
-        err?.message || 'حدث خطأ أثناء حفظ بيانات الطالب'
+        err?.message || tr('حدث خطأ أثناء حفظ بيانات الطالب', 'Error saving student profile')
       );
     } finally {
       setLoading(false);
@@ -546,13 +551,14 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
   return (
     <>
       <div 
+        dir={dir}
         className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-hidden"
         onClick={handleRequestClose}
       >
         <div
           id="student-form-modal"
           onClick={(e) => e.stopPropagation()}
-          className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-2xl w-full flex flex-col max-h-[92dvh] sm:max-h-[90vh] shadow-2xl border border-slate-200 dark:border-slate-800 text-right overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-2xl w-full flex flex-col max-h-[92dvh] sm:max-h-[90vh] shadow-2xl border border-slate-200 dark:border-slate-800 text-start overflow-hidden animate-in fade-in zoom-in-95 duration-200"
         >
           {/* Header */}
           <div className="shrink-0 p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900">
@@ -569,18 +575,18 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                 <div className="flex items-center gap-2">
                   <h3 className="font-extrabold text-slate-900 dark:text-white text-base sm:text-lg">
                     {activeStudent
-                      ? 'تعديل بيانات الطالب'
-                      : 'إضافة طالب جديد'}
+                      ? tr('تعديل بيانات الطالب', 'Edit Student Profile')
+                      : tr('إضافة طالب جديد', 'Add New Student')}
                   </h3>
                   {isDirty && (
                     <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse">
-                      تعديلات غير محفوظة
+                      {tr('تعديلات غير محفوظة', 'Unsaved changes')}
                     </span>
                   )}
                 </div>
 
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  سجل بيانات الطالب (منهج الإمارات - صفوف 1 إلى 12)
+                  {tr('سجل بيانات الطالب (منهج الإمارات - صفوف 1 إلى 12)', 'Student Profile Record (UAE Curriculum Grades 1–12)')}
                 </p>
               </div>
             </div>
@@ -605,7 +611,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
         {restoredFromDraft && !activeStudent && (
           <div className="mx-4 sm:mx-6 mt-3 p-3 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl flex items-center justify-between gap-2 text-xs">
             <span className="font-bold text-indigo-800 dark:text-indigo-200">
-              تم استرجاع آخر بيانات كنت تدخلها تلقائياً — يمكنك المتابعة أو البدء من جديد
+              {tr('تم استرجاع آخر بيانات كنت تدخلها تلقائياً — يمكنك المتابعة أو البدء من جديد', 'Auto-restored your last draft — continue or start fresh')}
             </span>
             <button
               type="button"
@@ -613,7 +619,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
               className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700 rounded-lg font-bold hover:bg-indigo-100 cursor-pointer shrink-0"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>البدء من جديد</span>
+              <span>{tr('البدء من جديد', 'Start Fresh')}</span>
             </button>
           </div>
         )}
@@ -624,11 +630,19 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
             <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2.5">
               <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                 <GraduationCap className="w-4 h-4 text-amber-500" />
-                <span>حالة ملف الطالب في الكورس:</span>
+                <span>{tr('حالة ملف الطالب في الكورس:', 'Course Enrollment Status:')}</span>
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {ENROLLMENT_STATUS_LIST.map((stOpt) => {
                   const isSel = enrollmentStatus === stOpt.id;
+                  const statusLabel =
+                    stOpt.id === 'active'
+                      ? tr('ملف فعال', 'Active')
+                      : stOpt.id === 'completed'
+                        ? tr('منتهي الكورس', 'Completed')
+                        : stOpt.id === 'paused'
+                          ? tr('متوقف مؤقتاً', 'Paused')
+                          : tr('منقطع', 'Withdrawn');
                   return (
                     <button
                       key={stOpt.id}
@@ -640,7 +654,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                           : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
                       }`}
                     >
-                      <span>{stOpt.shortLabel}</span>
+                      <span>{lang === 'ar' ? stOpt.shortLabel : statusLabel}</span>
                       <span className={`w-2 h-2 rounded-full ${isSel ? 'bg-white' : stOpt.dotColor}`} />
                     </button>
                   );
@@ -650,8 +664,8 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                 type="text"
                 value={enrollmentStatusNote}
                 onChange={(e) => setEnrollmentStatusNote(e.target.value)}
-                placeholder="ملاحظة عن حالة الكورس (اختياري: مثال تاريخ انتهاء الكورس أو سبب الانقطاع)"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200"
+                placeholder={tr('ملاحظة عن حالة الكورس (اختياري: مثال تاريخ انتهاء الكورس أو سبب الانقطاع)', 'Enrollment status note (optional: e.g. course end date or reason)')}
+                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 text-start"
               />
             </div>
 
@@ -660,7 +674,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
             {/* Full Name */}
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                اسم الطالب بالكامل{' '}
+                {tr('اسم الطالب بالكامل', 'Student Full Name')}{' '}
                 <span className="text-rose-500">*</span>
               </label>
 
@@ -671,11 +685,11 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="مثال: زايد راشد المري"
-                  className="w-full pr-10 pl-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right font-medium"
+                  placeholder={tr('مثال: زايد راشد المري', 'e.g. Zayed Rashid Al Marri')}
+                  className="w-full ps-10 pe-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start font-medium"
                 />
 
-                <User className="w-4 h-4 text-slate-400 absolute right-3 top-3.5" />
+                <User className="w-4 h-4 text-slate-400 absolute start-3 top-3.5" />
               </div>
             </div>
 
@@ -683,7 +697,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  الرقم التعريفي (Student ID){' '}
+                  {tr('الرقم التعريفي (Student ID)', 'Student ID')}{' '}
                   <span className="text-rose-500">*</span>
                 </label>
 
@@ -691,9 +705,9 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setStudentId(generateNextId())}
-                    className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-semibold"
+                    className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-semibold cursor-pointer"
                   >
-                    توليد تلقائي
+                    {tr('توليد تلقائي', 'Auto Generate')}
                   </button>
                 )}
               </div>
@@ -706,17 +720,17 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                   value={studentId}
                   onChange={(e) => setStudentId(e.target.value)}
                   placeholder="STU-001"
-                  className="w-full pr-10 pl-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-mono focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right"
+                  className="w-full ps-10 pe-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-mono focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start"
                 />
 
-                <Hash className="w-4 h-4 text-slate-400 absolute right-3 top-3.5" />
+                <Hash className="w-4 h-4 text-slate-400 absolute start-3 top-3.5" />
               </div>
             </div>
 
             {/* Grade */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                الصف الدراسي (منهج الإمارات 1-12){' '}
+                {tr('الصف الدراسي (منهج الإمارات 1-12)', 'Grade (UAE Curriculum 1–12)')}{' '}
                 <span className="text-rose-500">*</span>
               </label>
 
@@ -725,16 +739,16 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                   id="student-grade-select"
                   value={grade}
                   onChange={(e) => setGrade(e.target.value)}
-                  className="w-full pr-10 pl-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer"
+                  className="w-full ps-10 pe-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start cursor-pointer"
                 >
                   {gradeList.map((g) => (
                     <option key={g} value={g}>
-                      {g}
+                      {translateGrade(g, lang)}
                     </option>
                   ))}
                 </select>
 
-                <BookOpen className="w-4 h-4 text-slate-400 absolute right-3 top-3.5 pointer-events-none" />
+                <BookOpen className="w-4 h-4 text-slate-400 absolute start-3 top-3.5 pointer-events-none" />
               </div>
             </div>
 
@@ -744,14 +758,14 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-amber-500" />
-                  <span>السنة الدراسية</span>
+                  <span>{tr('السنة الدراسية', 'Academic Year')}</span>
                 </label>
                 <div className="relative">
                   <select
                     id="student-academic-year-select"
                     value={academicYear}
                     onChange={(e) => setAcademicYear(e.target.value)}
-                    className="w-full pr-8 pl-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer"
+                    className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start cursor-pointer"
                   >
                     {ACADEMIC_YEARS.map((yr) => (
                       <option key={yr} value={yr}>
@@ -762,44 +776,44 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                 </div>
               </div>
 
-              {/* Term (أول - ثاني - ثالث) */}
+              {/* Term */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5 text-amber-500" />
-                  <span>الفصل الدراسي</span>
+                  <span>{tr('الفصل الدراسي', 'Term')}</span>
                 </label>
                 <div className="relative">
                   <select
                     id="student-term-select"
                     value={term}
                     onChange={(e) => setTerm(e.target.value)}
-                    className="w-full pr-8 pl-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer"
+                    className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start cursor-pointer"
                   >
                     {ACADEMIC_TERMS.map((t) => (
                       <option key={t} value={t}>
-                        {t}
+                        {translateTerm(t, lang)}
                       </option>
                     ))}
                   </select>
                 </div>
               </div>
 
-              {/* Track (عام - متقدم) */}
+              {/* Track */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                   <Compass className="w-3.5 h-3.5 text-amber-500" />
-                  <span>المسار</span>
+                  <span>{tr('المسار', 'Track')}</span>
                 </label>
                 <div className="relative">
                   <select
                     id="student-track-select"
                     value={track}
                     onChange={(e) => setTrack(e.target.value)}
-                    className="w-full pr-8 pl-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right cursor-pointer"
+                    className="w-full px-3 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start cursor-pointer"
                   >
-                    {ACADEMIC_TRACKS.map((tr) => (
-                      <option key={tr} value={tr}>
-                        {tr === 'عام' ? 'عام (General)' : tr === 'متقدم' ? 'متقدم (Advanced)' : tr}
+                    {ACADEMIC_TRACKS.map((trk) => (
+                      <option key={trk} value={trk}>
+                        {translateTrack(trk, lang)}
                       </option>
                     ))}
                   </select>
@@ -811,12 +825,12 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
             <div className="md:col-span-2">
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  المواد الدراسية{' '}
+                  {tr('المواد الدراسية', 'Subjects')}{' '}
                   <span className="text-rose-500">*</span>
                 </label>
 
                 <span className="text-[11px] text-slate-400">
-                  يمكن اختيار أكثر من مادة
+                  {tr('يمكن اختيار أكثر من مادة', 'Multiple subjects allowed')}
                 </span>
               </div>
 
@@ -833,13 +847,13 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                         onClick={() =>
                           toggleSubject(availableSubject)
                         }
-                        className={`flex items-center justify-between gap-2 w-full px-3 py-2.5 rounded-lg border text-sm font-medium transition-all text-right ${
+                        className={`flex items-center justify-between gap-2 w-full px-3 py-2.5 rounded-lg border text-sm font-medium transition-all text-start cursor-pointer ${
                           selected
                             ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-400 dark:border-amber-700 text-amber-700 dark:text-amber-300'
                             : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-amber-300 hover:bg-amber-50/50 dark:hover:bg-slate-800'
                         }`}
                       >
-                        <span>{availableSubject}</span>
+                        <span>{translateSubject(availableSubject, lang)}</span>
 
                         {selected ? (
                           <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white">
@@ -864,11 +878,11 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                         setCustomSubjectText('');
                       }
                     }}
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:text-amber-700 transition-colors"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:text-amber-700 transition-colors cursor-pointer"
                   >
                     {isCustomSubject
-                      ? '− إلغاء المادة اليدوية'
-                      : '+ إضافة مادة غير موجودة'}
+                      ? tr('− إلغاء المادة اليدوية', '− Cancel Custom Subject')
+                      : tr('+ إضافة مادة غير موجودة', '+ Add Custom Subject')}
                   </button>
 
                   {isCustomSubject && (
@@ -880,12 +894,12 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                         onChange={(e) =>
                           setCustomSubjectText(e.target.value)
                         }
-                        placeholder="اكتب اسم المادة يدوياً"
-                        className="w-full pr-10 pl-3 py-2.5 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right font-medium"
+                        placeholder={tr('اكتب اسم المادة يدوياً', 'Enter subject name')}
+                        className="w-full ps-10 pe-3 py-2.5 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start font-medium"
                         autoFocus
                       />
 
-                      <BookOpen className="w-4 h-4 text-amber-500 absolute right-3 top-3.5" />
+                      <BookOpen className="w-4 h-4 text-amber-500 absolute start-3 top-3.5" />
                     </div>
                   )}
                 </div>
@@ -899,7 +913,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 text-xs font-bold"
                       >
                         <Check className="w-3 h-3" />
-                        {selectedSubject}
+                        {translateSubject(selectedSubject, lang)}
                       </span>
                     ))}
                   </div>
@@ -910,7 +924,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
             {/* School */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                المدرسة (اختياري)
+                {tr('المدرسة (اختياري)', 'School (optional)')}
               </label>
 
               <div className="relative">
@@ -919,18 +933,18 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                   type="text"
                   value={school}
                   onChange={(e) => setSchool(e.target.value)}
-                  placeholder="اسم المدرسة في الإمارات"
-                  className="w-full pr-10 pl-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right"
+                  placeholder={tr('اسم المدرسة في الإمارات', 'School name in UAE')}
+                  className="w-full ps-10 pe-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start"
                 />
 
-                <School className="w-4 h-4 text-slate-400 absolute right-3 top-3.5" />
+                <School className="w-4 h-4 text-slate-400 absolute start-3 top-3.5" />
               </div>
             </div>
 
             {/* Student Phone */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                رقم هاتف الطالب (اختياري)
+                {tr('رقم هاتف الطالب (اختياري)', 'Student Phone (optional)')}
               </label>
 
               <div className="relative">
@@ -941,17 +955,17 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="+971 50 123 4567"
-                  className="w-full pr-10 pl-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right font-mono"
+                  className="w-full ps-10 pe-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start font-mono"
                 />
 
-                <Phone className="w-4 h-4 text-slate-400 absolute right-3 top-3.5" />
+                <Phone className="w-4 h-4 text-slate-400 absolute start-3 top-3.5" />
               </div>
             </div>
 
             {/* Parent Phone */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                رقم هاتف ولي الأمر (اختياري)
+                {tr('رقم هاتف ولي الأمر (اختياري)', 'Parent Phone (optional)')}
               </label>
 
               <div className="relative">
@@ -962,17 +976,17 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                   value={parentPhone}
                   onChange={(e) => setParentPhone(e.target.value)}
                   placeholder="+971 50 987 6543"
-                  className="w-full pr-10 pl-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right font-mono"
+                  className="w-full ps-10 pe-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start font-mono"
                 />
 
-                <Phone className="w-4 h-4 text-slate-400 absolute right-3 top-3.5" />
+                <Phone className="w-4 h-4 text-slate-400 absolute start-3 top-3.5" />
               </div>
             </div>
 
             {/* Email */}
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                البريد الإلكتروني (إن وجد)
+                {tr('البريد الإلكتروني (إن وجد)', 'Email (optional)')}
               </label>
 
               <div className="relative">
@@ -983,10 +997,10 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="student@example.com"
-                  className="w-full pr-10 pl-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right"
+                  className="w-full ps-10 pe-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start"
                 />
 
-                <Mail className="w-4 h-4 text-slate-400 absolute right-3 top-3.5" />
+                <Mail className="w-4 h-4 text-slate-400 absolute start-3 top-3.5" />
               </div>
             </div>
           </div>
@@ -994,7 +1008,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
           {/* Notes */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-              ملاحظات خاصة بالطالب (اختياري)
+              {tr('ملاحظات خاصة بالطالب (اختياري)', 'Student Notes (optional)')}
             </label>
 
             <textarea
@@ -1002,8 +1016,8 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="ملاحظات حول مستوى الطالب أو ظروف دراسية خاصة..."
-              className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-right"
+              placeholder={tr('ملاحظات حول مستوى الطالب أو ظروف دراسية خاصة...', 'Notes on student progress or special study circumstances...')}
+              className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:bg-white dark:focus:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-slate-900 dark:text-white transition-all text-start"
             />
           </div>
 
@@ -1016,7 +1030,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
               onClick={handleRequestClose}
               className="px-4 py-2.5 text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
             >
-              إلغاء
+              {tr('إلغاء', 'Cancel')}
             </button>
 
             <button
@@ -1028,10 +1042,10 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
               <Save className="w-4 h-4" />
 
               {loading
-                ? 'جاري الحفظ...'
+                ? tr('جاري الحفظ...', 'Saving...')
                 : activeStudent
-                  ? 'حفظ التعديلات'
-                  : 'إضافة الطالب'}
+                  ? tr('حفظ التعديلات', 'Save Changes')
+                  : tr('إضافة الطالب', 'Add Student')}
             </button>
           </div>
         </form>
@@ -1041,10 +1055,13 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
     {/* Confirmation dialog for unsaved changes */}
     <ConfirmModal
       isOpen={showConfirmClose}
-      title="تنبيه: تعديلات غير محفوظة"
-      message={`هناك بيانات أو تعديلات تم إدخالها لطالب "${name.trim() || 'بدون اسم'}" ولم يتم حفظها بعد. هل أنت متأكد من رغبتك في إغلاق النموذج وتجاهل التعديلات؟`}
-      confirmText="نعم، تجاهل التغييرات وأغلق"
-      cancelText="الرجوع ومتابعة الحفظ"
+      title={tr('تنبيه: تعديلات غير محفوظة', 'Unsaved Changes')}
+      message={tr(
+        `هناك بيانات أو تعديلات تم إدخالها لطالب "${name.trim() || 'بدون اسم'}" ولم يتم حفظها بعد. هل أنت متأكد من رغبتك في إغلاق النموذج وتجاهل التعديلات؟`,
+        `There are unsaved changes for "${name.trim() || 'Unnamed'}". Are you sure you want to close and discard them?`
+      )}
+      confirmText={tr('نعم، تجاهل التغييرات وأغلق', 'Discard & Close')}
+      cancelText={tr('الرجوع ومتابعة الحفظ', 'Keep Editing')}
       isDestructive={true}
       onConfirm={handleForceClose}
       onCancel={() => setShowConfirmClose(false)}

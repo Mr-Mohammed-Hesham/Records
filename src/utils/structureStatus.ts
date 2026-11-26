@@ -5,8 +5,11 @@ export type StructureStatusFilter = 'all' | StructureCompletionStatus;
 export interface StructureStatusMeta {
   id: StructureCompletionStatus;
   label: string;
+  labelEn: string;
   shortLabel: string;
+  shortLabelEn: string;
   description: string;
+  descriptionEn: string;
   badgeClass: string;
   dotColor: string;
   activeBtnClass: string;
@@ -22,8 +25,11 @@ export const STRUCTURE_STATUS_META: Record<StructureCompletionStatus, StructureS
   ongoing: {
     id: 'ongoing',
     label: 'مستمر وجاري الدراسة',
+    labelEn: 'Ongoing / Studying',
     shortLabel: 'مستمر / جاري الدراسة',
+    shortLabelEn: 'Ongoing',
     description: 'الهيكل ما زال قيد التدريس والمراجعة ولم تنتهِ دراسته بعد',
+    descriptionEn: 'Structure is still being taught and reviewed',
     badgeClass:
       'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
     dotColor: 'bg-emerald-500',
@@ -33,8 +39,11 @@ export const STRUCTURE_STATUS_META: Record<StructureCompletionStatus, StructureS
   studied_not_examined: {
     id: 'studied_not_examined',
     label: 'منتهي دراسته ولم يتم الامتحان بعد',
+    labelEn: 'Studied / Not Examined Yet',
     shortLabel: 'منتهي دراسة / لم يُمتحن',
+    shortLabelEn: 'Studied / Pending Exam',
     description: 'تم الانتهاء من دراسة وشرح الهيكل بالكامل وبانتظار عقد امتحان المادة',
+    descriptionEn: 'Study completed and awaiting the subject exam',
     badgeClass:
       'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800',
     dotColor: 'bg-amber-500',
@@ -44,8 +53,11 @@ export const STRUCTURE_STATUS_META: Record<StructureCompletionStatus, StructureS
   completed: {
     id: 'completed',
     label: 'انتهى وتم امتحان المادة',
+    labelEn: 'Completed & Examined',
     shortLabel: 'منتهي / تم الامتحان',
+    shortLabelEn: 'Completed & Examined',
     description: 'تم الانتهاء من تدريس الهيكل وأُجري امتحان المادة الخاص به',
+    descriptionEn: 'Structure teaching finished and the subject exam has been taken',
     badgeClass:
       'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
     dotColor: 'bg-indigo-500',
@@ -72,10 +84,19 @@ export function getNextStructureStatus(
 
 export function getStructureStatusLabel(
   structure?: Pick<ExamStructure, 'completionStatus' | 'completedAt'> | null,
-  short = false
+  short = false,
+  lang: 'ar' | 'en' = 'ar'
 ): string {
   const eff = getEffectiveStructureStatus(structure);
-  const base = short ? STRUCTURE_STATUS_META[eff].shortLabel : STRUCTURE_STATUS_META[eff].label;
+  const meta = STRUCTURE_STATUS_META[eff];
+  const base =
+    lang === 'en'
+      ? short
+        ? meta.shortLabelEn
+        : meta.labelEn
+      : short
+      ? meta.shortLabel
+      : meta.label;
   if (eff !== 'ongoing' && structure?.completedAt) {
     return `${base} (${structure.completedAt})`;
   }
@@ -83,8 +104,15 @@ export function getStructureStatusLabel(
 }
 
 export function getStructureCompletionFilterLabel(
-  filter: StructureStatusFilter | undefined
+  filter: StructureStatusFilter | undefined,
+  lang: 'ar' | 'en' = 'ar'
 ): string {
+  if (lang === 'en') {
+    if (filter === 'ongoing') return 'Ongoing / Studying structures only';
+    if (filter === 'studied_not_examined') return 'Studied / Pending Exam structures only';
+    if (filter === 'completed') return 'Completed & Examined structures only';
+    return 'All Structures (All Statuses)';
+  }
   if (filter === 'ongoing') return 'الهياكل المستمرة وجاري دراستها فقط';
   if (filter === 'studied_not_examined') {
     return 'الهياكل المنتهية دراستها ولم يُمتحن فيها بعد فقط';

@@ -30,6 +30,7 @@ import {
   Compass,
 } from 'lucide-react';
 import { ChartDisplayType, ExamResult } from '../types';
+import { useLanguage } from '../utils/i18n';
 
 export interface ChartDataPoint {
   id?: string;
@@ -90,11 +91,24 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
   height = 270,
   valueLabel,
 }) => {
+  const { dir, tr } = useLanguage();
   const effectiveMode: 'percentage' | 'count' =
     mode === 'count' || mode === 'distribution' ? 'count' : 'percentage';
 
   const resolvedValueLabel =
-    valueLabel || (effectiveMode === 'percentage' ? 'النسبة المئوية' : 'القيمة / العدد');
+    valueLabel ||
+    (effectiveMode === 'percentage'
+      ? tr('النسبة المئوية', 'Percentage')
+      : tr('القيمة / العدد', 'Value / Count'));
+
+  const chartTypeLabels: Record<ChartDisplayType, string> = {
+    bar: tr('أعمدة', 'Columns'),
+    pie: tr('دائري', 'Pie'),
+    area: tr('منحنى مساحي', 'Area'),
+    line: tr('خطي', 'Line'),
+    horizontal: tr('أفقي', 'Horizontal'),
+    radar: tr('شبكي', 'Radar'),
+  };
 
   const [chartType, setChartType] = useState<ChartDisplayType>(() => {
     try {
@@ -173,11 +187,11 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
 
     // Group percentages into academic rating bands for meaningful pie chart
     const bands = [
-      { name: 'ممتاز (90% فأعلى)', value: 0, color: '#10b981' },
-      { name: 'جيد جداً (80% - 89%)', value: 0, color: '#3b82f6' },
-      { name: 'جيد (70% - 79%)', value: 0, color: '#f59e0b' },
-      { name: 'مقبول (60% - 69%)', value: 0, color: '#f97316' },
-      { name: 'يحتاج تحسين (أقل من 60%)', value: 0, color: '#ef4444' },
+      { name: tr('ممتاز (90% فأعلى)', 'Excellent (90%+)'), value: 0, color: '#10b981' },
+      { name: tr('جيد جداً (80% - 89%)', 'Very Good (80-89%)'), value: 0, color: '#3b82f6' },
+      { name: tr('جيد (70% - 79%)', 'Good (70-79%)'), value: 0, color: '#f59e0b' },
+      { name: tr('مقبول (60% - 69%)', 'Pass (60-69%)'), value: 0, color: '#f97316' },
+      { name: tr('يحتاج تحسين (أقل من 60%)', 'Needs Support (<60%)'), value: 0, color: '#ef4444' },
     ];
 
     enrichedData.forEach((d) => {
@@ -189,7 +203,7 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
     });
 
     return bands.filter((b) => b.value > 0);
-  }, [enrichedData, effectiveMode, pieSubMode]);
+  }, [enrichedData, effectiveMode, pieSubMode, tr]);
 
   return (
     <div className="bg-slate-50/90 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-4">
@@ -210,11 +224,12 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
         {/* Chart Shape Switcher Buttons */}
         <div className="flex flex-wrap items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs print:hidden">
           <span className="text-[10px] font-bold text-slate-400 px-2 hidden sm:inline">
-            الشكل البياني:
+            {tr('الشكل البياني:', 'Chart Type:')}
           </span>
           {CHART_TYPE_OPTIONS.map((opt) => {
             const Icon = opt.icon;
             const isActive = chartType === opt.id;
+            const optLabel = chartTypeLabels[opt.id] || opt.label;
             return (
               <button
                 key={opt.id}
@@ -225,10 +240,10 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
                     ? 'bg-amber-500 text-slate-950 shadow-xs'
                     : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
-                title={`تبديل إلى رسم بياني ${opt.label}`}
+                title={tr(`تبديل إلى رسم بياني ${optLabel}`, `Switch to ${optLabel} chart`)}
               >
                 <Icon className="w-3.5 h-3.5" />
-                <span>{opt.label}</span>
+                <span>{optLabel}</span>
               </button>
             );
           })}
@@ -238,7 +253,7 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
       {/* Sub-toggle when Pie chart is active in percentage mode */}
       {chartType === 'pie' && effectiveMode === 'percentage' && (
         <div className="flex items-center justify-end gap-1.5 text-[11px] print:hidden">
-          <span className="text-slate-400">عرض الدائرة حسب:</span>
+          <span className="text-slate-400">{tr('عرض الدائرة حسب:', 'Group pie by:')}</span>
           <button
             type="button"
             onClick={() => setPieSubMode('ratings')}
@@ -248,7 +263,7 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
                 : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
             }`}
           >
-            توزيع التقديرات
+            {tr('توزيع التقديرات', 'Rating Bands')}
           </button>
           <button
             type="button"
@@ -259,7 +274,7 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
                 : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
             }`}
           >
-            مقارنة الامتحانات
+            {tr('مقارنة الامتحانات', 'Compare Exams')}
           </button>
         </div>
       )}
@@ -519,21 +534,21 @@ export const DynamicGradesChart: React.FC<DynamicGradesChartProps> = ({
 
       {/* Legend for Percentage Mode */}
       {effectiveMode === 'percentage' && (
-        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 pt-3 border-t border-slate-200/80 dark:border-slate-700/70 text-[11px] text-slate-500 dark:text-slate-400">
+        <div dir={dir} className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 pt-3 border-t border-slate-200/80 dark:border-slate-700/70 text-[11px] text-slate-500 dark:text-slate-400">
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> ممتاز (90%+)
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> {tr('ممتاز (90%+)', 'Excellent (90%+)')}
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> جيد جداً (80-89%)
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> {tr('جيد جداً (80-89%)', 'Very Good (80-89%)')}
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> جيد (70-79%)
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> {tr('جيد (70-79%)', 'Good (70-79%)')}
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-orange-500" /> مقبول (60-69%)
+            <span className="w-2.5 h-2.5 rounded-full bg-orange-500" /> {tr('مقبول (60-69%)', 'Pass (60-69%)')}
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> يحتاج تحسين (&lt;60%)
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> {tr('يحتاج تحسين (<60%)', 'Needs Support (<60%)')}
           </span>
         </div>
       )}
